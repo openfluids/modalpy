@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Thin wrapper around the unified ``modalpy run`` command core."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from modalpy.commands import run_config_entrypoint
+
+
+DEFAULT_CONFIG = Path(__file__).with_suffix(".jsonc")
+
+
+def run_single_case_cli(default_config: Path, description: str | None = None) -> None:
+    """Backward-compatible helper used by the per-case example wrappers."""
+    run_config_entrypoint(default_config=default_config, description=description)
+
+
+def main() -> None:
+    """Run the example suite defined by ``run_benchmarks.jsonc``."""
+    run_config_entrypoint(
+        default_config=DEFAULT_CONFIG,
+        description="Run the ModalPy example suite from a JSONC config.",
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,11 @@
+{
+  // Suite config: each listed JSONC is run through the shared `modalpy run` core.
+  "kind": "config-suite",
+  "name": "ModalPy canonical example suite",
+  "description": "Run the canonical ModalPy examples: cavity, cylinder, and jet.",
+  "configs": [
+    "./cavity.jsonc",
+    "./cylinder.jsonc",
+    "./jet.jsonc"
+  ]
+}
