@@ -8,6 +8,8 @@ so we only need to import utils in other files.
 import json
 import os
 
+from fftkit import DEFAULT_BACKEND as _FFTKIT_BACKEND
+
 os.environ["OS_ACTIVITY_MODE"] = "disable"  # suppress macOS IMKClient logs
 """
 Configuration and shared imports for modal decomposition tools.
@@ -59,33 +61,12 @@ def require_existing_data_path(data_file: str | None) -> str:
 FIG_DPI = 500
 FIG_FORMAT = "png"  # or "pdf"
 
-# FFT backend selection. Options include:
-#  - 'scipy', 'numpy'
-#  - 'tensorflow', 'torch'
-#  - 'mkl' for Intel MKL via :mod:`mkl_fft`
-#  - 'accelerate' for macOS vDSP/Accelerate
-#  - 'cv2' (OpenCV)
-# The name must match the keys defined in :mod:`fft.fft_backends`.
-#
-# Auto-detection priority: PYMODAL_FFT_BACKEND env var > MKL > scipy
-def _detect_fft_backend():
-    """Auto-detect best available FFT backend."""
-    # 1. Check environment variable override
-    env_backend = os.environ.get("PYMODAL_FFT_BACKEND")
-    if env_backend:
-        return env_backend.lower()
-
-    # 2. Try MKL (2-10x faster than scipy on Intel CPUs)
-    try:
-        import mkl_fft  # noqa: F401
-        return "mkl"
-    except ImportError:
-        pass
-
-    # 3. Default to scipy (always available)
-    return "scipy"
-
-FFT_BACKEND = _detect_fft_backend()
+# FFT backend selection is owned by fftkit, which probes every backend at import
+# time and degrades to an available one rather than failing. Re-exported here so
+# the name modalpy reports is always the one fftkit actually dispatches to.
+# Override with the FFTKIT_BACKEND env var; the legacy PYMODAL_FFT_BACKEND is
+# still honoured by fftkit as a fallback.
+FFT_BACKEND = _FFTKIT_BACKEND
 
 # Matplotlib/LaTeX options
 USE_LATEX = False  # Set True to enable LaTeX rendering

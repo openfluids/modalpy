@@ -43,11 +43,13 @@ dependencies = [
     "h5py>=3.8",
     "tqdm>=4.65",
     "threadpoolctl>=3.0",
+    "fftkit>=0.1.0",
 ]
 
 [project.optional-dependencies]
-mkl = ["mkl_fft"]
-gpu = ["cupy", "torch"]
+# FFT accelerators are provided by fftkit, which owns backend dispatch.
+mkl = ["fftkit[mkl]"]
+gpu = ["fftkit[gpu]"]
 viz3d = ["pyvista>=0.46"]
 
 [project.scripts]

@@ -33,6 +33,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from fftkit import find_peaks, periodogram_rfft
 
 from modalpy.core.base import (
     BaseAnalyzer,
@@ -51,7 +52,6 @@ from modalpy.core.config import (
     RESULTS_DIR_STPOD,
     require_existing_data_path,
 )
-from modalpy.fft.spectral_utils import find_peaks, periodogram_rfft
 
 
 class STPODAnalyzer(BaseAnalyzer):

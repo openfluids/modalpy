@@ -293,6 +293,28 @@ wheels = [
 ]
 
 [[package]]
+name = "fftkit"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e5/c0/664a79d2c829eb2653bc0a535727cdd1098f436dbc8dfef068030924c0ef/fftkit-0.1.0.tar.gz", hash = "sha256:71f3ebc827d25a123ba76bfb7fa469aaa2dbb0190ec2643c95c79af932806eda", size = 21413, upload-time = "2026-07-24T21:32:03.376Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/a5/1460e9d74ab8f7f0d175792ea5c56ed9ffa8b3838f60b65e1c55bc9682b1/fftkit-0.1.0-py3-none-any.whl", hash = "sha256:daa49444f91886773fb7397a042e168dcdb80e55d7f317ff7c55b4175122c4bb", size = 15780, upload-time = "2026-07-24T21:32:02.499Z" },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "cupy" },
+    { name = "torch" },
+]
+mkl = [
+    { name = "mkl-fft" },
+]
+
+[[package]]
 name = "filelock"
 version = "3.20.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1001,6 +1023,7 @@ name = "openmodalpy"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fftkit" },
     { name = "h5py" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -1011,11 +1034,10 @@ dependencies = [
 
 [package.optional-dependencies]
 gpu = [
-    { name = "cupy" },
-    { name = "torch" },
+    { name = "fftkit", extra = ["gpu"] },
 ]
 mkl = [
-    { name = "mkl-fft" },
+    { name = "fftkit", extra = ["mkl"] },
 ]
 viz3d = [
     { name = "pyvista" },
@@ -1035,15 +1057,15 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cupy", marker = "extra == 'gpu'" },
+    { name = "fftkit", specifier = ">=0.1.0" },
+    { name = "fftkit", extras = ["gpu"], marker = "extra == 'gpu'" },
+    { name = "fftkit", extras = ["mkl"], marker = "extra == 'mkl'" },
     { name = "h5py", specifier = ">=3.8" },
     { name = "matplotlib", specifier = ">=3.7" },
-    { name = "mkl-fft", marker = "extra == 'mkl'" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pyvista", marker = "extra == 'viz3d'", specifier = ">=0.46" },
     { name = "scipy", specifier = ">=1.10" },
     { name = "threadpoolctl", specifier = ">=3.0" },
-    { name = "torch", marker = "extra == 'gpu'" },
     { name = "tqdm", specifier = ">=4.65" },
 ]
 provides-extras = ["mkl", "gpu", "viz3d"]

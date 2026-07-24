@@ -31,10 +31,13 @@ src/modalpy/
 ├── config_io.py         # load_jsonc, resolve_path, strip_jsonc_comments
 ├── specs.py             # DataSourceSpec, CaseSpec, AnalyzeSpec, RunOutcome, etc.
 ├── example_data.py      # built-in generators: double_gyre, taylor_green, cylinder_wake
-├── fft/
-│   └── fft_backends.py  # get_fft_func() — dispatches to scipy/numpy/mkl/cupy
 └── examples/            # packaged .jsonc configs shipped in the wheel
 ```
+
+FFT backend dispatch lives in the external [`fftkit`](https://github.com/openfluids/fftkit)
+package: `get_fft_func()` selects among scipy/numpy/mkl/cupy/accelerate, and
+`core.config.FFT_BACKEND` re-exports the backend fftkit resolved. Override it with the
+`FFTKIT_BACKEND` environment variable.
 
 ### Analyzer lifecycle
 

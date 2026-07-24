@@ -13,6 +13,7 @@ from typing import Any, Union
 
 import h5py
 import numpy as np
+from fftkit import get_fft_func
 from scipy.signal import get_window
 from scipy.sparse.linalg import svds
 
@@ -24,7 +25,6 @@ from modalpy.core.io import auto_detect_weight_type as di_auto_detect_weight_typ
 from modalpy.core.io import load_data as di_load_data
 from modalpy.core.io import load_jetles_data as di_load_jetles_data
 from modalpy.core.io import load_mat_data as di_load_mat_data
-from modalpy.fft.fft_backends import get_fft_func
 
 try:
     from modalpy.core.parallel import (

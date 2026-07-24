@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 # Third-party imports
 import numpy as np
 import scipy.linalg  # For eigh
+from fftkit import find_peaks, periodogram_rfft
 
 from modalpy.core.base import (
     BaseAnalyzer,
@@ -49,7 +50,6 @@ from modalpy.core.config import (
     require_existing_data_path,
 )
 from modalpy.core.parallel import print_optimization_status
-from modalpy.fft.spectral_utils import find_peaks, periodogram_rfft
 
 
 class PODAnalyzer(BaseAnalyzer):
