@@ -1,0 +1,10 @@
+{
+  "kind": "config-suite",
+  "name": "ModalPy packaged example suite",
+  "description": "Run the self-contained generator-backed ModalPy examples shipped in the public package.",
+  "configs": [
+    "./double_gyre.jsonc",
+    "./cylinder_wake.jsonc",
+    "./taylor_green.jsonc"
+  ]
+}
