@@ -16,6 +16,9 @@ requires-python = ">=3.11"
 authors = [
     { name = "Ricardo Frantz", email = "rasfrantz@gmail.com" },
 ]
+maintainers = [
+    { name = "Ricardo Frantz", email = "rasfrantz@gmail.com" },
+]
 keywords = [
     "POD",
     "MPOD",
@@ -31,12 +34,16 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
@@ -49,12 +56,6 @@ dependencies = [
     "fftkit>=0.1.0",
 ]
 
-[project.urls]
-Homepage = "https://github.com/openfluids/modalpy"
-Repository = "https://github.com/openfluids/modalpy"
-Issues = "https://github.com/openfluids/modalpy/issues"
-Changelog = "https://github.com/openfluids/modalpy/blob/main/CHANGELOG.md"
-
 [project.optional-dependencies]
 # FFT accelerators are provided by fftkit, which owns backend dispatch.
 mkl = ["fftkit[mkl]"]
@@ -64,12 +65,14 @@ viz3d = ["pyvista>=0.46"]
 [project.scripts]
 modalpy = "modalpy.cli:main"
 
-[tool.hatch.version]
-path = "src/modalpy/__init__.py"
+[project.urls]
+Homepage = "https://github.com/openfluids/openmodalpy"
+Source = "https://github.com/openfluids/openmodalpy"
+Tracker = "https://github.com/openfluids/openmodalpy/issues"
+Documentation = "https://github.com/openfluids/openmodalpy#readme"
+Changelog = "https://github.com/openfluids/openmodalpy/blob/main/CHANGELOG.md"
 
-[tool.hatch.build]
-dev-mode-dirs = ["src"]
-
+# Development dependencies as PEP 735 groups; the CI workflows call `uv run --group ...`.
 [dependency-groups]
 test = [
     "pytest>=7.0",
@@ -82,6 +85,14 @@ dev = [
     { include-group = "lint" },
 ]
 
+[tool.hatch.version]
+path = "src/modalpy/__init__.py"
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+
+# Only the self-contained, generator-backed example configs ship. The excluded ones
+# depend on benchmark datasets that live outside the repository.
 [tool.hatch.build.targets.sdist]
 include = [
     "/src/modalpy",

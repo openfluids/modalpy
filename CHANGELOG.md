@@ -32,5 +32,5 @@ First public release, distributed on PyPI as `openmodalpy` and imported as `moda
 - The bundled `modalpy.fft` subpackage. Import FFT helpers from `fftkit` instead:
   `get_fft_func`, `periodogram_rfft`, `find_peaks` and related functions.
 
-[Unreleased]: https://github.com/openfluids/modalpy/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/openfluids/modalpy/releases/tag/v0.1.0
+[Unreleased]: https://github.com/openfluids/openmodalpy/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/openfluids/openmodalpy/releases/tag/v0.1.0
