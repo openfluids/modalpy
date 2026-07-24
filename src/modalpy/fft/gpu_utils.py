@@ -87,7 +87,6 @@ To clear memory:
 
 import numpy as np
 
-
 # =============================================================================
 # Configuration for RTX 4060 (8GB VRAM)
 # =============================================================================
@@ -433,6 +432,7 @@ def benchmark_cpu_vs_gpu(sizes=None, batch_sizes=None, iterations=10):
         dict with timing results
     """
     import time
+
     from scipy.fft import fft as scipy_fft
 
     if sizes is None:

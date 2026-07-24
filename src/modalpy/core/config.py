@@ -77,7 +77,7 @@ def _detect_fft_backend():
 
     # 2. Try MKL (2-10x faster than scipy on Intel CPUs)
     try:
-        import mkl_fft
+        import mkl_fft  # noqa: F401
         return "mkl"
     except ImportError:
         pass

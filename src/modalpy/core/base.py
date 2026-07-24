@@ -18,21 +18,7 @@ from scipy.sparse.linalg import svds
 
 from modalpy.core.config import (
     CMAP_DIV,
-    CMAP_SEQ,
     FFT_BACKEND,
-    FIG_DPI,
-    FIGURES_DIR,
-    FIGURES_DIR_BSMD,
-    FIGURES_DIR_DMD,
-    FIGURES_DIR_POD,
-    FIGURES_DIR_SPOD,
-    RESULTS_DIR,
-    RESULTS_DIR_BSMD,
-    RESULTS_DIR_DMD,
-    RESULTS_DIR_POD,
-    RESULTS_DIR_SPOD,
-    WINDOW_NORM,
-    WINDOW_TYPE,
 )
 from modalpy.core.io import auto_detect_weight_type as di_auto_detect_weight_type
 from modalpy.core.io import load_data as di_load_data

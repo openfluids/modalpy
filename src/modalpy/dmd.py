@@ -23,17 +23,9 @@ import matplotlib.pyplot as plt
 
 # Suppress contour warnings when no levels can be plotted
 warnings.filterwarnings("ignore", message="No contour levels were found within the data range.")
-import numpy as np
+import numpy as np  # noqa: E402
 
-from modalpy.core.config import (
-    CMAP_DIV,
-    CMAP_SEQ,
-    FIG_DPI,
-    FIGURES_DIR_DMD,
-    RESULTS_DIR_DMD,
-    require_existing_data_path,
-)
-from modalpy.core.base import (
+from modalpy.core.base import (  # noqa: E402
     BaseAnalyzer,
     add_inset_colorbar,
     compute_reduced_svd,
@@ -43,9 +35,17 @@ from modalpy.core.base import (
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
     print_summary,
-    resolve_volume_layout,
     reshape_mode_to_volume,
+    resolve_volume_layout,
     style_spatial_axes,
+)
+from modalpy.core.config import (  # noqa: E402
+    CMAP_DIV,
+    CMAP_SEQ,
+    FIG_DPI,
+    FIGURES_DIR_DMD,
+    RESULTS_DIR_DMD,
+    require_existing_data_path,
 )
 
 # Try to import DNamiDataLoader for npz support
@@ -645,9 +645,6 @@ class DMDAnalyzer(BaseAnalyzer):
         fig_aspect = get_fig_aspect_ratio(self.data)
         var_name = self.data.get("metadata", {}).get("var_name", "q")
         # Compute mode frequencies (Hz) for annotation purposes
-        dt = self.data.get("dt", 1.0)
-        eigvals_subset = self.eigenvalues[:n_modes]
-        freq = np.angle(eigvals_subset) / (2 * np.pi * dt)
 
         for start in range(0, n_modes, modes_per_fig):
             end = min(start + modes_per_fig, n_modes)
@@ -696,7 +693,7 @@ class DMDAnalyzer(BaseAnalyzer):
                     # Plot filled contour
                     cf = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
                     # Contour lines
-                    cs = ax.contour(
+                    _ = ax.contour(
                         x_mesh, y_mesh, mode_plot, levels=levels[::4], colors="k", linewidths=0.5, alpha=0.5
                     )
                     # Optionally add cylinder overlay

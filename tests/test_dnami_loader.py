@@ -1,4 +1,5 @@
 import numpy as np
+
 from modalpy.core.io import DNamiDataLoader
 
 

@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import signal
+
 try:
     from scipy.fft import rfft, rfftfreq  # SciPy >= 1.4.0
 except ImportError:

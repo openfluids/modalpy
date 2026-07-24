@@ -24,8 +24,8 @@ from modalpy.core.base import (
     make_result_filename,
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
-    resolve_volume_layout,
     reshape_mode_to_volume,
+    resolve_volume_layout,
     style_spatial_axes,
 )
 from modalpy.core.io import load_data
@@ -44,7 +44,6 @@ from modalpy.specs import (
 )
 from modalpy.spod import SPODAnalyzer
 from modalpy.stpod import STPODAnalyzer
-
 
 METHOD_REGISTRY: dict[str, MethodInfo] = {
     "pod": MethodInfo(

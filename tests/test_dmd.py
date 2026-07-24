@@ -1,6 +1,6 @@
-import numpy as np
-import matplotlib
 import h5py
+import matplotlib
+import numpy as np
 import pytest
 
 from modalpy import DMDAnalyzer

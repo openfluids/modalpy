@@ -11,8 +11,8 @@ decomposition recovers that exact structure.
 
 import numpy as np
 import pytest
-from modalpy import PODAnalyzer, DMDAnalyzer, STPODAnalyzer
 
+from modalpy import DMDAnalyzer, PODAnalyzer, STPODAnalyzer
 
 # =============================================================================
 # POD Analytical Benchmarks

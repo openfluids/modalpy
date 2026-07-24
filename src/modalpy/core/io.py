@@ -19,7 +19,6 @@ from typing import Any, Dict, Optional
 import h5py
 import numpy as np
 
-
 DEFAULT_DNAMI_SCHEMA: dict[str, Any] = {
     "layout": "consolidated_npz",
     "files": {

@@ -108,16 +108,16 @@ To compare backends on your system:
 """
 
 import sys
-import os
+
 from modalpy.core.config import FFT_BACKEND
 
 
 def accelerate_fft(x, axis=0):
     """FFT using Apple's Accelerate framework via PyObjC or ctypes."""
-    import sys
-    import numpy as np
     import ctypes
     import ctypes.util
+
+    import numpy as np
 
     if sys.platform != 'darwin':
         raise NotImplementedError('Accelerate FFT is only available on macOS.')
@@ -225,8 +225,8 @@ def register_mkl_scipy_backend():
     After calling this, all scipy.fft operations will use MKL automatically.
     """
     try:
-        from scipy.fft import set_global_backend
         import mkl_fft.interfaces.scipy_fft
+        from scipy.fft import set_global_backend
         set_global_backend(mkl_fft.interfaces.scipy_fft)
         return True
     except ImportError:
@@ -333,7 +333,7 @@ FFT_BACKENDS = {
 
 # Optionally enable PyFFTW if available
 try:
-    import pyfftw
+    import pyfftw  # noqa: F401
     FFT_BACKENDS["pyfftw"] = _pyfftw_fft_impl
 except ImportError:
     pass
@@ -386,7 +386,7 @@ def gpu_available():
 def mkl_available():
     """Check if Intel MKL FFT is available."""
     try:
-        import mkl_fft
+        import mkl_fft  # noqa: F401
         return True
     except ImportError:
         return False
@@ -435,8 +435,9 @@ def benchmark_backends(size=8192, iterations=100):
 
     Returns dict of {backend_name: time_per_fft_ms}
     """
-    import numpy as np
     import time
+
+    import numpy as np
 
     results = {}
     test_signal = np.random.randn(size) + 1j * np.random.randn(size)

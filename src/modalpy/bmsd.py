@@ -40,16 +40,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from modalpy.core.config import (
-    CMAP_DIV,
-    CMAP_SEQ,
-    FIG_DPI,
-    FIGURES_DIR_BSMD,
-    RESULTS_DIR_BSMD,
-    RESULTS_DIR_SPOD,
-    require_existing_data_path,
-)
-from modalpy.core.parallel import print_optimization_status
 from modalpy.core.base import (
     BaseAnalyzer,
     add_inset_colorbar,
@@ -60,10 +50,20 @@ from modalpy.core.base import (
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
     print_summary,
-    resolve_volume_layout,
     reshape_mode_to_volume,
+    resolve_volume_layout,
     style_spatial_axes,
 )
+from modalpy.core.config import (
+    CMAP_DIV,
+    CMAP_SEQ,
+    FIG_DPI,
+    FIGURES_DIR_BSMD,
+    RESULTS_DIR_BSMD,
+    RESULTS_DIR_SPOD,
+    require_existing_data_path,
+)
+from modalpy.core.parallel import print_optimization_status
 
 # Try to import DNamiDataLoader for npz support
 try:

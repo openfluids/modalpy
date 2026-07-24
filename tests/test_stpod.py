@@ -2,9 +2,10 @@
 Unit tests for STPODAnalyzer.
 """
 
+import h5py
 import numpy as np
 import pytest
-import h5py
+
 from modalpy import STPODAnalyzer
 
 

@@ -34,6 +34,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+from modalpy.core.base import (
+    BaseAnalyzer,
+    compute_reduced_svd,
+    get_fig_aspect_ratio,
+    plot_isometric_slices_3d,
+    plot_orthogonal_slices_3d,
+    print_summary,
+    reshape_mode_to_volume,
+    resolve_volume_layout,
+)
 from modalpy.core.config import (
     CMAP_DIV,
     FIG_DPI,
@@ -42,16 +52,6 @@ from modalpy.core.config import (
     require_existing_data_path,
 )
 from modalpy.fft.spectral_utils import find_peaks, periodogram_rfft
-from modalpy.core.base import (
-    BaseAnalyzer,
-    compute_reduced_svd,
-    get_fig_aspect_ratio,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
-    print_summary,
-    resolve_volume_layout,
-    reshape_mode_to_volume,
-)
 
 
 class STPODAnalyzer(BaseAnalyzer):
@@ -661,7 +661,7 @@ class STPODAnalyzer(BaseAnalyzer):
             else:
                 mode_plot = mode_2d
 
-            cf = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
+            _ = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
 
             if show_cylinder:
                 cyl = plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray",
@@ -823,7 +823,6 @@ class STPODAnalyzer(BaseAnalyzer):
 
         # Element-wise multiply instead of forming dense (d*Nspace)² diagonal matrix
         gram = self.modes.T @ (W_extended[:, np.newaxis] * self.modes)
-        identity = np.eye(n_modes)
 
         diag_dev = np.max(np.abs(np.diag(gram) - 1.0))
         off_diag_mask = ~np.eye(n_modes, dtype=bool)

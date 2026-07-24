@@ -13,6 +13,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
+from modalpy.core.base import (
+    BaseAnalyzer,
+    add_inset_colorbar,
+    auto_detect_weight_type,
+    format_mode_title,
+    get_fig_aspect_ratio,
+    load_jetles_data,
+    load_mat_data,
+    make_result_filename,
+    plot_isometric_slices_3d,
+    plot_orthogonal_slices_3d,
+    print_summary,
+    reshape_mode_to_volume,
+    resolve_volume_layout,
+    spod_function,
+    style_spatial_axes,
+)
 from modalpy.core.config import (
     CMAP_DIV,
     FIG_DPI,
@@ -24,24 +41,6 @@ from modalpy.core.config import (
     require_existing_data_path,
 )
 from modalpy.core.parallel import print_optimization_status
-from modalpy.core.base import (
-    BaseAnalyzer,
-    add_inset_colorbar,
-    auto_detect_weight_type,
-    format_mode_title,
-    get_fig_aspect_ratio,
-    get_num_threads,
-    load_jetles_data,
-    load_mat_data,
-    make_result_filename,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
-    print_summary,
-    resolve_volume_layout,
-    reshape_mode_to_volume,
-    spod_function,
-    style_spatial_axes,
-)
 
 # Try to import DNamiDataLoader for npz support
 try:
@@ -531,7 +530,6 @@ class SPODAnalyzer(BaseAnalyzer):
         cplex_opts = plot_complex_plane_options or opts.get("complex_plane")
 
         print(f"🔎 Starting SPOD analysis for {os.path.basename(self.file_path)}")
-        start_total_time = time.time()
 
         self.load_and_preprocess()
         super().run(compute_fft=True)  # Compute/load qhat before SPOD
@@ -608,7 +606,7 @@ class SPODAnalyzer(BaseAnalyzer):
             norm_vmin = norm_vmax * 0.1  # ensure vmin < vmax and positive
 
         if norm_vmin > 0 and norm_vmax > 0 and norm_vmin < norm_vmax:
-            mesh = ax.pcolormesh(
+            _ = ax.pcolormesh(
                 St_plot,
                 y_coords_mesh,
                 C_fill_data,
@@ -685,7 +683,6 @@ class SPODAnalyzer(BaseAnalyzer):
             n_modes = n_modes_total
         else:
             n_modes = min(plot_n_modes, n_modes_total)
-        modes_to_plot = list(range(n_modes))
 
         if resolve_volume_layout(self.data, self.modes.shape[1]) is not None:
             self.plot_modes_3d_slices(freqs_to_plot=freqs_to_plot, plot_n_modes=n_modes)

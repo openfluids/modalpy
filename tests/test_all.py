@@ -6,10 +6,10 @@ Validates mathematical correctness using synthetic data with known analytical so
 Run with: python test_all.py
 """
 
-import numpy as np
-import sys
-import tempfile
 import os
+import sys
+
+import numpy as np
 
 # Tolerance for numerical comparisons
 TOL = 1e-10
@@ -21,7 +21,6 @@ results = []
 
 def report(name: str, passed: bool, details: str = ""):
     """Record test result."""
-    status = "PASS" if passed else "FAIL"
     results.append((name, passed, details))
     symbol = "✓" if passed else "✗"
     print(f"  {symbol} {name}" + (f" ({details})" if details and not passed else ""))
@@ -81,7 +80,6 @@ def test_pod():
     # Create data that is exactly rank-3: sum of 3 spatial patterns with time coefficients
     np.random.seed(42)
     Nx, Ny, Ns = 40, 40, 200  # Higher resolution: 1600 spatial DOF
-    Nspace = Nx * Ny
 
     # 3 orthogonal spatial patterns
     x = np.linspace(0, 2*np.pi, Nx)
@@ -293,7 +291,6 @@ def test_spod():
     dt = 0.01
     Ns = 2048  # Longer time series
     t = np.arange(Ns) * dt
-    fs = 1.0 / dt
 
     # --- Test 1: White noise - flat spectrum ---
     spatial = np.random.randn(Nspace)
@@ -378,7 +375,6 @@ def test_spod():
 
     # --- Test 4: Comparison with Welch PSD ---
     # First SPOD eigenvalue should show similar spectral structure to Welch PSD
-    from scipy import signal as sig
 
     # Multi-tone signal with different parameters to avoid cache collision
     f1, f2 = 5.0, 15.0
@@ -414,8 +410,7 @@ def test_cross_method():
     """Test consistency between methods."""
     section("Cross-Method Consistency Tests")
 
-    from modalpy import PODAnalyzer
-    from modalpy import SPODAnalyzer
+    from modalpy import PODAnalyzer, SPODAnalyzer
 
     np.random.seed(42)
     Nx, Ny = 8, 8
@@ -467,9 +462,7 @@ def test_cross_method():
 
 def test_heavy():
     """Heavy tests with larger degrees of freedom for real-world validation."""
-    from modalpy import PODAnalyzer
-    from modalpy import DMDAnalyzer
-    from modalpy import SPODAnalyzer
+    from modalpy import DMDAnalyzer, PODAnalyzer, SPODAnalyzer
 
     section("Heavy Tests (Large DOF)")
 
@@ -502,7 +495,6 @@ def test_heavy():
     q_wake = np.zeros((Ns, Nspace))
     for i, ti in enumerate(t):
         # Vortex street: alternating vortices
-        phase = 2 * np.pi * f_shed * ti
         vortex = decay * np.sin(k_x * (X - U_conv * ti)) * np.exp(-Y**2 / 0.5)
         # Add higher harmonic (characteristic of real wakes)
         vortex += 0.3 * decay * np.sin(2 * k_x * (X - U_conv * ti)) * np.exp(-Y**2 / 0.3)
@@ -588,7 +580,6 @@ def test_heavy():
     Nx_jet, Ny_jet = 80, 80  # 6400 spatial DOF (higher resolution)
     Ns_jet = 4096  # Longer time series
     dt_jet = 0.01
-    fs_jet = 1.0 / dt_jet
     t_jet = np.arange(Ns_jet) * dt_jet
 
     print(f"  Jet-like SPOD: {Nx_jet}x{Ny_jet} = {Nx_jet*Ny_jet} DOF, {Ns_jet} snapshots")
@@ -650,14 +641,13 @@ def test_heavy():
            f"relative error = {recon_error:.3f}")
 
     # Clean up cache
-    import os
     for f in ["dummy_jet"]:
         cache_pattern = f"./results_spod/{f}_*"
         import glob
         for cache_file in glob.glob(cache_pattern):
             try:
                 os.remove(cache_file)
-            except:
+            except Exception:
                 pass
 
 

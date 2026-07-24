@@ -1,6 +1,7 @@
-import numpy as np
 import h5py
+import numpy as np
 from scipy import signal
+
 from modalpy import PODAnalyzer
 from modalpy.core.base import subset_volume_focus_3d
 

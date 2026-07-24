@@ -15,40 +15,37 @@ For GPU batch processing:
     result = processor.fft_batch(batch_signals, axis=1)
 """
 
+from .complex_signal import generate_complex_signal
 from .fft_backends import (
-    get_fft_func,
-    get_fft_backend_names,
-    get_available_backends,
-    get_optimal_backend,
     benchmark_backends,
+    cupy_fft,
+    get_available_backends,
+    get_fft_backend_names,
+    get_fft_func,
+    get_optimal_backend,
     gpu_available,
     mkl_available,
-    scipy_fft,
-    numpy_fft,
     mkl_fft,
-    cupy_fft,
+    numpy_fft,
     register_mkl_scipy_backend,
+    scipy_fft,
 )
-
 from .gpu_utils import (
     GPUBatchFFT,
     GPUConfig,
-    should_use_gpu,
+    benchmark_cpu_vs_gpu,
     get_gpu_info,
     gpu_fft,
     gpu_rfft,
-    benchmark_cpu_vs_gpu,
+    should_use_gpu,
 )
-
 from .spectral_utils import (
-    periodogram_rfft,
     blackman_tukey_rfft,
-    welch_method,
-    find_peaks,
     calculate_error,
+    find_peaks,
+    periodogram_rfft,
+    welch_method,
 )
-
-from .complex_signal import generate_complex_signal
 
 __all__ = [
     # Backend selection

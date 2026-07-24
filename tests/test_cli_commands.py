@@ -7,7 +7,13 @@ import h5py
 
 from modalpy import analyze_from_config
 from modalpy.cli import main
-from modalpy.commands import _maybe_plot_volumetric_modes, discover_examples, get_method_spec, inspect_results, run_from_config
+from modalpy.commands import (
+    _maybe_plot_volumetric_modes,
+    discover_examples,
+    get_method_spec,
+    inspect_results,
+    run_from_config,
+)
 
 
 def _write_jsonc(path: Path, payload: dict) -> None:

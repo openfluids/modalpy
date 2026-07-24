@@ -28,6 +28,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.linalg  # For eigh
 
+from modalpy.core.base import (
+    BaseAnalyzer,
+    add_inset_colorbar,
+    format_mode_title,
+    get_fig_aspect_ratio,
+    plot_isometric_slices_3d,
+    plot_orthogonal_slices_3d,
+    print_summary,
+    reshape_mode_to_volume,
+    resolve_volume_layout,
+    style_spatial_axes,
+)
 from modalpy.core.config import (
     CMAP_DIV,
     CMAP_SEQ,
@@ -36,22 +48,8 @@ from modalpy.core.config import (
     RESULTS_DIR_POD,
     require_existing_data_path,
 )
-from modalpy.fft.spectral_utils import find_peaks, periodogram_rfft
 from modalpy.core.parallel import print_optimization_status
-from modalpy.core.base import (
-    BaseAnalyzer,
-    add_inset_colorbar,
-    auto_detect_weight_type,
-    format_mode_title,
-    get_fig_aspect_ratio,
-    make_result_filename,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
-    resolve_volume_layout,
-    reshape_mode_to_volume,
-    print_summary,
-    style_spatial_axes,
-)
+from modalpy.fft.spectral_utils import find_peaks, periodogram_rfft
 
 
 class PODAnalyzer(BaseAnalyzer):
@@ -498,7 +496,6 @@ class PODAnalyzer(BaseAnalyzer):
                     print(f"  Warning: Mode {mode_idx} has no valid data points, skipping plot.")
                     continue
                 # Compute levels with robust limits
-                from modalpy.core.base import get_robust_clim
 
                 # Use percentile method but don't force symmetry for sequential colormap
                 mode_clean = mode_flat[np.isfinite(mode_flat)]
@@ -507,7 +504,7 @@ class PODAnalyzer(BaseAnalyzer):
                 # Plot filled contour
                 cf = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_SEQ, extend="both")
                 # Contour lines
-                cs = ax.contour(x_mesh, y_mesh, mode_plot, levels=levels[::4], colors="k", linewidths=0.5, alpha=0.5)
+                _ = ax.contour(x_mesh, y_mesh, mode_plot, levels=levels[::4], colors="k", linewidths=0.5, alpha=0.5)
                 # Optionally add cylinder overlay
                 if show_cylinder:
                     cylinder = plt.Circle(
@@ -563,14 +560,10 @@ class PODAnalyzer(BaseAnalyzer):
         x_coords = self.data.get("x", np.arange(Nx))
         y_coords = self.data.get("y", np.arange(Ny))
         fig_aspect = get_fig_aspect_ratio(self.data)
-        var_name = self.data.get("metadata", {}).get("var_name", "q")
 
         # --- Colormap setup for raw and magnitude plots ---
-        import matplotlib.cm as cm
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         # Hold contour handles for shared colorbars (set in first loop iteration)
-        first_cf = None  # For raw (signed) mode fields
 
         for start in range(0, n_modes, 2):
             end = min(start + 2, n_modes)
@@ -613,8 +606,6 @@ class PODAnalyzer(BaseAnalyzer):
                     cmap=CMAP_DIV,  # diverging colormap for signed mode field
                     extend="both",
                 )
-                if first_cf is None:
-                    first_cf = cf
                 if show_cylinder:
                     ax.add_patch(
                         plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray", edgecolor="black", linewidth=0.5)
@@ -768,11 +759,8 @@ class PODAnalyzer(BaseAnalyzer):
         )
 
         # Import make_axes_locatable for better colorbar placement
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         # Track the first contourf for colorbar
-        first_cf = None
-
         # Plot each mode
         for k in range(n_modes_plot):
             row, col = divmod(k, ncols)
@@ -1253,8 +1241,6 @@ class PODAnalyzer(BaseAnalyzer):
             return False
 
         ortho_check_matrix = self.modes.T @ W_diag_matrix @ self.modes
-        identity_matrix = np.eye(n_saved_modes)
-
         # Check diagonals are close to 1
         diag_diff = np.abs(np.diag(ortho_check_matrix) - 1.0)
         max_diag_deviation = np.max(diag_diff)
