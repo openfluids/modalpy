@@ -757,66 +757,6 @@ wheels = [
 ]
 
 [[package]]
-name = "modalpy"
-version = "0.1.1"
-source = { editable = "." }
-dependencies = [
-    { name = "h5py" },
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "scipy" },
-    { name = "threadpoolctl" },
-    { name = "tqdm" },
-]
-
-[package.optional-dependencies]
-gpu = [
-    { name = "cupy" },
-    { name = "torch" },
-]
-mkl = [
-    { name = "mkl-fft" },
-]
-viz3d = [
-    { name = "pyvista" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
-lint = [
-    { name = "ruff" },
-]
-test = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cupy", marker = "extra == 'gpu'" },
-    { name = "h5py", specifier = ">=3.8" },
-    { name = "matplotlib", specifier = ">=3.7" },
-    { name = "mkl-fft", marker = "extra == 'mkl'" },
-    { name = "numpy", specifier = ">=1.24" },
-    { name = "pyvista", marker = "extra == 'viz3d'", specifier = ">=0.46" },
-    { name = "scipy", specifier = ">=1.10" },
-    { name = "threadpoolctl", specifier = ">=3.0" },
-    { name = "torch", marker = "extra == 'gpu'" },
-    { name = "tqdm", specifier = ">=4.65" },
-]
-provides-extras = ["mkl", "gpu", "viz3d"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=7.0" },
-    { name = "ruff", specifier = ">=0.1" },
-]
-lint = [{ name = "ruff", specifier = ">=0.1" }]
-test = [{ name = "pytest", specifier = ">=7.0" }]
-
-[[package]]
 name = "mpmath"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1055,6 +995,66 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3e/1d/7acbedb07bf4c71cc499527c25a3ef60bf83ed41b8918e986ed7a4573bd4/onemkl_license-2025.3.1-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:b6263a01bf29c04ea683eab1712eb6b74c2b8b722722f46fd90784ed8778c093", size = 58934, upload-time = "2026-01-22T05:36:11.789Z" },
     { url = "https://files.pythonhosted.org/packages/1b/7f/732bd62f4ce4ddcbf97003efa856fcafc99c29e6b05deb0c1bb9cb85bdc4/onemkl_license-2025.3.1-py2.py3-none-win_amd64.whl", hash = "sha256:9fa45b274f05a61797f9ec3166b136124250ec7c9c91dedb87f3a926bfed9a54", size = 58959, upload-time = "2026-01-22T05:32:16.865Z" },
 ]
+
+[[package]]
+name = "openmodalpy"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "h5py" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "threadpoolctl" },
+    { name = "tqdm" },
+]
+
+[package.optional-dependencies]
+gpu = [
+    { name = "cupy" },
+    { name = "torch" },
+]
+mkl = [
+    { name = "mkl-fft" },
+]
+viz3d = [
+    { name = "pyvista" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+lint = [
+    { name = "ruff" },
+]
+test = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cupy", marker = "extra == 'gpu'" },
+    { name = "h5py", specifier = ">=3.8" },
+    { name = "matplotlib", specifier = ">=3.7" },
+    { name = "mkl-fft", marker = "extra == 'mkl'" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pyvista", marker = "extra == 'viz3d'", specifier = ">=0.46" },
+    { name = "scipy", specifier = ">=1.10" },
+    { name = "threadpoolctl", specifier = ">=3.0" },
+    { name = "torch", marker = "extra == 'gpu'" },
+    { name = "tqdm", specifier = ">=4.65" },
+]
+provides-extras = ["mkl", "gpu", "viz3d"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.0" },
+    { name = "ruff", specifier = ">=0.1" },
+]
+lint = [{ name = "ruff", specifier = ">=0.1" }]
+test = [{ name = "pytest", specifier = ">=7.0" }]
 
 [[package]]
 name = "packaging"

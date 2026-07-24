@@ -157,6 +157,8 @@ def get_robust_clim(data: np.ndarray, method: str = "percentile", sigma: float =
 
     # Ensure symmetric for diverging colormaps
     abs_max = max(abs(vmin), abs(vmax))
+    if not np.isfinite(abs_max) or abs_max == 0.0:
+        return -1.0, 1.0
     return -abs_max, abs_max
 
 

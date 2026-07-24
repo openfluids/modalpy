@@ -15,7 +15,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from modalpy.bmsd import BSMDAnalyzer
+from modalpy.bsmd import BSMDAnalyzer
 from modalpy.config_io import load_jsonc, resolve_path
 from modalpy.core.base import (
     add_inset_colorbar,

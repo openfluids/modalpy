@@ -8,19 +8,21 @@ Pure NumPy/SciPy — no external solver dependencies.
 ## Installation
 
 ```bash
-uv add modalpy
+uv add openmodalpy
 ```
+
+The installed package is imported as `modalpy`.
 
 Or as a standalone CLI:
 
 ```bash
-uv tool install modalpy
+uv tool install openmodalpy
 ```
 
 For modern 3D slice/isosurface plotting:
 
 ```bash
-uv add "modalpy[viz3d]"
+uv add "openmodalpy[viz3d]"
 ```
 
 ## Quick Start

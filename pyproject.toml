@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "modalpy"
-version = "0.1.1"
+name = "openmodalpy"
+version = "0.1.0"
 description = "ModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
 readme = "README.md"
 license = "MIT"

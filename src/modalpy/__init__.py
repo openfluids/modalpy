@@ -1,6 +1,6 @@
 """ModalPy public package."""
 
-from modalpy.bmsd import BSMDAnalyzer
+from modalpy.bsmd import BSMDAnalyzer
 from modalpy.commands import (
     analyze_from_config,
     analyze_from_spec,
@@ -18,7 +18,7 @@ from modalpy.specs import AnalyzeSpec, CaseSpec, DataSourceSpec, RunOutcome
 from modalpy.spod import SPODAnalyzer
 from modalpy.stpod import STPODAnalyzer
 
-__version__ = "0.1.1"
+__version__ = "0.1.0"
 __all__ = [
     "PODAnalyzer",
     "MPODAnalyzer",
