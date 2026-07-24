@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openmodalpy"
-version = "0.1.0"
+# Single source of truth: __version__ in src/modalpy/__init__.py (see [tool.hatch.version]).
+# Keeping it in one place means the release workflow's tag check and the built
+# artifact can never disagree about the version.
+dynamic = ["version"]
 description = "ModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
 readme = "README.md"
 license = "MIT"
@@ -46,6 +49,12 @@ dependencies = [
     "fftkit>=0.1.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/openfluids/modalpy"
+Repository = "https://github.com/openfluids/modalpy"
+Issues = "https://github.com/openfluids/modalpy/issues"
+Changelog = "https://github.com/openfluids/modalpy/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 # FFT accelerators are provided by fftkit, which owns backend dispatch.
 mkl = ["fftkit[mkl]"]
@@ -54,6 +63,9 @@ viz3d = ["pyvista>=0.46"]
 
 [project.scripts]
 modalpy = "modalpy.cli:main"
+
+[tool.hatch.version]
+path = "src/modalpy/__init__.py"
 
 [tool.hatch.build]
 dev-mode-dirs = ["src"]
@@ -73,7 +85,9 @@ dev = [
 [tool.hatch.build.targets.sdist]
 include = [
     "/src/modalpy",
+    "/tests",
     "/README.md",
+    "/CHANGELOG.md",
     "/LICENSE",
     "/pyproject.toml",
 ]

@@ -1020,7 +1020,6 @@ wheels = [
 
 [[package]]
 name = "openmodalpy"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fftkit" },
@@ -1068,7 +1067,7 @@ requires-dist = [
     { name = "threadpoolctl", specifier = ">=3.0" },
     { name = "tqdm", specifier = ">=4.65" },
 ]
-provides-extras = ["mkl", "gpu", "viz3d"]
+provides-extras = ["gpu", "mkl", "viz3d"]
 
 [package.metadata.requires-dev]
 dev = [

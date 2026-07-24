@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Lint
+        run: uv run --group lint ruff check .
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          # macOS exercises the Accelerate FFT path fftkit selects on Darwin.
+          - os: macos-latest
+            python-version: "3.14"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Run tests
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv run --group test --python "$PYTHON_VERSION" pytest -q
+
+  # The package must import from a plain wheel install, with no dev group and no
+  # repository checkout on sys.path — this catches missing runtime dependencies
+  # that the editable dev environment would otherwise hide.
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Build wheel
+        run: uv build
+
+      - name: Install wheel into a clean environment and import
+        run: |
+          uv venv /tmp/wheelcheck
+          uv pip install --python /tmp/wheelcheck dist/*.whl
+          cd /tmp
+          /tmp/wheelcheck/bin/python -c "import modalpy, fftkit; from modalpy.core.config import FFT_BACKEND; print(modalpy.__version__, fftkit.__version__, FFT_BACKEND)"

@@ -25,6 +25,33 @@ For modern 3D slice/isosurface plotting:
 uv add "openmodalpy[viz3d]"
 ```
 
+## FFT Backend
+
+FFT dispatch is handled by [`fftkit`](https://github.com/openfluids/fftkit), installed
+automatically. It probes the available backends and picks the fastest one, falling back
+to SciPy when nothing else is present — so no configuration is needed.
+
+To pin a backend explicitly:
+
+```bash
+export FFTKIT_BACKEND=mkl      # or scipy, numpy, cupy, accelerate
+```
+
+```python
+from modalpy.core.config import FFT_BACKEND
+print(FFT_BACKEND)   # the backend actually in use
+```
+
+Accelerator support comes from the corresponding extra:
+
+```bash
+uv add "openmodalpy[mkl]"   # Intel MKL
+uv add "openmodalpy[gpu]"   # CuPy / PyTorch
+```
+
+> The legacy `PYMODAL_FFT_BACKEND` variable is still honoured as a fallback, but
+> `FFTKIT_BACKEND` is the supported name.
+
 ## Quick Start
 
 ```python
