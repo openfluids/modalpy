@@ -1,0 +1,1176 @@
+#!/usr/bin/env python3
+"""
+Common utilities for modal decomposition methods.
+
+All imports are centralized here to keep the code clean and consistent.
+"""
+
+import glob
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Union
+
+import h5py
+import numpy as np
+from scipy.signal import get_window
+from scipy.sparse.linalg import svds
+
+from modalpy.core.config import (
+    CMAP_DIV,
+    CMAP_SEQ,
+    FFT_BACKEND,
+    FIG_DPI,
+    FIGURES_DIR,
+    FIGURES_DIR_BSMD,
+    FIGURES_DIR_DMD,
+    FIGURES_DIR_POD,
+    FIGURES_DIR_SPOD,
+    RESULTS_DIR,
+    RESULTS_DIR_BSMD,
+    RESULTS_DIR_DMD,
+    RESULTS_DIR_POD,
+    RESULTS_DIR_SPOD,
+    WINDOW_NORM,
+    WINDOW_TYPE,
+)
+from modalpy.core.io import auto_detect_weight_type as di_auto_detect_weight_type
+from modalpy.core.io import load_data as di_load_data
+from modalpy.core.io import load_jetles_data as di_load_jetles_data
+from modalpy.core.io import load_mat_data as di_load_mat_data
+from modalpy.fft.fft_backends import get_fft_func
+
+try:
+    from modalpy.core.parallel import (
+        PARALLEL_AVAILABLE,
+        blocksfft_optimized,
+        calculate_polar_weights_optimized,
+        get_threadpool_summary,
+        spod_single_frequency_optimized,
+    )
+except ImportError:
+    PARALLEL_AVAILABLE = False
+
+
+def compute_reduced_svd(X: np.ndarray, rank: int):
+    """Return leading *rank* singular triplets, using truncated SVD for large matrices.
+
+    Falls back to ``np.linalg.svd`` when the matrix is small enough that
+    dense SVD is faster and more numerically stable than ARPACK.
+    """
+    min_dim = min(X.shape)
+    if rank < min_dim and min_dim >= 256:
+        u, s, vh = svds(X, k=rank)
+        order = np.argsort(s)[::-1]
+        return u[:, order], s[order], vh[order, :]
+    return np.linalg.svd(X, full_matrices=False)
+
+
+def get_num_threads():
+    """Return thread count from ``OMP_NUM_THREADS`` or ``os.cpu_count()``."""
+    env = os.environ.get("OMP_NUM_THREADS")
+    try:
+        val = int(env) if env is not None else None
+    except (TypeError, ValueError):
+        val = None
+    if val is not None and val > 0:
+        return val
+    cpu = os.cpu_count() or 1
+    return cpu
+
+
+def parallel_map(func, iterable, threads=None):
+    """Map function over iterable using threads."""
+    threads = threads or get_num_threads()
+    if threads <= 1:
+        return [func(x) for x in iterable]
+    results = []
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        futures = [pool.submit(func, x) for x in iterable]
+        for f in futures:
+            results.append(f.result())
+    return results
+
+
+def make_result_filename(root, nfft, overlap, Ns, analysis):
+    """
+    Generate a harmonized result filename for analysis outputs.
+    Args:
+        root (str): Base name of the dataset (no extension)
+        nfft (int): FFT block size
+        overlap (float): Overlap fraction (0-1)
+        Ns (int): Number of snapshots
+        analysis (str): Analysis type (e.g., 'spod', 'bsmd')
+    Returns:
+        str: Result filename (always .hdf5)
+    """
+    return f"{root}_Nfft{nfft}_ovlap{overlap}_{Ns}snapshots_{analysis}.hdf5"
+
+
+def print_summary(analysis: str, results_dir: str, figures_dir: str) -> None:
+    """Print a short summary of where results and figures were saved."""
+    print(f"✅ {analysis} analysis finished!")
+    print(f"📁 Results: {results_dir}")
+    print(f"📊 Figures: {figures_dir}")
+
+
+def compute_aspect_ratio(x_coords, y_coords):
+    """Return ``dy/dx`` if coordinates are 1D vectors, else ``'auto'``."""
+    if hasattr(x_coords, "ndim") and hasattr(y_coords, "ndim"):
+        if x_coords.ndim == 1 and y_coords.ndim == 1:
+            dx = float(x_coords.max() - x_coords.min())
+            dy = float(y_coords.max() - y_coords.min())
+            if dx > 0 and dy > 0:
+                return dy / dx
+    return "auto"
+
+
+def get_aspect_ratio(data: dict) -> Union[float, str]:
+    """Return aspect ratio for ``data`` using available coordinates."""
+    x = data.get("x", [])
+    y = data.get("y", [])
+    return compute_aspect_ratio(x, y)
+
+
+def get_robust_clim(data: np.ndarray, method: str = "percentile", sigma: float = 2.5) -> tuple:
+    """Compute robust colormap limits that reduce the effect of outliers.
+
+    Parameters
+    ----------
+    data : ndarray
+        Data array (can contain NaNs which will be ignored)
+    method : str
+        'percentile' : Use 2nd and 98th percentiles
+        'sigma' : Use median ± sigma * MAD (median absolute deviation)
+        'minmax' : Use global min/max (no robustness)
+    sigma : float
+        Number of standard deviations for 'sigma' method
+
+    Returns
+    -------
+    vmin, vmax : float
+        Colormap limits
+    """
+    data_flat = np.asarray(data).ravel()
+    data_clean = data_flat[np.isfinite(data_flat)]
+
+    if len(data_clean) == 0:
+        return -1.0, 1.0
+
+    if method == "percentile":
+        vmin, vmax = np.percentile(data_clean, [2, 98])
+    elif method == "sigma":
+        median = np.median(data_clean)
+        mad = np.median(np.abs(data_clean - median))
+        # MAD to std: std ≈ 1.4826 * MAD
+        std_estimate = 1.4826 * mad
+        vmin = median - sigma * std_estimate
+        vmax = median + sigma * std_estimate
+    else:  # minmax
+        vmin, vmax = data_clean.min(), data_clean.max()
+
+    # Ensure symmetric for diverging colormaps
+    abs_max = max(abs(vmin), abs(vmax))
+    return -abs_max, abs_max
+
+
+def get_fig_aspect_ratio(data: dict, clamp_low: float = 0.3, clamp_high: float = 5.0) -> float:
+    """Return physical domain aspect ratio (dx/dy) with reasonable clamping for figure sizing.
+
+    Computes aspect from physical extent if coordinates available, otherwise from Nx/Ny.
+    Clamps to [0.3, 5.0] to avoid extremely distorted figures while preserving physical proportions.
+    """
+    x_coords = data.get("x")
+    y_coords = data.get("y")
+
+    # Try to compute from physical extent first
+    if x_coords is not None and y_coords is not None:
+        try:
+            x_arr = np.asarray(x_coords)
+            y_arr = np.asarray(y_coords)
+            dx = float(x_arr.max() - x_arr.min())
+            dy = float(y_arr.max() - y_arr.min())
+            if dx > 0 and dy > 0:
+                aspect = dx / dy
+                return max(clamp_low, min(aspect, clamp_high))
+        except (ValueError, TypeError):
+            pass
+
+    # Fall back to grid point ratio
+    nx = int(data.get("Nx", 1))
+    ny = int(data.get("Ny", 1))
+    if ny <= 0:
+        aspect = 1.0
+    else:
+        aspect = nx / ny
+    return max(clamp_low, min(aspect, clamp_high))
+
+
+def get_plot_style(data: dict, section: str = "spatial") -> dict[str, Any]:
+    """Return plot-style overrides stored in data metadata."""
+    metadata = data.get("metadata", {})
+    plot_style = metadata.get("plot_style", {})
+    if not isinstance(plot_style, dict):
+        return {}
+    section_style = plot_style.get(section)
+    if isinstance(section_style, dict):
+        return section_style
+    return plot_style
+
+
+def format_mode_title(data: dict, mode_index: int, default: str) -> str:
+    """Format a mode title using optional metadata-driven templates."""
+    style = get_plot_style(data)
+    template = style.get("title_template")
+    if not template:
+        return default
+    mode_number = mode_index + 1
+    return template.format(mode=mode_number, m=mode_number)
+
+
+def style_spatial_axes(
+    ax,
+    data: dict,
+    *,
+    x_coords=None,
+    y_coords=None,
+    equal_default: bool = True,
+):
+    """Apply metadata-driven styling to a 2D spatial axis."""
+    style = get_plot_style(data)
+    figure_facecolor = style.get("figure_facecolor")
+    axes_facecolor = style.get("axes_facecolor", style.get("facecolor"))
+    if figure_facecolor:
+        ax.figure.patch.set_facecolor(figure_facecolor)
+    if axes_facecolor:
+        ax.set_facecolor(axes_facecolor)
+
+    axis_labels = style.get("axis_labels", {})
+    ax.set_xlabel(axis_labels.get("x", r"$x/D$"))
+    ax.set_ylabel(axis_labels.get("y", r"$y/D$"))
+
+    aspect = style.get("aspect")
+    if aspect == "equal":
+        ax.set_aspect("equal", "box")
+    elif aspect == "auto":
+        ax.set_aspect("auto")
+    elif aspect is not None:
+        ax.set_aspect(aspect)
+    elif equal_default:
+        ax.set_aspect("equal", "box")
+    else:
+        ax.set_aspect("auto")
+
+    if x_coords is not None:
+        x_arr = np.asarray(x_coords)
+        x_limits = style.get("xlim", [float(np.min(x_arr)), float(np.max(x_arr))])
+        ax.set_xlim(*x_limits)
+    elif "xlim" in style:
+        ax.set_xlim(*style["xlim"])
+
+    if y_coords is not None:
+        y_arr = np.asarray(y_coords)
+        y_limits = style.get("ylim", [float(np.min(y_arr)), float(np.max(y_arr))])
+        ax.set_ylim(*y_limits)
+    elif "ylim" in style:
+        ax.set_ylim(*style["ylim"])
+
+    grid_style = style.get("grid", {})
+    if isinstance(grid_style, dict):
+        grid_enabled = grid_style.get("enabled", True)
+        grid_kwargs = {
+            "linestyle": grid_style.get("linestyle", "--"),
+            "alpha": grid_style.get("alpha", 0.3),
+            "color": grid_style.get("color"),
+        }
+    else:
+        grid_enabled = bool(grid_style) if style.get("grid") is not None else True
+        grid_kwargs = {"linestyle": "--", "alpha": 0.3, "color": None}
+    if grid_enabled:
+        if grid_kwargs["color"] is None:
+            del grid_kwargs["color"]
+        ax.grid(True, **grid_kwargs)
+    else:
+        ax.grid(False)
+
+
+def add_inset_colorbar(
+    fig,
+    ax,
+    mappable,
+    data: dict,
+    *,
+    ticks=None,
+    ticklabels=None,
+    fmt="%.2f",
+):
+    """Add a compact, metadata-driven inset colorbar to an axis."""
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+    style = get_plot_style(data)
+    cbar_style = style.get("colorbar", {})
+    if cbar_style.get("enabled", True) is False:
+        return None
+
+    location = cbar_style.get("location", "top_inset")
+    orientation = cbar_style.get("orientation", "horizontal")
+    if location == "top_inset":
+        cax = inset_axes(
+            ax,
+            width=cbar_style.get("width", "24%"),
+            height=cbar_style.get("height", "6%"),
+            loc=cbar_style.get("loc", "upper right"),
+            borderpad=cbar_style.get("borderpad", 2.0),
+        )
+        cb = fig.colorbar(mappable, cax=cax, orientation=orientation, format=fmt)
+    else:
+        cb = fig.colorbar(mappable, ax=ax, shrink=cbar_style.get("shrink", 0.8), format=fmt)
+        cax = cb.ax
+
+    cb.ax.tick_params(
+        labelsize=cbar_style.get("tick_fontsize", 8),
+        pad=cbar_style.get("tick_pad", 1),
+        colors=cbar_style.get("tick_color", "black"),
+    )
+    if orientation == "horizontal":
+        cb.ax.xaxis.set_ticks_position("top")
+        cb.ax.xaxis.set_label_position("top")
+    if ticks is not None:
+        cb.set_ticks(ticks)
+    if ticklabels is not None:
+        cb.set_ticklabels(ticklabels)
+    cax.patch.set_facecolor(cbar_style.get("facecolor", "white"))
+    cax.patch.set_alpha(cbar_style.get("alpha", 0.95))
+    return cb
+
+
+def subset_volume_focus_3d(
+    field_3d: np.ndarray,
+    x_coords,
+    y_coords,
+    z_coords,
+    data: dict,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Apply optional metadata-driven volume cropping to a 3D scalar field."""
+    values = np.asarray(field_3d)
+    if values.ndim != 3:
+        raise ValueError(f"Expected a 3D field, got shape {values.shape}.")
+
+    x_arr = np.asarray(x_coords)
+    y_arr = np.asarray(y_coords)
+    z_arr = np.asarray(z_coords)
+    nx, ny, nz = values.shape
+    if x_arr.shape[0] != nx or y_arr.shape[0] != ny or z_arr.shape[0] != nz:
+        raise ValueError(
+            f"Coordinate lengths {(x_arr.shape[0], y_arr.shape[0], z_arr.shape[0])} do not match field shape {values.shape}."
+        )
+
+    style = get_plot_style(data, section="volume")
+
+    def _axis_subset(arr: np.ndarray, limits: Any) -> tuple[np.ndarray, np.ndarray]:
+        if not isinstance(limits, (list, tuple)) or len(limits) != 2:
+            mask = np.ones(arr.shape[0], dtype=bool)
+            return arr, mask
+        lo = max(float(np.min(arr)), float(limits[0]))
+        hi = min(float(np.max(arr)), float(limits[1]))
+        mask = (arr >= lo) & (arr <= hi)
+        if not np.any(mask):
+            raise ValueError(f"Requested volume limits {limits} do not overlap the available coordinate range.")
+        return arr[mask], mask
+
+    x_focus, x_mask = _axis_subset(x_arr, style.get("xlim"))
+    y_focus, y_mask = _axis_subset(y_arr, style.get("ylim"))
+    z_focus, z_mask = _axis_subset(z_arr, style.get("zlim"))
+    focused = values[np.ix_(x_mask, y_mask, z_mask)]
+    return focused, x_focus, y_focus, z_focus
+
+
+def resolve_volume_layout(data: dict, mode_size: int) -> tuple[int, int, int, int] | None:
+    """Return `(Nx, Ny, Nz, multiplier)` when `mode_size` matches a 3D layout."""
+    nx = int(data.get("Nx", 0) or 0)
+    ny = int(data.get("Ny", 0) or 0)
+    z_value = data.get("Nz")
+    if z_value is None:
+        z_coords = data.get("z")
+        nz = int(len(z_coords)) if z_coords is not None else 1
+    else:
+        nz = int(z_value)
+    nz = max(nz, 1)
+    physical_nspace = nx * ny * nz
+    if nx <= 1 or ny <= 1 or nz <= 1 or physical_nspace <= 0:
+        return None
+    if mode_size % physical_nspace != 0:
+        return None
+    return nx, ny, nz, mode_size // physical_nspace
+
+
+def reshape_mode_to_volume(mode_values: np.ndarray, data: dict, *, block_index: int = 0) -> np.ndarray:
+    """Reshape a flattened spatial mode into a 3D volume, selecting one block if needed."""
+    mode_arr = np.asarray(mode_values)
+    layout = resolve_volume_layout(data, mode_arr.size)
+    if layout is None:
+        raise ValueError(f"Mode of length {mode_arr.size} does not match a volumetric layout.")
+    nx, ny, nz, multiplier = layout
+    if not 0 <= block_index < multiplier:
+        raise ValueError(f"Requested block_index={block_index} but multiplier={multiplier}.")
+    if multiplier == 1:
+        return mode_arr.reshape((nx, ny, nz))
+    return mode_arr.reshape((multiplier, nx, ny, nz))[block_index]
+
+
+def plot_orthogonal_slices_3d(
+    field_3d: np.ndarray,
+    x_coords,
+    y_coords,
+    z_coords,
+    *,
+    output_path: str,
+    title_prefix: str,
+    data: dict,
+    slice_indices: tuple[int, int, int] | None = None,
+    scalar_name: str = "mode",
+) -> None:
+    """Render 3 orthogonal slices of a 3D scalar field with PyVista."""
+    try:
+        import pyvista as pv
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "PyVista is required for 3D slice plots. Install modalpy[viz3d] to enable 3D plotting."
+        ) from exc
+
+    values, x_arr, y_arr, z_arr = subset_volume_focus_3d(field_3d, x_coords, y_coords, z_coords, data)
+    nx, ny, nz = values.shape
+
+    if slice_indices is None:
+        slice_indices = (nx // 2, ny // 2, nz // 2)
+    ix, iy, iz = slice_indices
+
+    vmin, vmax = get_robust_clim(values, method="percentile")
+    center = [float(x_arr[ix]), float(y_arr[iy]), float(z_arr[iz])]
+
+    grid = pv.RectilinearGrid(x_arr, y_arr, z_arr)
+    grid.point_data[scalar_name] = values.flatten(order="F")
+
+    plotter = pv.Plotter(shape=(1, 3), off_screen=True, window_size=(1800, 600), border=False)
+    plotter.set_background("white")
+
+    slice_specs = [
+        ("YZ", "x", [center[0], center[1], center[2]], plotter.view_yz, f"x = {center[0]:.3g}"),
+        ("XZ", "y", [center[0], center[1], center[2]], plotter.view_xz, f"y = {center[1]:.3g}"),
+        ("XY", "z", [center[0], center[1], center[2]], plotter.view_xy, f"z = {center[2]:.3g}"),
+    ]
+
+    for idx, (plane_name, normal, origin, view_fn, coord_label) in enumerate(slice_specs):
+        plotter.subplot(0, idx)
+        slc = grid.slice(normal=normal, origin=origin)
+        plotter.add_mesh(
+            slc,
+            scalars=scalar_name,
+            cmap=CMAP_DIV,
+            clim=[vmin, vmax],
+            show_scalar_bar=(idx == 2),
+            scalar_bar_args={"title": "", "n_labels": 3},
+        )
+        plotter.add_text(f"{title_prefix}\n{plane_name} @ {coord_label}", font_size=10)
+        view_fn()
+        plotter.enable_parallel_projection()
+        plotter.show_bounds(
+            grid="front",
+            location="outer",
+            ticks="outside",
+            xtitle="x",
+            ytitle="y",
+            ztitle="z",
+            font_size=9,
+            minor_ticks=False,
+        )
+
+    plotter.screenshot(output_path)
+    plotter.close()
+    print(f"Saving figure {output_path}")
+
+
+def plot_isometric_slices_3d(
+    field_3d: np.ndarray,
+    x_coords,
+    y_coords,
+    z_coords,
+    *,
+    output_path: str,
+    title_prefix: str,
+    data: dict,
+    slice_indices: tuple[int, int, int] | None = None,
+    scalar_name: str = "mode",
+) -> None:
+    """Render positive/negative 3D isosurfaces in one isometric PyVista view."""
+    try:
+        import pyvista as pv
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "PyVista is required for 3D isometric plots. Install modalpy[viz3d] to enable 3D plotting."
+        ) from exc
+
+    values, x_arr, y_arr, z_arr = subset_volume_focus_3d(field_3d, x_coords, y_coords, z_coords, data)
+    nx, ny, nz = values.shape
+
+    vmin, vmax = get_robust_clim(values, method="percentile")
+    grid = pv.RectilinearGrid(x_arr, y_arr, z_arr)
+    grid.point_data[scalar_name] = values.flatten(order="F")
+    abs_scale = max(abs(vmin), abs(vmax))
+    if abs_scale <= 0:
+        raise ValueError("Cannot build isosurfaces from a zero field.")
+    iso_value = 0.45 * abs_scale
+
+    positive = grid.contour(isosurfaces=[iso_value], scalars=scalar_name)
+    negative = grid.contour(isosurfaces=[-iso_value], scalars=scalar_name)
+
+    bounds_sources = [mesh.bounds for mesh in (positive, negative) if mesh.n_points]
+    if bounds_sources:
+        xmin = min(bounds[0] for bounds in bounds_sources)
+        xmax = max(bounds[1] for bounds in bounds_sources)
+        ymin = min(bounds[2] for bounds in bounds_sources)
+        ymax = max(bounds[3] for bounds in bounds_sources)
+        zmin = min(bounds[4] for bounds in bounds_sources)
+        zmax = max(bounds[5] for bounds in bounds_sources)
+    else:
+        xmin, xmax, ymin, ymax, zmin, zmax = grid.bounds
+
+    span_x = max(xmax - xmin, 1e-12)
+    span_y = max(ymax - ymin, 1e-12)
+    span_z = max(zmax - zmin, 1e-12)
+    shock_xmax = xmin + 0.40 * span_x
+    focus_bounds = (
+        xmin,
+        shock_xmax,
+        ymin - 0.12 * span_y,
+        ymax + 0.12 * span_y,
+        zmin - 0.12 * span_z,
+        zmax + 0.12 * span_z,
+    )
+    positive = positive.clip_box(bounds=focus_bounds, invert=False)
+    negative = negative.clip_box(bounds=focus_bounds, invert=False)
+
+    plotter = pv.Plotter(off_screen=True, window_size=(900, 900), border=False)
+    plotter.set_background("white")
+    if positive.n_points:
+        plotter.add_mesh(
+            positive,
+            color="#d1495b",
+            opacity=0.62,
+            smooth_shading=True,
+            specular=0.2,
+        )
+    if negative.n_points:
+        plotter.add_mesh(
+            negative,
+            color="#3a86ff",
+            opacity=0.62,
+            smooth_shading=True,
+            specular=0.2,
+        )
+
+    bounds_sources = [mesh.bounds for mesh in (positive, negative) if mesh.n_points]
+    if bounds_sources:
+        xmin = min(bounds[0] for bounds in bounds_sources)
+        xmax = max(bounds[1] for bounds in bounds_sources)
+        ymin = min(bounds[2] for bounds in bounds_sources)
+        ymax = max(bounds[3] for bounds in bounds_sources)
+        zmin = min(bounds[4] for bounds in bounds_sources)
+        zmax = max(bounds[5] for bounds in bounds_sources)
+    else:
+        xmin, xmax, ymin, ymax, zmin, zmax = grid.bounds
+
+    span_x = max(xmax - xmin, 1e-12)
+    span_y = max(ymax - ymin, 1e-12)
+    span_z = max(zmax - zmin, 1e-12)
+    pad_x = 0.12 * span_x
+    pad_y = 0.12 * span_y
+    pad_z = 0.12 * span_z
+    focus_bounds = (
+        xmin - pad_x,
+        xmax + pad_x,
+        ymin - pad_y,
+        ymax + pad_y,
+        zmin - pad_z,
+        zmax + pad_z,
+    )
+    focus_center = (
+        0.5 * (focus_bounds[0] + focus_bounds[1]),
+        0.5 * (focus_bounds[2] + focus_bounds[3]),
+        0.5 * (focus_bounds[4] + focus_bounds[5]),
+    )
+    max_span = max(
+        focus_bounds[1] - focus_bounds[0],
+        focus_bounds[3] - focus_bounds[2],
+        focus_bounds[5] - focus_bounds[4],
+    )
+
+    plotter.add_mesh(
+        pv.Box(bounds=focus_bounds),
+        style="wireframe",
+        color="black",
+        line_width=1,
+        opacity=0.35,
+    )
+    plotter.add_text(f"{title_prefix}\niso = ±{iso_value:.3g}", font_size=11)
+    plotter.camera.focal_point = focus_center
+    plotter.camera.position = (
+        focus_center[0] + 1.45 * max_span,
+        focus_center[1] + 0.55 * max_span,
+        focus_center[2] - 1.35 * max_span,
+    )
+    plotter.camera.up = (0.0, 1.0, 0.0)
+    plotter.camera.clipping_range = (1e-3, 50.0 * max_span)
+    plotter.screenshot(output_path)
+    plotter.close()
+    print(f"Saving figure {output_path}")
+
+
+# Re-export data loading functions
+load_jetles_data = di_load_jetles_data
+load_mat_data = di_load_mat_data
+load_data = di_load_data
+
+
+def generate_dummy_data_like_jetles(
+    output_path: str,
+    Ns: int = 100,
+    Nx: int = 30,
+    Ny: int = 20,
+    dt: float = 0.01,
+    f1: float = 5.0,
+    f2: float = 2.0,
+    noise_level: float = 0.05,
+    save_mat: bool = False,
+) -> str:
+    """Create a small JetLES-like dataset with simple coherent content.
+
+    This utility generates a synthetic pressure field composed of a few
+    low-frequency modes rather than purely random noise.  It is intended for
+    quick demonstrations when no real dataset is available.
+
+    Parameters
+    ----------
+    output_path : str
+        Path to the file to create.
+    Ns : int, optional
+        Number of snapshots (time samples).
+    Nx : int, optional
+        Number of points in the ``x`` direction.
+    Ny : int, optional
+        Number of points in the radial ``r`` direction.
+    dt : float, optional
+        Time step between snapshots.
+    f1, f2 : float, optional
+        Dominant temporal frequencies of the two synthetic modes.
+    noise_level : float, optional
+        Amplitude of added Gaussian noise relative to the signal.
+    save_mat : bool, optional
+        If ``True`` the file is created with ``.mat`` extension, otherwise an
+        HDF5 ``.h5`` file is created.  The function does not require SciPy and
+        always uses ``h5py`` for writing.
+    Returns
+    -------
+    str
+        Path to the generated dummy file.
+    """
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # Coordinates stored as 2-D arrays as in the real dataset
+    x = np.linspace(0.0, 1.0, Nx)[:, None]
+    r = np.linspace(0.0, 1.0, Ny)[None, :]
+
+    # Temporal vector
+    t = np.arange(Ns) * dt
+
+    # Simple spatial modes
+    mode1 = np.sin(np.pi * x) * np.cos(np.pi * r)
+    mode2 = np.cos(0.5 * np.pi * x) * np.sin(2.0 * np.pi * r)
+
+    # Construct coherent pressure field (shape: Nx, Ny, Ns)
+    signal = (
+        np.sin(2 * np.pi * f1 * t)[:, None, None] * mode1[None, :, :]
+        + 0.5 * np.sin(2 * np.pi * f2 * t)[:, None, None] * mode2[None, :, :]
+    )
+
+    noise = noise_level * np.random.randn(Ns, Nx, Ny)
+    p = np.transpose(signal + noise, (1, 2, 0))  # (Nx, Ny, Ns)
+
+    with h5py.File(output_path, "w") as f:
+        f.create_dataset("p", data=p)
+        f.create_dataset("x", data=x)
+        f.create_dataset("r", data=r)
+        f.create_dataset("dt", data=np.array([[dt]]))
+
+    # Optionally save a ``.mat`` file for compatibility with some loaders
+    if save_mat and not output_path.endswith(".mat"):
+        mat_path = os.path.splitext(output_path)[0] + ".mat"
+        with h5py.File(mat_path, "w") as f:
+            f.create_dataset("p", data=p)
+            f.create_dataset("x", data=x)
+            f.create_dataset("r", data=r)
+            f.create_dataset("dt", data=np.array([[dt]]))
+
+    return output_path
+
+
+def calculate_polar_weights(x, y, use_parallel=True):
+    """Calculate integration weights for a 2D cylindrical grid (x, r)."""
+    if use_parallel and PARALLEL_AVAILABLE:
+        return calculate_polar_weights_optimized(x, y)
+    # Support both 1-D and 2-D coordinate arrays
+    x_line = x[:, 0] if x.ndim > 1 else x
+    y_line = y[0, :] if y.ndim > 1 else y
+    Nx = x_line.shape[0]
+    Ny = y_line.shape[0]
+
+    # Calculate y-direction (r-direction) integration weights (Wy)
+    Wy = np.zeros((Ny, 1))
+
+    # First point (centerline)
+    if Ny > 1:
+        y_mid_right = (y_line[0] + y_line[1]) / 2
+        Wy[0] = np.pi * y_mid_right**2
+    else:
+        Wy[0] = np.pi * y_line[0] ** 2
+
+    # Middle points
+    for i in range(1, Ny - 1):
+        y_mid_left = (y_line[i - 1] + y_line[i]) / 2
+        y_mid_right = (y_line[i] + y_line[i + 1]) / 2
+        Wy[i] = np.pi * (y_mid_right**2 - y_mid_left**2)
+
+    # Last point
+    if Ny > 1:
+        y_mid_left = (y_line[-2] + y_line[-1]) / 2
+        Wy[Ny - 1] = np.pi * (y_line[-1] ** 2 - y_mid_left**2)
+
+    # Calculate x-direction integration weights (Wx)
+    Wx = np.zeros((Nx, 1))
+
+    # First point
+    if Nx > 1:
+        Wx[0] = (x_line[1] - x_line[0]) / 2
+    else:
+        Wx[0] = 1.0
+
+    # Middle points
+    for i in range(1, Nx - 1):
+        Wx[i] = (x_line[i + 1] - x_line[i - 1]) / 2
+
+    # Last point
+    if Nx > 1:
+        Wx[Nx - 1] = (x_line[Nx - 1] - x_line[Nx - 2]) / 2
+
+    # Combine weights
+    W = np.reshape(Wx @ np.transpose(Wy), (Nx * Ny, 1))
+
+    return W
+
+
+def calculate_uniform_weights(x, y, z=None):
+    """Return uniform weights for a Cartesian grid."""
+    # Support both 1-D and 2-D coordinate arrays
+    if x.ndim > 1:
+        Nx, Ny = x.shape
+    elif y.ndim > 1:
+        Nx, Ny = y.shape
+    else:
+        Nx, Ny = x.shape[0], y.shape[0]
+    if z is None:
+        Nz = 1
+    else:
+        z_arr = np.asarray(z)
+        Nz = int(z_arr.shape[0] if z_arr.ndim > 0 else 1)
+    return np.ones((Nx * Ny * Nz, 1))
+
+
+def sine_window(n):
+    """Return a sine window of length n."""
+    return np.sin(np.pi * (np.arange(n) + 0.5) / n)
+
+
+def blocksfft(
+    q,
+    nfft,
+    nblocks,
+    novlap,
+    blockwise_mean=False,
+    normvar=False,
+    window_norm="power",
+    window_type="hamming",
+    n_threads=None,
+    use_parallel=True,
+):
+    """
+    Compute blocked FFT using Welch's method for CSD estimation.
+
+    If ``use_parallel`` is True and optimized routines are available,
+    ``blocksfft_optimized`` from :mod:`parallel_utils` is used.
+
+    Parameters:
+    q (np.ndarray): Input data [time, space]
+    nfft (int): Number of FFT points
+    nblocks (int): Number of blocks
+    novlap (int): Number of overlapping points between blocks
+    blockwise_mean (bool): Subtract blockwise mean if True
+    normvar (bool): Normalize variance if True
+    window_norm (str): Window normalization type ('amplitude' or 'power')
+    window_type (str): Window type. Use 'sine' for the custom sine window or any
+        name recognized by ``scipy.signal.get_window`` (e.g., 'hamming', 'hann',
+        'blackman', etc.)
+
+    Returns:
+    q_hat (np.ndarray): FFT coefficients [freq, space, block]
+
+    ---
+    IMPORTANT:
+    - This function assumes the FFT backend (numpy, scipy, pyfftw, etc.) does NOT normalize the FFT by default (which is true for standard backends).
+    - If you use a backend or option that applies normalization (e.g., norm='ortho'), REMOVE the division by nfft below to avoid double normalization.
+    - For correct SPOD scaling, ensure that dst (frequency resolution) is set as fs / nfft, where fs is the sampling frequency.
+    ---
+    """
+    if use_parallel and PARALLEL_AVAILABLE:
+        return blocksfft_optimized(
+            q,
+            nfft,
+            nblocks,
+            novlap,
+            blockwise_mean=blockwise_mean,
+            normvar=normvar,
+            window_norm=window_norm,
+            window_type=window_type,
+        )
+
+    # Select window function
+    if window_type == "sine":
+        window = sine_window(nfft)
+    else:
+        window = get_window(window_type, nfft)
+
+    # Normalize window
+    if window_norm == "amplitude":
+        cw = 1.0 / window.mean()
+    else:  # 'power' normalization (default)
+        cw = 1.0 / np.sqrt(np.mean(window**2))
+
+    nmesh = q.shape[1]  # Number of spatial points (Nx * Ny)
+    n_freq_out = nfft // 2 + 1  # Number of frequency bins for one-sided spectrum
+    q_hat = np.zeros((n_freq_out, nmesh, nblocks), dtype=complex)
+    q_mean = np.mean(q, axis=0)
+    window_broadcast = window[:, np.newaxis]
+
+    # ``n_threads`` is accepted for backward compatibility but FFT blocks are
+    # processed sequentially to avoid oversubscribing underlying math libraries.
+    fft_func = get_fft_func()
+    for iblk in range(nblocks):
+        ts = min(iblk * (nfft - novlap), q.shape[0] - nfft)
+        tf = np.arange(ts, ts + nfft)
+        block = q[tf, :]
+
+        # Subtract mean
+        if blockwise_mean:
+            block_mean = np.mean(block, axis=0)
+        else:
+            block_mean = q_mean
+        block_centered = block - block_mean
+
+        # Normalize variance if requested
+        if normvar:
+            block_var = np.var(block_centered, axis=0, ddof=1)
+            block_var[block_var < 4 * np.finfo(float).eps] = 1.0
+            block_centered = block_centered / block_var
+
+        # Apply window and FFT
+        full_fft_result = fft_func(block_centered * window_broadcast, axis=0)
+
+        # Store one-sided spectrum
+        q_hat[:, :, iblk] = (cw / nfft) * full_fft_result[:n_freq_out, :]
+
+    return q_hat
+
+
+def auto_detect_weight_type(file_path):
+    # Always return 'uniform' for dNamiX consolidated .npz files
+    if file_path.lower().endswith(".npz"):
+        return "uniform"
+    return di_auto_detect_weight_type(file_path)
+
+
+def _flatten_weights(w, expected_len):
+    """Return weights as a column vector matching ``expected_len``."""
+    w = np.asarray(w)
+    if w.ndim == 3:
+        if w.shape[0] != w.shape[1]:
+            raise ValueError("weight array's first two dimensions must be equal")
+        w = np.stack([np.diag(w[:, :, i]) for i in range(w.shape[2])], axis=1)
+    if w.ndim == 2:
+        if w.shape[0] == w.shape[1] and w.shape[1] != 1:
+            w = np.diag(w)
+        if w.shape[1] > 1:
+            w = w.reshape(-1, 1)
+    w = w.reshape(-1, 1)
+    if w.shape[0] != expected_len:
+        raise ValueError("Flattened weights length mismatch")
+    return w
+
+
+def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
+    """
+    Compute SPOD modes and eigenvalues for a single frequency.
+    Args:
+        qhat (np.ndarray): FFT coefficients for this frequency [space, block].
+        nblocks (int): Number of blocks.
+        dst (float): Frequency resolution (delta f).
+        w (np.ndarray): Spatial integration weights [space, 1].
+        return_psi (bool): If True, also return psi (time coefficients).
+    Returns:
+        tuple: (phi, lambda_tilde[, psi])
+            phi (np.ndarray): Spatial SPOD modes for this frequency [space, mode].
+            lambda_tilde (np.ndarray): SPOD eigenvalues (energy) for this frequency [mode].
+            psi (np.ndarray, optional): Time coefficients for this frequency [block, mode].
+    """
+    if use_parallel and PARALLEL_AVAILABLE:
+        w_col = _flatten_weights(w, qhat.shape[0])
+        return spod_single_frequency_optimized(
+            qhat,
+            w_col,
+            nblocks,
+            dst,
+            return_psi=return_psi,
+        )
+
+    # Normalize FFT coefficients to get fluctuation matrix X_f for this frequency f.
+    x = qhat / np.sqrt(nblocks * dst)
+    w_col = _flatten_weights(w, qhat.shape[0])
+    # Compute the weighted cross-spectral density (CSD) matrix M_f.
+    xprime_w = np.transpose(np.conj(x)) * np.transpose(w_col)  # X_f^H * W
+    m = xprime_w @ x  # (X_f^H * W) * X_f = M_f
+    del xprime_w
+    # Solve the eigenvalue problem: M_f * Psi_f = Psi_f * Lambda_f
+    lambda_tilde, psi = np.linalg.eigh(m)
+    # Sort eigenvalues and eigenvectors in descending order
+    idx = lambda_tilde.argsort()[::-1]
+    lambda_tilde = lambda_tilde[idx]
+    psi = psi[:, idx]
+    # Compute spatial SPOD modes (Phi_f) of the direct problem.
+    inv_sqrt_lambda = np.zeros_like(lambda_tilde)
+    mask = lambda_tilde > 1e-12
+    inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
+    phi = x @ psi @ np.diag(inv_sqrt_lambda)
+    if return_psi:
+        return phi, np.abs(lambda_tilde), psi
+    return phi, np.abs(lambda_tilde)
+
+
+class BaseAnalyzer:
+    """Base class for modal decomposition analyzers."""
+
+    def __init__(
+        self,
+        file_path,
+        nfft=128,
+        overlap=0.5,
+        results_dir="./preprocess",
+        figures_dir="./figs",
+        data_loader=None,
+        spatial_weight_type="auto",
+        n_threads=None,
+        use_parallel=True,
+    ):
+        """Initialize the analyzer.
+
+        Args:
+            file_path (str): Path to data file.
+            nfft (int): Number of snapshots per FFT block.
+            overlap (float): Overlap fraction between blocks.
+            results_dir (str): Directory to save results.
+            figures_dir (str): Directory to save figures.
+            data_loader (callable): Function to load data.
+            spatial_weight_type (str): Type of spatial weighting.
+        """
+        self.file_path = file_path
+        self.nfft = nfft
+        self.overlap = overlap
+        self.results_dir = results_dir
+        self.figures_dir = figures_dir
+
+        # Set default data loader based on file type
+        self.data_loader = data_loader or load_data
+        self.n_threads = n_threads if n_threads is not None else get_num_threads()
+        self.use_parallel = use_parallel
+
+        # Set default weight type
+        if spatial_weight_type == "auto":
+            self.spatial_weight_type = auto_detect_weight_type(file_path)
+        else:
+            self.spatial_weight_type = spatial_weight_type
+
+        # Calculated later
+        self.novlap = int(overlap * nfft)
+        self.data = {}
+        self.W = np.array([])
+        self.nblocks = 0
+        self.fs = 0.0
+        self.qhat = np.array([])
+
+        # Extract root name for output files
+        base = os.path.basename(file_path)
+        root, ext = os.path.splitext(base)
+        if ext == ".npz":
+            npz_files = glob.glob(os.path.join(os.path.dirname(file_path), "*.npz"))
+            if len(npz_files) > 1:
+                # Use directory name if multiple npz files were concatenated
+                self.data_root = os.path.basename(os.path.dirname(file_path))
+            else:
+                self.data_root = root
+        else:
+            self.data_root = root
+
+        # Ensure output directories exist
+        os.makedirs(self.results_dir, exist_ok=True)
+        os.makedirs(self.figures_dir, exist_ok=True)
+
+    def load_and_preprocess(self):
+        """Load data and calculate weights."""
+        # Load data from file only if not already provided
+        if not self.data:
+            self.data = self.data_loader(self.file_path)
+
+        # Calculate spatial weights
+        if self.spatial_weight_type == "polar":
+            self.W = calculate_polar_weights(self.data["x"], self.data["y"], use_parallel=self.use_parallel)
+            print("Using polar (cylindrical) spatial weights.")
+        else:
+            self.W = calculate_uniform_weights(self.data["x"], self.data["y"], self.data.get("z"))
+            print("Using uniform spatial weights (rectangular grid).")
+
+        # Calculate derived parameters
+        self.nblocks = int(np.ceil((self.data["Ns"] - self.novlap) / (self.nfft - self.novlap)))
+        if self.data["dt"] == 0.0:
+            print("[WARNING] dt is zero. Setting dt to 0.1.")
+            self.data["dt"] = 0.1
+        self.fs = 1 / self.data["dt"]
+
+        print(f"Data loaded: {self.data['Ns']} snapshots, {self.data['Nx']}×{self.data['Ny']} spatial points")
+        if self.nfft > 1:
+            print(
+                f"FFT parameters: {self.nfft} points, {self.overlap * 100}% overlap, {self.nblocks} blocks [backend: {FFT_BACKEND}]"
+            )
+
+    def compute_fft_blocks(self):
+        """Compute blocked FFT using Welch's method."""
+        if "q" not in self.data:
+            raise ValueError("Data not loaded. Call load_and_preprocess() first.")
+
+        pools = get_threadpool_summary()
+        print(f"Computing FFT with {self.nblocks} blocks on {FFT_BACKEND} backend [pools: {pools}]")
+        self.qhat = blocksfft(
+            self.data["q"],
+            self.nfft,
+            self.nblocks,
+            self.novlap,
+            blockwise_mean=getattr(self, "blockwise_mean", False),
+            normvar=getattr(self, "normvar", False),
+            window_norm=getattr(self, "window_norm", "power"),
+            window_type=getattr(self, "window_type", "hamming"),
+            n_threads=self.n_threads,
+            use_parallel=self.use_parallel,
+        )
+        print("FFT computation complete.")
+
+    def save_results(self, filename=None, analysis_type="spod"):
+        """Save results to HDF5 file with harmonized filename and format.
+        Args:
+            filename (str, optional): Custom filename. If not provided, uses harmonized scheme.
+            analysis_type (str): Analysis type for filename (e.g., 'spod', 'bsmd').
+        """
+        if not filename:
+            filename = make_result_filename(
+                self.data_root,
+                self.nfft,
+                self.overlap,
+                self.data.get("Ns", 0),
+                analysis_type,
+            )
+        save_path = os.path.join(self.results_dir, filename)
+        print(f"Saving results to {save_path}")
+        # This is a placeholder - subclasses should implement specific saving logic
+        with h5py.File(save_path, "w") as f:
+            f.attrs["nfft"] = self.nfft
+            f.attrs["overlap"] = self.overlap
+            f.attrs["nblocks"] = self.nblocks
+            f.attrs["fs"] = self.fs
+            # Save coordinates
+            f.create_dataset("x", data=self.data["x"], compression="gzip")
+            f.create_dataset("y", data=self.data["y"], compression="gzip")
+            # Save weights
+            f.create_dataset("W", data=self.W, compression="gzip")
+
+    def run(self, compute_fft=True):
+        """Run the full analysis pipeline."""
+        start_time = time.time()
+
+        # Load data and calculate weights
+        self.load_and_preprocess()
+
+        # Compute FFT blocks if requested
+        if compute_fft:
+            self.compute_fft_blocks()
+
+        end_time = time.time()
+        print(f"Completed in {end_time - start_time:.2f} seconds.")
+
+        return self
+
+    def _get_metadata(self):
+        """Return a dictionary of common metadata for saving results."""
+        meta = {
+            "analysis_type": getattr(self, "analysis_type", ""),
+            "data_file": self.file_path,
+            "nfft": self.nfft,
+            "overlap": self.overlap,
+            "nblocks": self.nblocks,
+            "fs": self.fs,
+            "dt": self.data.get("dt", 0),
+            "Ns": self.data.get("Ns", 0),
+            "Nx": self.data.get("Nx", 0),
+            "Ny": self.data.get("Ny", 0),
+            "Nz": self.data.get("Nz", 1),
+            "spatial_weight_type": self.spatial_weight_type,
+        }
+        for attr in ["window_type", "window_norm", "blockwise_mean", "normvar"]:
+            if hasattr(self, attr):
+                meta[attr] = getattr(self, attr)
+        meta.update(self._get_algorithm_metadata())
+        return meta
+
+    def _get_algorithm_metadata(self) -> dict:
+        """Return analyzer-specific metadata describing the implemented contract."""
+        return {}
+
+    def release_memory(self) -> None:
+        """Release large arrays to free memory."""
+        attrs = [
+            "data",
+            "W",
+            "qhat",
+            "modes",
+            "eigenvalues",
+            "time_coefficients",
+            "temporal_mean",
+            "freq",
+            "St",
+            "amplitudes",
+        ]
+        for attr in attrs:
+            if hasattr(self, attr):
+                val = getattr(self, attr)
+                if isinstance(val, np.ndarray):
+                    setattr(self, attr, np.array([]))
+                elif isinstance(val, dict):
+                    setattr(self, attr, {})
+                else:
+                    setattr(self, attr, None)
