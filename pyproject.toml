@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "modalpy"
+version = "0.1.1"
+description = "ModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [
+    { name = "Ricardo Frantz", email = "rasfrantz@gmail.com" },
+]
+keywords = [
+    "POD",
+    "MPOD",
+    "DMD",
+    "SPOD",
+    "PSD-POD",
+    "BSMD",
+    "ST-POD",
+    "modal decomposition",
+    "spatiotemporal data",
+    "fluid dynamics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "h5py>=3.8",
+    "tqdm>=4.65",
+    "threadpoolctl>=3.0",
+]
+
+[project.optional-dependencies]
+mkl = ["mkl_fft"]
+gpu = ["cupy", "torch"]
+viz3d = ["pyvista>=0.46"]
+
+[project.scripts]
+modalpy = "modalpy.cli:main"
+
+[tool.hatch.build]
+dev-mode-dirs = ["src"]
+
+[dependency-groups]
+test = [
+    "pytest>=7.0",
+]
+lint = [
+    "ruff>=0.1",
+]
+dev = [
+    { include-group = "test" },
+    { include-group = "lint" },
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/modalpy",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
+exclude = [
+    "/src/modalpy/examples/cavity.jsonc",
+    "/src/modalpy/examples/cylinder.jsonc",
+    "/src/modalpy/examples/cylinder_wake_compressible.jsonc",
+    "/src/modalpy/examples/jet.jsonc",
+    "/src/modalpy/examples/jet_small.jsonc",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/modalpy"]
+include = [
+    "src/modalpy/examples/cylinder_wake.jsonc",
+    "src/modalpy/examples/double_gyre.jsonc",
+    "src/modalpy/examples/run_benchmarks.jsonc",
+    "src/modalpy/examples/taylor_green.jsonc",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
