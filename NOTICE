@@ -1,8 +1,11 @@
 OpenModalPy
+
 Copyright 2026 Ricardo A S Frantz
 
-This product includes software developed by Ricardo A S Frantz
-(https://github.com/openfluids/openmodalpy).
+This project was originally created by Ricardo A S Frantz.
+It is maintained by Ricardo A S Frantz.
+Project home: https://github.com/openfluids/openmodalpy
+Contact: rasfrantz@gmail.com
 
-Licensed under the Apache License, Version 2.0. You may obtain a copy of
-the License at http://www.apache.org/licenses/LICENSE-2.0
+Modifications and derivative works must preserve the applicable copyright,
+license, and notice text as required by Apache-2.0.

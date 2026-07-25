@@ -1,5 +1,9 @@
 # OpenModalPy
 
+[![CI](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml/badge.svg)](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Modal decomposition of spatiotemporal data in Python.
 Pure NumPy/SciPy — no external solver dependencies.
 
