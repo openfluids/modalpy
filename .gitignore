@@ -64,3 +64,16 @@ plan.md
 
 # macOS
 .DS_Store
+
+# Improvement-planning artifacts (AI process, not part of the package)
+docs/improve-ledger.md
+.beads/
+
+# bv (beads viewer) local config and caches
+.bv/
+VISION.md
+
+# Supervised-relay artifacts (private; public repo)
+.sc/
+docs/goals.md
+docs/goals-ledger.md
