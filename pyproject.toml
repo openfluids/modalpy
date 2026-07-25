@@ -52,12 +52,20 @@ dependencies = [
     "h5py>=3.8",
     "tqdm>=4.65",
     "threadpoolctl>=3.0",
-    "fftkit>=0.1.0",
+    # >=0.2.0: fftkit 0.1.0's `gpu` extra resolved to the source-only `cupy`
+    # sdist, so `openmodalpy[gpu]` triggered a local CUDA toolkit compile
+    # instead of installing a wheel. 0.2.0 points it at `cupy-cuda12x`.
+    # openmodalpy is compatible with both releases -- its two FFT call sites
+    # pass axis=0 explicitly, so 0.2.0's axis default change does not reach
+    # them (verified: full suite, 94 passed, no AxisDefaultWarning).
+    "fftkit>=0.2.0",
 ]
 
 [project.optional-dependencies]
 # FFT accelerators are provided by fftkit, which owns backend dispatch.
 mkl = ["fftkit[mkl]"]
+# fftkit's `gpu` extra is an alias for its CUDA 12 wheel; use fftkit[cuda11]
+# directly if you need a CUDA 11 build.
 gpu = ["fftkit[gpu]"]
 viz3d = ["pyvista>=0.46"]
 
