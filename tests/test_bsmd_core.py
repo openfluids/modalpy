@@ -144,7 +144,16 @@ def test_disk_backed_qhat_matches_ram(tmp_path):
 
 
 def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
-    """The current BSMD core returns the dominant eigenpair of C."""
+    """The current BSMD core returns the dominant eigenpair of C.
+
+    NOTE: this test re-derives the formula inline and therefore mirrors the
+    implementation in src/openmodalpy/bsmd.py::_compute_single_triad -- it is
+    a characterization test, NOT an independent oracle. It only proves the
+    method is internally self-consistent with its own formula; it says nothing
+    about whether that formula is physically correct. The independent oracle
+    for correctness (manufactured phase-locked/control triads) lives in
+    tests/test_bsmd_manufactured.py.
+    """
     analyzer = _make_analyzer(tmp_path, triads=[(1, 2, 3)], nfft=8, Ns=24, Nspace=2)
     analyzer.W = np.ones((2, 1), dtype=complex)
 
@@ -157,14 +166,14 @@ def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
     eigval, mode1, mode2 = analyzer._compute_single_triad(1, 2, 3)
 
     prod = q1 * q2
-    c_matrix = (prod.T @ (analyzer.W * q3)) / q1.shape[1]
+    c_matrix = (np.conj(q3).T @ (analyzer.W * prod)) / q1.shape[1]
     eigvals, eigvecs = np.linalg.eig(c_matrix)
     dom = np.argmax(np.abs(eigvals))
     coeffs = eigvecs[:, dom]
 
     np.testing.assert_allclose(eigval, eigvals[dom], rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(mode1, q3 @ np.conj(coeffs), rtol=1e-12, atol=1e-12)
-    np.testing.assert_allclose(mode2, np.conj(prod @ coeffs), rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(mode1, q3 @ coeffs, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(mode2, prod @ coeffs, rtol=1e-12, atol=1e-12)
 
 
 def test_save_results_records_bsmd_approximation_contract(tmp_path):
@@ -177,3 +186,35 @@ def test_save_results_records_bsmd_approximation_contract(tmp_path):
         assert handle.attrs["bsmd_target_objective"] == "numerical_radius"
         assert handle.attrs["lift_kind"] == "triadic_spectral_product"
         assert bool(handle.attrs["uses_shared_triadic_coefficients"])
+        assert handle.attrs["bispectrum_conjugation"] == "sum_frequency_conjugated"
+
+
+def test_load_results_roundtrip_accepts_current_stamp(tmp_path):
+    """A file written by the current build reloads without complaint."""
+    analyzer = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
+    analyzer._perform_static_bsmd_core()
+    analyzer.save_results("bsmd_roundtrip.hdf5")
+
+    reloaded = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
+    reloaded.load_results("bsmd_roundtrip.hdf5")
+    np.testing.assert_allclose(reloaded.eigenvalues, analyzer.eigenvalues, rtol=1e-12)
+
+
+def test_load_results_rejects_prefix_unconjugated_file(tmp_path):
+    """Results written before the sum-frequency conjugation fix must not load.
+
+    Such files carry eigenvalues and modes computed from E[X(f1)X(f2)X(f1+f2)]
+    instead of the bispectrum E[X(f1)X(f2)X*(f1+f2)]; reloading them silently
+    would hand the caller invalid numbers.
+    """
+    analyzer = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
+    analyzer._perform_static_bsmd_core()
+    analyzer.save_results("bsmd_stale.hdf5")
+
+    # Simulate a file produced by a pre-fix build: the stamp did not exist.
+    with h5py.File(tmp_path / "bsmd_stale.hdf5", "a") as handle:
+        del handle.attrs["bispectrum_conjugation"]
+
+    reloaded = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
+    with pytest.raises(ValueError, match="sum-frequency term was not conjugated"):
+        reloaded.load_results("bsmd_stale.hdf5")

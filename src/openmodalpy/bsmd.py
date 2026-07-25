@@ -550,15 +550,18 @@ class BSMDAnalyzer(BaseAnalyzer):
         # dominant eigenpair as the current approximation to the ideal BSMD
         # numerical-radius problem.
         prod = Q1 * Q2  # (Nspace, Nblocks)
-        C = (prod.T @ (self.W * Q3)) / nblocks  # (Nblocks, Nblocks)
+        # Schmidt (2020), Bispectral mode decomposition of nonlinear flows:
+        #   B = Q_{k+l}^H W (Q_k o Q_l) / N_blk
+        # The sum-frequency term carries the conjugate; E[X(f1)X(f2)X*(f1+f2)].
+        C = (np.conj(Q3).T @ (self.W * prod)) / nblocks  # (Nblocks, Nblocks)
 
         try:
             eigvals, eigvecs = np.linalg.eig(C)
             dom = np.argmax(np.abs(eigvals))
             a = eigvecs[:, dom]
 
-            mode1 = Q3 @ np.conj(a)  # Φ1 = B @ conj(a)
-            mode2 = np.conj(prod @ a)  # Φ2 = conj(prod @ a) = A @ conj(a)
+            mode1 = Q3 @ a
+            mode2 = prod @ a
             return eigvals[dom], mode1, mode2
         except np.linalg.LinAlgError:
             return np.nan, None, None
@@ -571,6 +574,7 @@ class BSMDAnalyzer(BaseAnalyzer):
             "bsmd_target_objective": "numerical_radius",
             "uses_spatial_metric_in_cross_operator": True,
             "uses_shared_triadic_coefficients": True,
+            "bispectrum_conjugation": "sum_frequency_conjugated",
         }
 
     # Core logic for BSMD with statically defined triads.
@@ -764,6 +768,13 @@ class BSMDAnalyzer(BaseAnalyzer):
                 print(f"[ERROR] No BSMD results file found in {self.results_dir}")
                 return
         with h5py.File(load_path, "r") as f:
+            stamp = f.attrs.get("bispectrum_conjugation")
+            if stamp != "sum_frequency_conjugated":
+                raise ValueError(
+                    f"{load_path} was written by a pre-fix BSMD build in which the "
+                    "sum-frequency term was not conjugated; its eigenvalues and modes "
+                    "are invalid. Recompute from the raw data."
+                )
             self.triads = f["triads"][:] if "triads" in f else np.array([])
             self.eigenvalues = f["eigenvalues"][:] if "eigenvalues" in f else np.array([])
             self.modes1 = f["Modes1"][:] if "Modes1" in f else np.array([])
