@@ -1,6 +1,6 @@
 import numpy as np
 
-from modalpy.core.io import DNamiDataLoader
+from openmodalpy.core.io import DNamiDataLoader
 
 
 def test_parallel_loading_identical(tmp_path, monkeypatch):

@@ -1,4 +1,4 @@
-"""Typed specs and command metadata for the ModalPy CLI/API."""
+"""Typed specs and command metadata for the OpenModalPy CLI/API."""
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ class RunCollectionSpec:
 
 @dataclass(frozen=True)
 class MethodInfo:
-    """Metadata exposed through ``modalpy methods``."""
+    """Metadata exposed through ``openmodalpy methods``."""
 
     method_id: str
     cli_name: str

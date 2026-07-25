@@ -9,8 +9,8 @@ from typing import Iterable
 import h5py
 import numpy as np
 
-from modalpy.core.config import FIGURES_DIR_POD, RESULTS_DIR_POD
-from modalpy.pod import PODAnalyzer
+from openmodalpy.core.config import FIGURES_DIR_POD, RESULTS_DIR_POD
+from openmodalpy.pod import PODAnalyzer
 
 
 def _as_weight_vector(W: np.ndarray, n_space: int) -> np.ndarray:

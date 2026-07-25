@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Cylinder",
-  "description": "Cylinder dNamiX dataset with all current ModalPy methods using spatial stride-2 loading.",
+  "description": "Cylinder dNamiX dataset with all current OpenModalPy methods using spatial stride-2 loading.",
   "case": {
     "name": "cylinder",
     "case_type": "experimental",

@@ -1,6 +1,6 @@
 import numpy as np
 
-from modalpy.core.base import spod_function
+from openmodalpy.core.base import spod_function
 
 
 def test_spod_function_simple():

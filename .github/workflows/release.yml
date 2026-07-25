@@ -67,7 +67,7 @@ jobs:
       - name: Check tag matches package version
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          pkg="$(uv run python -c 'import modalpy; print(modalpy.__version__)')"
+          pkg="$(uv run python -c 'import openmodalpy; print(openmodalpy.__version__)')"
           if [ "$tag" != "$pkg" ]; then
             echo "tag $tag does not match package version $pkg" >&2
             exit 1

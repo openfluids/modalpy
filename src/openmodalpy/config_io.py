@@ -1,4 +1,4 @@
-"""Shared JSONC and path helpers for ModalPy command/config flows."""
+"""Shared JSONC and path helpers for OpenModalPy command/config flows."""
 
 from __future__ import annotations
 

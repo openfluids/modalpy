@@ -1,7 +1,7 @@
-"""Core utilities for ModalPy."""
+"""Core utilities for OpenModalPy."""
 
-from modalpy.core.base import BaseAnalyzer
-from modalpy.core.config import (
+from openmodalpy.core.base import BaseAnalyzer
+from openmodalpy.core.config import (
     FFT_BACKEND,
     FIG_DPI,
     FIGURES_DIR_BSMD,

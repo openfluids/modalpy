@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Cavity PIV",
-  "description": "Experimental cavity dataset with all current ModalPy methods and DMD variants.",
+  "description": "Experimental cavity dataset with all current OpenModalPy methods and DMD variants.",
   "case": {
     "name": "cavity",
     "case_type": "experimental",

@@ -1,6 +1,6 @@
 import numpy as np
 
-from modalpy.core.base import calculate_polar_weights, calculate_uniform_weights
+from openmodalpy.core.base import calculate_polar_weights, calculate_uniform_weights
 
 
 def test_uniform_weights_1d_vs_2d():

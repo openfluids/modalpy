@@ -1,25 +1,20 @@
 {
   "kind": "analysis-suite",
-  "name": "Cylinder Wake",
-  "description": "Synthetic von Karman cylinder wake with the full ModalPy method matrix.",
+  "name": "Compressible Cylinder Wake",
+  "description": "Compressible dNamiX cylinder wake dataset with all current OpenModalPy methods.",
   "case": {
-    "name": "cylinder_wake",
-    "case_type": "analytical",
-    "description": "Synthetic cylinder wake example.",
+    "name": "cylinder_wake_compressible",
+    "case_type": "experimental",
+    "description": "Compressible cylinder wake example.",
     "data": {
-      "kind": "generator",
-      "name": "cylinder_wake",
-      "params": {
-        "Nx": 100,
-        "Ny": 50,
-        "Nt": 500
-      }
+      "kind": "file",
+      "path": "../data/dnamix/snp1-947_u.npz"
     },
     "spatial_weight_type": "uniform",
     "n_modes_save": 10,
     "nfft": 128,
     "overlap": 0.5,
-    "embedding_dim": 20,
+    "embedding_dim": 15,
     "generate_plots": true
   },
   "runs": [
@@ -27,11 +22,8 @@
     { "id": "mpod", "method": "mpod", "params": { "band_edges": [0.0, 0.15, 0.35, 1.0], "band_scale": "normalized_nyquist" } },
     { "id": "dmd_ls", "method": "dmd", "params": { "method": "ls", "delays": 1 } },
     { "id": "dmd_tls", "method": "dmd", "params": { "method": "tls", "delays": 1 } },
-    { "id": "hodmd", "method": "hodmd", "params": { "delays": 4 } },
-    { "id": "tls_hodmd", "method": "tls-hodmd", "params": { "delays": 4 } },
     { "id": "spod", "method": "spod" },
     { "id": "psd_pod", "method": "psd-pod" },
-    { "id": "bsmd", "method": "bsmd" },
-    { "id": "stpod", "method": "stpod" }
+    { "id": "bsmd", "method": "bsmd" }
   ]
 }

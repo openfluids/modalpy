@@ -1,7 +1,7 @@
-"""ModalPy public package."""
+"""OpenModalPy public package."""
 
-from modalpy.bsmd import BSMDAnalyzer
-from modalpy.commands import (
+from openmodalpy.bsmd import BSMDAnalyzer
+from openmodalpy.commands import (
     analyze_from_config,
     analyze_from_spec,
     discover_examples,
@@ -11,14 +11,14 @@ from modalpy.commands import (
     load_case_spec,
     run_from_config,
 )
-from modalpy.dmd import DMDAnalyzer
-from modalpy.mpod import MPODAnalyzer
-from modalpy.pod import PODAnalyzer
-from modalpy.specs import AnalyzeSpec, CaseSpec, DataSourceSpec, RunOutcome
-from modalpy.spod import SPODAnalyzer
-from modalpy.stpod import STPODAnalyzer
+from openmodalpy.dmd import DMDAnalyzer
+from openmodalpy.mpod import MPODAnalyzer
+from openmodalpy.pod import PODAnalyzer
+from openmodalpy.specs import AnalyzeSpec, CaseSpec, DataSourceSpec, RunOutcome
+from openmodalpy.spod import SPODAnalyzer
+from openmodalpy.stpod import STPODAnalyzer
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "PODAnalyzer",
     "MPODAnalyzer",

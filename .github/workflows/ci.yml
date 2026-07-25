@@ -60,4 +60,4 @@ jobs:
           uv venv /tmp/wheelcheck
           uv pip install --python /tmp/wheelcheck dist/*.whl
           cd /tmp
-          /tmp/wheelcheck/bin/python -c "import modalpy, fftkit; from modalpy.core.config import FFT_BACKEND; print(modalpy.__version__, fftkit.__version__, FFT_BACKEND)"
+          /tmp/wheelcheck/bin/python -c "import openmodalpy, fftkit; from openmodalpy.core.config import FFT_BACKEND; print(openmodalpy.__version__, fftkit.__version__, FFT_BACKEND)"

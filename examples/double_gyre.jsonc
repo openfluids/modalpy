@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Double Gyre",
-  "description": "Analytical time-periodic double-gyre field with the full ModalPy run matrix.",
+  "description": "Analytical time-periodic double-gyre field with the full OpenModalPy run matrix.",
   "case": {
     "name": "double_gyre",
     "case_type": "analytical",

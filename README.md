@@ -1,4 +1,4 @@
-# ModalPy
+# OpenModalPy
 
 Modal decomposition of spatiotemporal data in Python.
 Pure NumPy/SciPy — no external solver dependencies.
@@ -11,7 +11,7 @@ Pure NumPy/SciPy — no external solver dependencies.
 uv add openmodalpy
 ```
 
-The installed package is imported as `modalpy`.
+The installed package is imported as `openmodalpy`.
 
 Or as a standalone CLI:
 
@@ -38,7 +38,7 @@ export FFTKIT_BACKEND=mkl      # or scipy, numpy, cupy, accelerate
 ```
 
 ```python
-from modalpy.core.config import FFT_BACKEND
+from openmodalpy.core.config import FFT_BACKEND
 print(FFT_BACKEND)   # the backend actually in use
 ```
 
@@ -55,7 +55,7 @@ uv add "openmodalpy[gpu]"   # CuPy / PyTorch
 ## Quick Start
 
 ```python
-from modalpy import PODAnalyzer, DMDAnalyzer, SPODAnalyzer
+from openmodalpy import PODAnalyzer, DMDAnalyzer, SPODAnalyzer
 
 pod = PODAnalyzer(file_path="data.mat", n_modes_save=10)
 pod.run_analysis()
@@ -90,18 +90,18 @@ A single JSONC file runs multiple methods on one dataset:
 ```
 
 ```bash
-modalpy run --config analysis.jsonc
+openmodalpy run --config analysis.jsonc
 ```
 
 ## CLI
 
 ```bash
-modalpy analyze pod --config case.jsonc         # one method
-modalpy run --config suite.jsonc                # full suite
-modalpy run --config suite.jsonc --dry-run      # preview
-modalpy methods list                            # supported methods
-modalpy examples list                           # bundled examples
-modalpy results inspect output.hdf5             # inspect result
+openmodalpy analyze pod --config case.jsonc         # one method
+openmodalpy run --config suite.jsonc                # full suite
+openmodalpy run --config suite.jsonc --dry-run      # preview
+openmodalpy methods list                            # supported methods
+openmodalpy examples list                           # bundled examples
+openmodalpy results inspect output.hdf5             # inspect result
 ```
 
 ## Bundled Example Configs
@@ -137,7 +137,7 @@ inspired by the reference
 
 ## Data Format
 
-ModalPy auto-detects `.mat` and `.npz` files:
+OpenModalPy auto-detects `.mat` and `.npz` files:
 
 ```python
 {

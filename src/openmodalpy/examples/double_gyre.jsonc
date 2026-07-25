@@ -1,18 +1,23 @@
 {
   "kind": "analysis-suite",
-  "name": "Cavity PIV",
-  "description": "Experimental cavity dataset with all current ModalPy methods and DMD variants.",
+  "name": "Double Gyre",
+  "description": "Analytical time-periodic double-gyre field with the full OpenModalPy run matrix.",
   "case": {
-    "name": "cavity",
-    "case_type": "experimental",
-    "description": "Cavity PIV example.",
+    "name": "double_gyre",
+    "case_type": "analytical",
+    "description": "Time-periodic double-gyre example.",
     "data": {
-      "kind": "file",
-      "path": "../data/cavity/cavityPIV.mat"
+      "kind": "generator",
+      "name": "double_gyre",
+      "params": {
+        "Nx": 80,
+        "Ny": 40,
+        "Nt": 200
+      }
     },
     "spatial_weight_type": "uniform",
     "n_modes_save": 10,
-    "nfft": 256,
+    "nfft": 64,
     "overlap": 0.5,
     "embedding_dim": 20,
     "generate_plots": true

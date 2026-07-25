@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the ModalPy double_gyre analytical case."""
+"""Run the OpenModalPy double_gyre analytical case."""
 
 from pathlib import Path
 
@@ -8,5 +8,5 @@ import run_benchmarks
 if __name__ == "__main__":
     run_benchmarks.run_single_case_cli(
         default_config=Path(__file__).with_suffix(".jsonc"),
-        description="Run the ModalPy double_gyre analytical case.",
+        description="Run the OpenModalPy double_gyre analytical case.",
     )

@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from fftkit import find_peaks, periodogram_rfft
 
-from modalpy.core.base import (
+from openmodalpy.core.base import (
     BaseAnalyzer,
     compute_reduced_svd,
     get_fig_aspect_ratio,
@@ -45,7 +45,7 @@ from modalpy.core.base import (
     reshape_mode_to_volume,
     resolve_volume_layout,
 )
-from modalpy.core.config import (
+from openmodalpy.core.config import (
     CMAP_DIV,
     FIG_DPI,
     FIGURES_DIR_STPOD,
@@ -478,7 +478,7 @@ class STPODAnalyzer(BaseAnalyzer):
             else:
                 mode_plot = mode_2d
 
-            from modalpy.core.base import get_robust_clim
+            from openmodalpy.core.base import get_robust_clim
             vmin, vmax = get_robust_clim(mode_plot, method="percentile")
             levels = np.linspace(vmin, vmax, 21)
 

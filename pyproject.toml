@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openmodalpy"
-# Single source of truth: __version__ in src/modalpy/__init__.py (see [tool.hatch.version]).
+# Single source of truth: __version__ in src/openmodalpy/__init__.py (see [tool.hatch.version]).
 # Keeping it in one place means the release workflow's tag check and the built
 # artifact can never disagree about the version.
 dynamic = ["version"]
-description = "ModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
+description = "OpenModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -63,7 +63,7 @@ gpu = ["fftkit[gpu]"]
 viz3d = ["pyvista>=0.46"]
 
 [project.scripts]
-modalpy = "modalpy.cli:main"
+openmodalpy = "openmodalpy.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/openfluids/openmodalpy"
@@ -86,7 +86,7 @@ dev = [
 ]
 
 [tool.hatch.version]
-path = "src/modalpy/__init__.py"
+path = "src/openmodalpy/__init__.py"
 
 [tool.hatch.build]
 dev-mode-dirs = ["src"]
@@ -95,7 +95,7 @@ dev-mode-dirs = ["src"]
 # depend on benchmark datasets that live outside the repository.
 [tool.hatch.build.targets.sdist]
 include = [
-    "/src/modalpy",
+    "/src/openmodalpy",
     "/tests",
     "/README.md",
     "/CHANGELOG.md",
@@ -103,20 +103,20 @@ include = [
     "/pyproject.toml",
 ]
 exclude = [
-    "/src/modalpy/examples/cavity.jsonc",
-    "/src/modalpy/examples/cylinder.jsonc",
-    "/src/modalpy/examples/cylinder_wake_compressible.jsonc",
-    "/src/modalpy/examples/jet.jsonc",
-    "/src/modalpy/examples/jet_small.jsonc",
+    "/src/openmodalpy/examples/cavity.jsonc",
+    "/src/openmodalpy/examples/cylinder.jsonc",
+    "/src/openmodalpy/examples/cylinder_wake_compressible.jsonc",
+    "/src/openmodalpy/examples/jet.jsonc",
+    "/src/openmodalpy/examples/jet_small.jsonc",
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/modalpy"]
+packages = ["src/openmodalpy"]
 include = [
-    "src/modalpy/examples/cylinder_wake.jsonc",
-    "src/modalpy/examples/double_gyre.jsonc",
-    "src/modalpy/examples/run_benchmarks.jsonc",
-    "src/modalpy/examples/taylor_green.jsonc",
+    "src/openmodalpy/examples/cylinder_wake.jsonc",
+    "src/openmodalpy/examples/double_gyre.jsonc",
+    "src/openmodalpy/examples/run_benchmarks.jsonc",
+    "src/openmodalpy/examples/taylor_green.jsonc",
 ]
 
 [tool.ruff]

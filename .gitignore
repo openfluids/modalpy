@@ -58,5 +58,9 @@ paper/
 # Collaborator working directories — kept private
 baptiste/
 
+# Local working notes and run logs — never part of the published repo
+plan.md
+*.log
+
 # macOS
 .DS_Store

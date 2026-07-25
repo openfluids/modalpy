@@ -2,8 +2,8 @@ import h5py
 import numpy as np
 from scipy import signal
 
-from modalpy import PODAnalyzer
-from modalpy.core.base import subset_volume_focus_3d
+from openmodalpy import PODAnalyzer
+from openmodalpy.core.base import subset_volume_focus_3d
 
 
 def test_perform_pod_simple():

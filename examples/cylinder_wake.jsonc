@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Cylinder Wake",
-  "description": "Synthetic von Karman cylinder wake with the full ModalPy method matrix.",
+  "description": "Synthetic von Karman cylinder wake with the full OpenModalPy method matrix.",
   "case": {
     "name": "cylinder_wake",
     "case_type": "analytical",

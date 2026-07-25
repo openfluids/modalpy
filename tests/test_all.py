@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive validation tests for ModalPy: POD, DMD, SPOD
+Comprehensive validation tests for OpenModalPy: POD, DMD, SPOD
 
 Validates mathematical correctness using synthetic data with known analytical solutions.
 Run with: python test_all.py
@@ -73,7 +73,7 @@ def section(title: str):
 
 def test_pod():
     """Test Proper Orthogonal Decomposition."""
-    from modalpy import PODAnalyzer
+    from openmodalpy import PODAnalyzer
     section("POD Validation Tests")
 
     # --- Test 1: Rank-k recovery ---
@@ -150,7 +150,7 @@ def test_pod():
 
 def test_dmd():
     """Test Dynamic Mode Decomposition."""
-    from modalpy import DMDAnalyzer
+    from openmodalpy import DMDAnalyzer
     section("DMD Validation Tests")
 
     np.random.seed(42)
@@ -282,7 +282,7 @@ def test_dmd():
 
 def test_spod():
     """Test Spectral Proper Orthogonal Decomposition."""
-    from modalpy import SPODAnalyzer
+    from openmodalpy import SPODAnalyzer
     section("SPOD Validation Tests")
 
     np.random.seed(42)
@@ -410,7 +410,7 @@ def test_cross_method():
     """Test consistency between methods."""
     section("Cross-Method Consistency Tests")
 
-    from modalpy import PODAnalyzer, SPODAnalyzer
+    from openmodalpy import PODAnalyzer, SPODAnalyzer
 
     np.random.seed(42)
     Nx, Ny = 8, 8
@@ -462,7 +462,7 @@ def test_cross_method():
 
 def test_heavy():
     """Heavy tests with larger degrees of freedom for real-world validation."""
-    from modalpy import DMDAnalyzer, PODAnalyzer, SPODAnalyzer
+    from openmodalpy import DMDAnalyzer, PODAnalyzer, SPODAnalyzer
 
     section("Heavy Tests (Large DOF)")
 
@@ -657,7 +657,7 @@ def test_heavy():
 
 def main():
     print("\n" + "="*60)
-    print(" ModalPy Validation Suite")
+    print(" OpenModalPy Validation Suite")
     print(" Testing POD, DMD, SPOD mathematical correctness")
     print("="*60)
 

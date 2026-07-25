@@ -1,7 +1,7 @@
 import h5py
 import numpy as np
 
-from modalpy import SPODAnalyzer
+from openmodalpy import SPODAnalyzer
 
 
 def test_plot_eigenvalues_v2(tmp_path):

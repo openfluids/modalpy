@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Jet LES",
-  "description": "Full jet LES dataset with all current ModalPy methods and DMD variants.",
+  "description": "Full jet LES dataset with all current OpenModalPy methods and DMD variants.",
   "case": {
     "name": "jet",
     "case_type": "experimental",

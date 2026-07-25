@@ -1,7 +1,7 @@
 import h5py
 import numpy as np
 
-from modalpy.core.io import MATDataLoader
+from openmodalpy.core.io import MATDataLoader
 
 
 def test_mat_loader_handles_flattened_space_by_time_matrix(tmp_path):

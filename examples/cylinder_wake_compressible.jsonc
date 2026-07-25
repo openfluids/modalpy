@@ -1,7 +1,7 @@
 {
   "kind": "analysis-suite",
   "name": "Compressible Cylinder Wake",
-  "description": "Compressible dNamiX cylinder wake dataset with all current ModalPy methods.",
+  "description": "Compressible dNamiX cylinder wake dataset with all current OpenModalPy methods.",
   "case": {
     "name": "cylinder_wake_compressible",
     "case_type": "experimental",

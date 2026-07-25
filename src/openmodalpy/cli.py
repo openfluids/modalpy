@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Subcommand CLI frontend for ModalPy."""
+"""Subcommand CLI frontend for OpenModalPy."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from modalpy.commands import (
+from openmodalpy.commands import (
     analyze_from_config,
     discover_examples,
     get_example_info,
@@ -24,7 +24,7 @@ from modalpy.commands import (
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argparse tree."""
     parser = argparse.ArgumentParser(
-        description="ModalPy: a unified Python workflow for modal decomposition of spatiotemporal data",
+        description="OpenModalPy: a unified Python workflow for modal decomposition of spatiotemporal data",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -153,7 +153,7 @@ def _print_examples_list() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point used by both the console script and ``python -m modalpy``."""
+    """CLI entry point used by both the console script and ``python -m openmodalpy``."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

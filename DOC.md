@@ -1,7 +1,7 @@
-# ModalPy — Technical Reference
+# OpenModalPy — Technical Reference
 
 This document is the single reference for humans and LLMs working with the
-ModalPy codebase. It covers architecture, every supported method, the data
+OpenModalPy codebase. It covers architecture, every supported method, the data
 contract, the configuration system, the CLI, and extension paths.
 
 ---
@@ -9,7 +9,7 @@ contract, the configuration system, the CLI, and extension paths.
 ## Architecture
 
 ```
-src/modalpy/
+src/openmodalpy/
 ├── __init__.py          # public exports: PODAnalyzer, MPODAnalyzer, DMDAnalyzer,
 │                        #   SPODAnalyzer, BSMDAnalyzer, STPODAnalyzer
 ├── core/
@@ -107,7 +107,7 @@ Every analyzer expects a Python dict with these keys:
 **Class:** `PODAnalyzer` · **Lift:** identity on centered snapshots · **Operator:** covariance kernel eigenproblem
 
 ```python
-from modalpy import PODAnalyzer
+from openmodalpy import PODAnalyzer
 
 pod = PODAnalyzer(file_path="data.mat", n_modes_save=10)
 pod.run_analysis()
@@ -126,7 +126,7 @@ pod.run_analysis()
 **Class:** `MPODAnalyzer` · **Lift:** temporal band filtering · **Operator:** POD per band
 
 ```python
-from modalpy import MPODAnalyzer
+from openmodalpy import MPODAnalyzer
 
 mpod = MPODAnalyzer(
     file_path="data.mat", n_modes_save=10,
@@ -159,7 +159,7 @@ mpod.run_analysis()
 **Class:** `SPODAnalyzer` · **Lift:** blockwise Fourier transform · **Operator:** per-frequency covariance eigenproblem
 
 ```python
-from modalpy import SPODAnalyzer
+from openmodalpy import SPODAnalyzer
 
 spod = SPODAnalyzer(file_path="data.mat", nfft=256, overlap=0.5)
 spod.run_analysis()
@@ -181,7 +181,7 @@ spod.run_analysis()
 **Class:** `STPODAnalyzer` · **Lift:** delay/Hankel stacking · **Operator:** POD in delay space
 
 ```python
-from modalpy import STPODAnalyzer
+from openmodalpy import STPODAnalyzer
 
 stpod = STPODAnalyzer(file_path="data.mat", embedding_dim=10, n_modes_save=10)
 stpod.run_analysis()
@@ -199,7 +199,7 @@ stpod.run_analysis()
 **Class:** `DMDAnalyzer` · **Lift:** identity (shifted pairs) · **Operator:** LS or TLS regression
 
 ```python
-from modalpy import DMDAnalyzer
+from openmodalpy import DMDAnalyzer
 
 dmd = DMDAnalyzer(file_path="data.mat", n_modes_save=10)
 dmd.load_and_preprocess()
@@ -235,7 +235,7 @@ Same class as DMD (`DMDAnalyzer`), with `delays >= 2`.
 **Class:** `BSMDAnalyzer` · **Lift:** Hadamard product of Fourier pairs · **Operator:** cross-bispectral eigenproblem
 
 ```python
-from modalpy import BSMDAnalyzer
+from openmodalpy import BSMDAnalyzer
 
 bsmd = BSMDAnalyzer(file_path="data.mat", nfft=256, overlap=0.5)
 bsmd.run_analysis()
@@ -324,14 +324,14 @@ All other method names work as-is: `pod`, `mpod`, `dmd`, `hodmd`, `spod`, `bsmd`
 ## CLI Reference
 
 ```
-modalpy analyze <method> --config <path.jsonc> [options]
-modalpy run --config <path.jsonc> [--dry-run]
-modalpy methods list
-modalpy methods show <name>
-modalpy examples list
-modalpy examples show <name>
-modalpy examples run <name> [--dry-run]
-modalpy results inspect <path>
+openmodalpy analyze <method> --config <path.jsonc> [options]
+openmodalpy run --config <path.jsonc> [--dry-run]
+openmodalpy methods list
+openmodalpy methods show <name>
+openmodalpy examples list
+openmodalpy examples show <name>
+openmodalpy examples run <name> [--dry-run]
+openmodalpy results inspect <path>
 ```
 
 ### analyze options

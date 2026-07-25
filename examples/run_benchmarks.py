@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin wrapper around the unified ``modalpy run`` command core."""
+"""Thin wrapper around the unified ``openmodalpy run`` command core."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ SRC_ROOT = REPO_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from modalpy.commands import run_config_entrypoint  # noqa: E402
+from openmodalpy.commands import run_config_entrypoint  # noqa: E402
 
 DEFAULT_CONFIG = Path(__file__).with_suffix(".jsonc")
 
@@ -25,7 +25,7 @@ def main() -> None:
     """Run the example suite defined by ``run_benchmarks.jsonc``."""
     run_config_entrypoint(
         default_config=DEFAULT_CONFIG,
-        description="Run the ModalPy example suite from a JSONC config.",
+        description="Run the OpenModalPy example suite from a JSONC config.",
     )
 
 

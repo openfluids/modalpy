@@ -29,7 +29,7 @@ import numpy as np
 import scipy.linalg  # For eigh
 from fftkit import find_peaks, periodogram_rfft
 
-from modalpy.core.base import (
+from openmodalpy.core.base import (
     BaseAnalyzer,
     add_inset_colorbar,
     format_mode_title,
@@ -41,7 +41,7 @@ from modalpy.core.base import (
     resolve_volume_layout,
     style_spatial_axes,
 )
-from modalpy.core.config import (
+from openmodalpy.core.config import (
     CMAP_DIV,
     CMAP_SEQ,
     FIG_DPI,
@@ -49,7 +49,7 @@ from modalpy.core.config import (
     RESULTS_DIR_POD,
     require_existing_data_path,
 )
-from modalpy.core.parallel import print_optimization_status
+from openmodalpy.core.parallel import print_optimization_status
 
 
 class PODAnalyzer(BaseAnalyzer):
@@ -593,7 +593,7 @@ class PODAnalyzer(BaseAnalyzer):
                     field = np.ma.array(mode_2d, mask=mask)
                 else:
                     field = mode_2d
-                from modalpy.core.base import get_robust_clim
+                from openmodalpy.core.base import get_robust_clim
 
                 vmin, vmax = get_robust_clim(field, method="percentile")
                 levels = np.linspace(vmin, vmax, 21)
@@ -786,7 +786,7 @@ class PODAnalyzer(BaseAnalyzer):
                     mode_plot = mode_2d
 
                 # Calculate contour levels with robust symmetric diverging scale
-                from modalpy.core.base import get_robust_clim
+                from openmodalpy.core.base import get_robust_clim
 
                 vmin, vmax = get_robust_clim(mode_plot, method="percentile")
                 levels = np.linspace(vmin, vmax, 21)
@@ -1438,7 +1438,7 @@ if __name__ == "__main__":
     print_optimization_status()
 
     if args.config:
-        from modalpy.core.config import load_config
+        from openmodalpy.core.config import load_config
 
         load_config(args.config)
 
@@ -1452,7 +1452,7 @@ if __name__ == "__main__":
     n_coeffs_to_plot_time_main = 5  # Number of temporal coefficients to visualize
 
     # Loop over all available fields in the consolidated npz
-    from modalpy.core.io import DNamiDataLoader
+    from openmodalpy.core.io import DNamiDataLoader
 
     loader = DNamiDataLoader()
     available_fields = loader.get_available_fields(data_file)

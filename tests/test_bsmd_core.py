@@ -2,7 +2,7 @@ import h5py
 import numpy as np
 import pytest
 
-from modalpy import BSMDAnalyzer
+from openmodalpy import BSMDAnalyzer
 
 
 def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4):

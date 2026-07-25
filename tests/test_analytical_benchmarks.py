@@ -1,5 +1,5 @@
 """
-Analytical benchmark tests for ModalPy.
+Analytical benchmark tests for OpenModalPy.
 
 These tests use synthetic data with KNOWN mathematical properties to verify
 that the decomposition methods produce correct results - not just "runs without
@@ -12,7 +12,7 @@ decomposition recovers that exact structure.
 import numpy as np
 import pytest
 
-from modalpy import DMDAnalyzer, PODAnalyzer, STPODAnalyzer
+from openmodalpy import DMDAnalyzer, PODAnalyzer, STPODAnalyzer
 
 # =============================================================================
 # POD Analytical Benchmarks

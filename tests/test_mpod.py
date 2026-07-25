@@ -3,7 +3,7 @@ from __future__ import annotations
 import h5py
 import numpy as np
 
-from modalpy import MPODAnalyzer, PODAnalyzer
+from openmodalpy import MPODAnalyzer, PODAnalyzer
 
 
 def _make_uniform_data(q: np.ndarray, dt: float = 1.0) -> dict:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from modalpy.core.base import blocksfft
+from openmodalpy.core.base import blocksfft
 
 
 def test_blocksfft_constant_signal():

@@ -1,4 +1,4 @@
-"""Shared command core for the ModalPy CLI and Python API."""
+"""Shared command core for the OpenModalPy CLI and Python API."""
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from modalpy.bsmd import BSMDAnalyzer
-from modalpy.config_io import load_jsonc, resolve_path
-from modalpy.core.base import (
+from openmodalpy.bsmd import BSMDAnalyzer
+from openmodalpy.config_io import load_jsonc, resolve_path
+from openmodalpy.core.base import (
     add_inset_colorbar,
     get_fig_aspect_ratio,
     get_robust_clim,
@@ -28,12 +28,12 @@ from modalpy.core.base import (
     resolve_volume_layout,
     style_spatial_axes,
 )
-from modalpy.core.io import load_data
-from modalpy.dmd import DMDAnalyzer
-from modalpy.example_data import generate_example_dataset
-from modalpy.mpod import MPODAnalyzer
-from modalpy.pod import PODAnalyzer
-from modalpy.specs import (
+from openmodalpy.core.io import load_data
+from openmodalpy.dmd import DMDAnalyzer
+from openmodalpy.example_data import generate_example_dataset
+from openmodalpy.mpod import MPODAnalyzer
+from openmodalpy.pod import PODAnalyzer
+from openmodalpy.specs import (
     AnalyzeSpec,
     CaseSpec,
     DataSourceSpec,
@@ -42,8 +42,8 @@ from modalpy.specs import (
     RunCollectionSpec,
     RunOutcome,
 )
-from modalpy.spod import SPODAnalyzer
-from modalpy.stpod import STPODAnalyzer
+from openmodalpy.spod import SPODAnalyzer
+from openmodalpy.stpod import STPODAnalyzer
 
 METHOD_REGISTRY: dict[str, MethodInfo] = {
     "pod": MethodInfo(
@@ -160,7 +160,7 @@ def examples_root() -> Path:
 
 def packaged_examples_root():
     """Return the packaged example-config root."""
-    return importlib.resources.files("modalpy.examples")
+    return importlib.resources.files("openmodalpy.examples")
 
 
 def normalize_method_name(name: str) -> str:
@@ -1120,7 +1120,7 @@ def print_results_summary(summary: dict[str, Any]) -> None:
 
 def run_config_entrypoint(default_config: Path, description: str | None = None) -> None:
     """Small argparse frontend used by the example wrapper scripts."""
-    parser = argparse.ArgumentParser(description=description or "Run one ModalPy config.")
+    parser = argparse.ArgumentParser(description=description or "Run one OpenModalPy config.")
     parser.add_argument(
         "--config",
         type=Path,

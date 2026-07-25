@@ -50,7 +50,7 @@ def require_existing_data_path(data_file: str | None) -> str:
     """Validate an explicit input path for direct module execution."""
     if not data_file:
         raise ValueError(
-            "No default input dataset is bundled with modalpy. "
+            "No default input dataset is bundled with openmodalpy. "
             "Provide --data PATH or use a packaged generator-backed example."
         )
     if not os.path.exists(data_file):
@@ -63,7 +63,7 @@ FIG_FORMAT = "png"  # or "pdf"
 
 # FFT backend selection is owned by fftkit, which probes every backend at import
 # time and degrades to an available one rather than failing. Re-exported here so
-# the name modalpy reports is always the one fftkit actually dispatches to.
+# the name openmodalpy reports is always the one fftkit actually dispatches to.
 # Override with the FFTKIT_BACKEND env var; the legacy PYMODAL_FFT_BACKEND is
 # still honoured by fftkit as a fallback.
 FFT_BACKEND = _FFTKIT_BACKEND

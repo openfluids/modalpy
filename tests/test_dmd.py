@@ -3,8 +3,8 @@ import matplotlib
 import numpy as np
 import pytest
 
-from modalpy import DMDAnalyzer
-from modalpy.dmd import _delay_embed
+from openmodalpy import DMDAnalyzer
+from openmodalpy.dmd import _delay_embed
 
 
 def _exact_dmd_eigenvalues(q: np.ndarray, n_modes_save: int) -> np.ndarray:

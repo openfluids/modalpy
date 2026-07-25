@@ -17,17 +17,17 @@ from fftkit import get_fft_func
 from scipy.signal import get_window
 from scipy.sparse.linalg import svds
 
-from modalpy.core.config import (
+from openmodalpy.core.config import (
     CMAP_DIV,
     FFT_BACKEND,
 )
-from modalpy.core.io import auto_detect_weight_type as di_auto_detect_weight_type
-from modalpy.core.io import load_data as di_load_data
-from modalpy.core.io import load_jetles_data as di_load_jetles_data
-from modalpy.core.io import load_mat_data as di_load_mat_data
+from openmodalpy.core.io import auto_detect_weight_type as di_auto_detect_weight_type
+from openmodalpy.core.io import load_data as di_load_data
+from openmodalpy.core.io import load_jetles_data as di_load_jetles_data
+from openmodalpy.core.io import load_mat_data as di_load_mat_data
 
 try:
-    from modalpy.core.parallel import (
+    from openmodalpy.core.parallel import (
         PARALLEL_AVAILABLE,
         blocksfft_optimized,
         calculate_polar_weights_optimized,
@@ -423,7 +423,7 @@ def plot_orthogonal_slices_3d(
         import pyvista as pv
     except ModuleNotFoundError as exc:
         raise ImportError(
-            "PyVista is required for 3D slice plots. Install modalpy[viz3d] to enable 3D plotting."
+            "PyVista is required for 3D slice plots. Install openmodalpy[viz3d] to enable 3D plotting."
         ) from exc
 
     values, x_arr, y_arr, z_arr = subset_volume_focus_3d(field_3d, x_coords, y_coords, z_coords, data)
@@ -495,7 +495,7 @@ def plot_isometric_slices_3d(
         import pyvista as pv
     except ModuleNotFoundError as exc:
         raise ImportError(
-            "PyVista is required for 3D isometric plots. Install modalpy[viz3d] to enable 3D plotting."
+            "PyVista is required for 3D isometric plots. Install openmodalpy[viz3d] to enable 3D plotting."
         ) from exc
 
     values, x_arr, y_arr, z_arr = subset_volume_focus_3d(field_3d, x_coords, y_coords, z_coords, data)

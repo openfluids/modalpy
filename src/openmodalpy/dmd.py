@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 warnings.filterwarnings("ignore", message="No contour levels were found within the data range.")
 import numpy as np  # noqa: E402
 
-from modalpy.core.base import (  # noqa: E402
+from openmodalpy.core.base import (  # noqa: E402
     BaseAnalyzer,
     add_inset_colorbar,
     compute_reduced_svd,
@@ -39,7 +39,7 @@ from modalpy.core.base import (  # noqa: E402
     resolve_volume_layout,
     style_spatial_axes,
 )
-from modalpy.core.config import (  # noqa: E402
+from openmodalpy.core.config import (  # noqa: E402
     CMAP_DIV,
     CMAP_SEQ,
     FIG_DPI,
@@ -50,7 +50,7 @@ from modalpy.core.config import (  # noqa: E402
 
 # Try to import DNamiDataLoader for npz support
 try:
-    from modalpy.core.io import DNamiDataLoader
+    from openmodalpy.core.io import DNamiDataLoader
 except ImportError:
     DNamiDataLoader = None
 
@@ -893,7 +893,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.config:
-        from modalpy.core.config import load_config
+        from openmodalpy.core.config import load_config
 
         load_config(args.config)
 
@@ -951,7 +951,7 @@ if __name__ == "__main__":
             print_summary("DMD", analyzer.results_dir, analyzer.figures_dir)
     else:
         # Fallback for legacy .mat/.h5 files
-        from modalpy.core.base import load_mat_data
+        from openmodalpy.core.base import load_mat_data
 
         loader = load_mat_data
         analyzer = DMDAnalyzer(

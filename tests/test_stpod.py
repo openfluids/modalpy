@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import pytest
 
-from modalpy import STPODAnalyzer
+from openmodalpy import STPODAnalyzer
 
 
 class TestSTPODBasic:

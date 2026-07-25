@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from modalpy.core.base import (
+from openmodalpy.core.base import (
     BaseAnalyzer,
     add_inset_colorbar,
     auto_detect_weight_type,
@@ -30,7 +30,7 @@ from modalpy.core.base import (
     spod_function,
     style_spatial_axes,
 )
-from modalpy.core.config import (
+from openmodalpy.core.config import (
     CMAP_DIV,
     FIG_DPI,
     FIG_FORMAT,
@@ -40,11 +40,11 @@ from modalpy.core.config import (
     WINDOW_TYPE,
     require_existing_data_path,
 )
-from modalpy.core.parallel import print_optimization_status
+from openmodalpy.core.parallel import print_optimization_status
 
 # Try to import DNamiDataLoader for npz support
 try:
-    from modalpy.core.io import DNamiDataLoader
+    from openmodalpy.core.io import DNamiDataLoader
 except ImportError:
     DNamiDataLoader = None
 
@@ -740,7 +740,7 @@ class SPODAnalyzer(BaseAnalyzer):
                             mode_plot = np.ma.array(mode_2d, mask=np.isnan(mode_2d) | cyl_mask)
                         else:
                             mode_plot = np.ma.array(mode_2d, mask=np.isnan(mode_2d))
-                        from modalpy.core.base import get_robust_clim
+                        from openmodalpy.core.base import get_robust_clim
 
                         vmin, vmax = get_robust_clim(mode_plot, method="percentile")
                         levels = np.linspace(vmin, vmax, 21)
@@ -999,14 +999,14 @@ if __name__ == "__main__":
     parser.add_argument("--plot", action="store_true", help="Generate default plots")
     args = parser.parse_args()
 
-    from modalpy.core.parallel import get_threadpool_summary
+    from openmodalpy.core.parallel import get_threadpool_summary
 
     print(f"Thread pools: {get_threadpool_summary()}")
 
     print_optimization_status()
 
     if args.config:
-        from modalpy.core.config import load_config
+        from openmodalpy.core.config import load_config
 
         load_config(args.config)
 

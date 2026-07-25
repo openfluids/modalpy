@@ -5,9 +5,9 @@ from pathlib import Path
 
 import h5py
 
-from modalpy import analyze_from_config
-from modalpy.cli import main
-from modalpy.commands import (
+from openmodalpy import analyze_from_config
+from openmodalpy.cli import main
+from openmodalpy.commands import (
     _maybe_plot_volumetric_modes,
     discover_examples,
     get_method_spec,
@@ -90,7 +90,7 @@ def test_analyze_from_config_routes_hodmd_aliases(tmp_path: Path, monkeypatch) -
         def plot_cumulative_energy(self):
             raise AssertionError("plots should be disabled in this test")
 
-    monkeypatch.setattr("modalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
+    monkeypatch.setattr("openmodalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
 
     outcome_hodmd = analyze_from_config(config_path, method="hodmd", overrides={"generate_plots": False})
     outcome_tls = analyze_from_config(config_path, method="tls-hodmd", overrides={"generate_plots": False})
@@ -157,7 +157,7 @@ def test_analyze_from_config_forwards_dmd_variant_options(tmp_path: Path, monkey
         def plot_cumulative_energy(self):
             raise AssertionError("plots should be disabled in this test")
 
-    monkeypatch.setattr("modalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
+    monkeypatch.setattr("openmodalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
 
     outcome = analyze_from_config(
         config_path,
@@ -210,7 +210,7 @@ def test_run_from_config_executes_runs_schema(tmp_path: Path, monkeypatch) -> No
         seen.append((spec.run_id, spec.method, dict(spec.params)))
         return object()
 
-    monkeypatch.setattr("modalpy.commands.analyze_from_spec", fake_analyze)
+    monkeypatch.setattr("openmodalpy.commands.analyze_from_spec", fake_analyze)
 
     run_from_config(config_path)
 
@@ -255,7 +255,7 @@ def test_run_from_config_executes_nested_config_suite(tmp_path: Path, monkeypatc
         seen.append(spec.config_path.name)
         return object()
 
-    monkeypatch.setattr("modalpy.commands.analyze_from_spec", fake_analyze)
+    monkeypatch.setattr("openmodalpy.commands.analyze_from_spec", fake_analyze)
 
     run_from_config(suite)
 
@@ -272,7 +272,7 @@ def test_discover_examples_lists_repo_configs() -> None:
 
 
 def test_discover_examples_falls_back_to_packaged_resources(monkeypatch) -> None:
-    monkeypatch.setattr("modalpy.commands.examples_root", lambda: Path("/definitely/missing/examples"))
+    monkeypatch.setattr("openmodalpy.commands.examples_root", lambda: Path("/definitely/missing/examples"))
 
     example_names = {info.name for info in discover_examples()}
 
@@ -343,7 +343,7 @@ def test_cli_analyze_subcommand_routes_overrides(tmp_path: Path, monkeypatch, ca
         captured["dry_run"] = dry_run
         return object()
 
-    monkeypatch.setattr("modalpy.cli.analyze_from_config", fake_analyze_from_config)
+    monkeypatch.setattr("openmodalpy.cli.analyze_from_config", fake_analyze_from_config)
 
     exit_code = main(
         [
