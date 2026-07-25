@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **Window convention for blocked FFT / SPOD:** both serial and parallel
+  `blocksfft` paths now use the PERIODIC window from
+  `scipy.signal.get_window(..., fftbins=True)`. The optimized path previously
+  ignored `window_type` other than `"sine"` (falling back to a SYMMETRIC
+  `np.hamming`) and silently substituted Hamming for `hann`/`blackman`/etc.
+  Default SPOD spectra therefore change for existing users; serial and parallel
+  results now agree bit-for-bit for all supported window names.
+- An unrecognised `window_type` now raises instead of quietly falling back to
+  Hamming. Names the optimized path used to accept by accident — `hanning`, any
+  capitalised spelling, and outright typos — are rejected, since only the exact
+  names `scipy.signal.get_window` knows (plus `sine`) are valid.
+
 ### Changed
 - Relicense from MIT to Apache-2.0, effective from 0.3.0 onward. The 0.1.0 and
   0.2.0 releases remain under MIT.

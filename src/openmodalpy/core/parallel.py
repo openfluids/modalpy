@@ -12,6 +12,7 @@ Author: Modal Decomposition Team
 import multiprocessing
 
 import numpy as np
+from scipy.signal import get_window
 from threadpoolctl import threadpool_info
 
 # OpenMP support was removed. All routines rely on NumPy vectorization and the
@@ -118,7 +119,8 @@ def blocksfft_optimized(q, nfft, nblocks, novlap, blockwise_mean=False, normvar=
     window_norm : str
         Window normalization type ('amplitude' or 'power')
     window_type : str
-        Window type ('hamming' or 'sine')
+        Window type. Use 'sine' for the custom sine window or any name
+        recognized by ``scipy.signal.get_window`` (periodic / fftbins=True).
 
     Returns:
     --------
@@ -128,11 +130,12 @@ def blocksfft_optimized(q, nfft, nblocks, novlap, blockwise_mean=False, normvar=
     # Import FFT backend
     from fftkit import get_fft_func
 
-    # Select window function
+    # Select window function — PERIODIC convention (get_window fftbins=True)
+    # so both FFT paths agree with Welch spectral estimation practice.
     if window_type == "sine":
         window = np.sin(np.pi * (np.arange(nfft) + 0.5) / nfft)
     else:
-        window = np.hamming(nfft)
+        window = get_window(window_type, nfft, fftbins=True)
 
     # Normalize window
     if window_norm == "amplitude":

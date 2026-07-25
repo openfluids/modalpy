@@ -836,7 +836,7 @@ def blocksfft(
     if window_type == "sine":
         window = sine_window(nfft)
     else:
-        window = get_window(window_type, nfft)
+        window = get_window(window_type, nfft, fftbins=True)
 
     # Normalize window
     if window_norm == "amplitude":
