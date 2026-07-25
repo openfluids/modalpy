@@ -1037,10 +1037,26 @@ class BaseAnalyzer:
 
         # Calculate derived parameters
         self.nblocks = int(np.ceil((self.data["Ns"] - self.novlap) / (self.nfft - self.novlap)))
-        if self.data["dt"] == 0.0:
-            print("[WARNING] dt is zero. Setting dt to 0.1.")
-            self.data["dt"] = 0.1
-        self.fs = 1 / self.data["dt"]
+        dt = self.data.get("dt")
+        try:
+            dt = float(dt)
+        except (TypeError, ValueError):
+            # Absent, None, or not a scalar (e.g. an array) — all the same failure
+            # to the caller, so they get the same exception rather than a KeyError
+            # or TypeError leaking out of a public method.
+            raise ValueError(
+                f"Missing or non-scalar timestep dt={dt!r} for data source {self.file_path!r}; "
+                "provide a positive finite scalar dt in the data dict or loader."
+            ) from None
+        if not np.isfinite(dt) or dt <= 0.0:
+            raise ValueError(
+                f"Invalid timestep dt={dt!r} for data source {self.file_path!r}; "
+                "provide a positive finite scalar dt in the data dict or loader."
+            )
+        # Divide by the validated local, not the dict entry: a float32 or 0-d
+        # array dt would otherwise give a slightly different fs than the value
+        # just checked. self.data["dt"] is deliberately left as the loader set it.
+        self.fs = 1 / dt
 
         print(f"Data loaded: {self.data['Ns']} snapshots, {self.data['Nx']}×{self.data['Ny']} spatial points")
         if self.nfft > 1:

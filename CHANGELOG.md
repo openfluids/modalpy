@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hamming. Names the optimized path used to accept by accident — `hanning`, any
   capitalised spelling, and outright typos — are rejected, since only the exact
   names `scipy.signal.get_window` knows (plus `sine`) are valid.
+- A missing or unusable timestep now raises `ValueError` instead of defaulting to
+  `0.1` and continuing. This covers `dt` zero, negative or non-finite, as well as
+  absent, `None`, or non-scalar — all of which previously either fabricated a
+  timestep or leaked a `KeyError`/`TypeError`. Frequency axes, Strouhal numbers,
+  and DMD growth rates require a real positive `dt` from the data or loader.
 
 ### Changed
 - Relicense from MIT to Apache-2.0, effective from 0.3.0 onward. The 0.1.0 and
