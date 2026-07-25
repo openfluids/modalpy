@@ -10,8 +10,8 @@ name = "openmodalpy"
 dynamic = ["version"]
 description = "OpenModalPy: Python tools for POD, MPOD, DMD, SPOD, PSD-POD, BSMD, and ST-POD on spatiotemporal data"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.11"
 authors = [
     { name = "Ricardo Frantz", email = "rasfrantz@gmail.com" },
@@ -35,7 +35,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Education",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",

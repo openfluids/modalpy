@@ -173,4 +173,5 @@ pod = PODAnalyzer(file_path="ignored", data_loader=my_loader)
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+This project is licensed under Apache-2.0.
+Originally developed by Ricardo A S Frantz. See `LICENSE` and `NOTICE` for license terms and attribution notices.
