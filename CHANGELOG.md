@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hamming. Names the optimized path used to accept by accident — `hanning`, any
   capitalised spelling, and outright typos — are rejected, since only the exact
   names `scipy.signal.get_window` knows (plus `sine`) are valid.
+- **Loaders no longer invent a timestep, and neither do the physical quantities that
+  consume one.** A `.mat` file with no `dt` used to be given `dt = 1.0` by the loader
+  before validation ever saw it, so the check added below passed on a fabricated value.
+  The `.mat` loader now leaves `dt` unset, and `_infer_dt_from_times` returns nothing
+  rather than `1.0` when the time vector has fewer than two samples or is constant.
+  Every physics-bearing consumer — the DMD continuous-time eigenvalues
+  `ω = log(λ)/dt`, the mPOD Nyquist frequency that resolves band edges, and the SPOD
+  sampling rate restored on reload — now goes through one validated accessor and raises
+  when the timestep is missing, zero, negative or non-finite. Reloading results from an
+  HDF5 file that carries no `dt` attribute raises instead of reporting growth rates
+  computed at a unit timestep. The mPOD case is the one worth re-checking in existing
+  work: a wrong `dt` there moved the band edges, so different modes landed in different
+  bands rather than merely being mislabelled.
 - A missing or unusable timestep now raises `ValueError` instead of defaulting to
   `0.1` and continuing. This covers `dt` zero, negative or non-finite, as well as
   absent, `None`, or non-scalar — all of which previously either fabricated a

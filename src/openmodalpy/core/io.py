@@ -239,15 +239,20 @@ def _coerce_coordinate(coord: np.ndarray, expected_size: int, label: str, file_p
     )
 
 
-def _infer_dt_from_times(times: np.ndarray) -> float:
-    """Infer ``dt`` from a time vector, ignoring repeated entries."""
+def _infer_dt_from_times(times: np.ndarray) -> float | None:
+    """Infer ``dt`` from a time vector, ignoring repeated entries.
+
+    Returns ``None`` when a timestep cannot be inferred (fewer than two
+    samples, or an all-constant time vector) so callers do not fabricate
+    a unit timestep that silently rescales physical quantities.
+    """
     times_arr = np.asarray(times, dtype=float).reshape(-1)
     if times_arr.size < 2:
-        return 1.0
+        return None
     diffs = np.diff(times_arr)
     diffs = diffs[np.nonzero(diffs)]
     if diffs.size == 0:
-        return 1.0
+        return None
     return float(np.mean(np.abs(diffs)))
 
 
@@ -460,8 +465,10 @@ class MATDataLoader(DataLoader):
                 dt_data = np.array(fread["dt"])
                 dt = dt_data[0][0] if dt_data.ndim > 1 else float(dt_data)
             else:
-                dt = 1.0
-                print("   Warning: No 'dt' found, using dt=1.0")
+                # Leave absent so BaseAnalyzer._require_dt() raises rather than
+                # silently rescaling every growth rate / band edge.
+                dt = None
+                print(f"   Warning: No 'dt' found in {file_path!r}; dt left unset")
 
         if q.ndim == 2 and expected_nspace > 1:
             nx = len(x_vec) if x_vec is not None else q.shape[1]

@@ -1114,9 +1114,26 @@ class BaseAnalyzer:
 
         # Calculate derived parameters
         self.nblocks = int(np.ceil((self.data["Ns"] - self.novlap) / (self.nfft - self.novlap)))
-        dt = self.data.get("dt")
+        # Divide by the validated local, not the dict entry: a float32 or 0-d
+        # array dt would otherwise give a slightly different fs than the value
+        # just checked. self.data["dt"] is deliberately left as the loader set it.
+        self.fs = 1 / self._require_dt()
+
+        print(f"Data loaded: {self.data['Ns']} snapshots, {self.data['Nx']}×{self.data['Ny']} spatial points")
+        if self.nfft > 1:
+            print(
+                f"FFT parameters: {self.nfft} points, {self.overlap * 100}% overlap, {self.nblocks} blocks [backend: {FFT_BACKEND}]"
+            )
+
+    def _require_dt(self) -> float:
+        """Return a validated positive finite timestep from ``self.data``.
+
+        Does not write to ``self.data["dt"]``. Physics-bearing consumers must
+        call this instead of ``self.data.get("dt", 1.0)``.
+        """
+        dt = self.data.get("dt") if self.data else None
         try:
-            dt = float(dt)
+            dt_f = float(dt)
         except (TypeError, ValueError):
             # Absent, None, or not a scalar (e.g. an array) — all the same failure
             # to the caller, so they get the same exception rather than a KeyError
@@ -1125,21 +1142,12 @@ class BaseAnalyzer:
                 f"Missing or non-scalar timestep dt={dt!r} for data source {self.file_path!r}; "
                 "provide a positive finite scalar dt in the data dict or loader."
             ) from None
-        if not np.isfinite(dt) or dt <= 0.0:
+        if not np.isfinite(dt_f) or dt_f <= 0.0:
             raise ValueError(
                 f"Invalid timestep dt={dt!r} for data source {self.file_path!r}; "
                 "provide a positive finite scalar dt in the data dict or loader."
             )
-        # Divide by the validated local, not the dict entry: a float32 or 0-d
-        # array dt would otherwise give a slightly different fs than the value
-        # just checked. self.data["dt"] is deliberately left as the loader set it.
-        self.fs = 1 / dt
-
-        print(f"Data loaded: {self.data['Ns']} snapshots, {self.data['Nx']}×{self.data['Ny']} spatial points")
-        if self.nfft > 1:
-            print(
-                f"FFT parameters: {self.nfft} points, {self.overlap * 100}% overlap, {self.nblocks} blocks [backend: {FFT_BACKEND}]"
-            )
+        return dt_f
 
     def compute_fft_blocks(self):
         """Compute blocked FFT using Welch's method."""

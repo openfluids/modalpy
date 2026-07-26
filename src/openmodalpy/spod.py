@@ -486,8 +486,8 @@ class SPODAnalyzer(BaseAnalyzer):
             for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
                 if attr_key in f.attrs:
                     self.data[attr_key] = f.attrs[attr_key]
-            if "dt" in self.data and self.data["dt"]:
-                self.fs = 1.0 / float(self.data["dt"])
+            if "dt" in self.data:
+                self.fs = 1.0 / self._require_dt()
         print("SPOD results loaded.")
 
     ############################################################

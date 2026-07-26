@@ -198,7 +198,7 @@ class DMDAnalyzer(BaseAnalyzer):
         modes = X2 @ (v_r / s_r) @ w
 
         # Continuous-time eigenvalues (guard against log(0))
-        dt = self.data.get("dt", 1.0)
+        dt = self._require_dt()
         safe_eigvals = np.where(
             np.abs(eigvals) > 0, eigvals, np.finfo(float).tiny
         )

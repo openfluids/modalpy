@@ -182,7 +182,7 @@ class MPODAnalyzer(PODAnalyzer):
         data_centered = data_matrix - self.temporal_mean
 
         weight_vector = _as_weight_vector(np.asarray(self.W), n_space)
-        dt = float(self.data.get("dt", 1.0))
+        dt = self._require_dt()
         nyquist = 0.5 / dt
         candidate_edges = self.band_edges
         if self.band_edges is not None and self.band_scale == "normalized_nyquist":
