@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
 ### Breaking
+- **The BSMD cross-bispectral matrix now conjugates the sum-frequency term.**
+  Earlier releases formed `E[X(f1) X(f2) X(f1+f2)]`, a plain third-order moment.
+  The bispectrum takes the conjugate of the sum-frequency component, so the matrix
+  is now built as `B = Q_{k+l}^H W (Q_k ∘ Q_l) / N_blk`, where `∘` is the
+  elementwise product, with the modes read from the right eigenvector.
+
+  **BSMD results produced by 0.1.0 or 0.2.0 are invalid and must be recomputed.**
+  This is not a question of precision. Without the conjugate the phases of the
+  three components never cancel, so the eigenvalue reduces to a random walk of
+  size `1/sqrt(N_blk)` instead of converging to the bispectral amplitude.
+  Eigenvalues, modes, energy maps and every figure derived from them are affected.
+  One case is unaffected: for the `(k, -k, 0)` triads the sum frequency falls on
+  the DC bin, which is real for a real field, so conjugating it changes nothing and
+  those results were correct all along.
+
+  `load_results` refuses an HDF5 file written before the fix, so an old results
+  file raises with the reason instead of feeding stale eigenvalues into a new
+  analysis in silence.
 - **Window convention for blocked FFT / SPOD:** both serial and parallel
   `blocksfft` paths now use the PERIODIC window from
   `scipy.signal.get_window(..., fftbins=True)`. The optimized path previously
@@ -28,6 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Relicense from MIT to Apache-2.0, effective from 0.3.0 onward. The 0.1.0 and
   0.2.0 releases remain under MIT.
+
+### Fixed
+- The blocked-FFT cache is validated against the parameters that produced it.
+  Each cache file now records the window type, window normalization, overlap,
+  `nfft`, the block preprocessing flags and a digest of the input array, and a
+  cached result is reused only when all of them match. The cache was previously
+  keyed on the result filename alone, so changing only `window_type` reused blocks
+  computed under the old window, and two datasets sharing a data root, `nfft`,
+  overlap and snapshot count could serve each other's blocks. Cache files written
+  by earlier versions carry no stamp and are recomputed once.
 
 ## [0.2.0] - 2026-07-25
 
@@ -63,6 +93,7 @@ First public release, distributed on PyPI as `openmodalpy`.
 - The bundled `openmodalpy.fft` subpackage. Import FFT helpers from `fftkit` instead:
   `get_fft_func`, `periodogram_rfft`, `find_peaks` and related functions.
 
-[Unreleased]: https://github.com/openfluids/openmodalpy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/openfluids/openmodalpy/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/openfluids/openmodalpy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/openfluids/openmodalpy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/openfluids/openmodalpy/releases/tag/v0.1.0
