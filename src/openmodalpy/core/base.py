@@ -1149,6 +1149,35 @@ class BaseAnalyzer:
             )
         return dt_f
 
+    def _time_axis(self, n: int) -> tuple[np.ndarray, str]:
+        """Return abscissa values and an honest x-axis label of length ``n``.
+
+        Prefer an explicit time vector in ``self.data["t"]`` when present and
+        long enough. Otherwise scale sample indices by a usable positive finite
+        ``dt``. When no usable timestep exists, return sample indices and a
+        label that does not claim units of time.
+
+        Never raises for missing, ``None``, zero, or non-finite ``dt`` — this is
+        a plot axis, not a physical claim. Callers that need Hz or growth rates
+        must use :meth:`_require_dt` instead.
+        """
+        data = self.data if self.data else {}
+        t = data.get("t")
+        if t is not None:
+            t_arr = np.asarray(t)
+            if t_arr.size >= n:
+                return np.asarray(t_arr[:n], dtype=float), "Time [s]"
+
+        dt = data.get("dt")
+        try:
+            dt_f = float(dt)
+        except (TypeError, ValueError):
+            dt_f = None
+        if dt_f is not None and np.isfinite(dt_f) and dt_f > 0.0:
+            return np.arange(n, dtype=float) * dt_f, "Time [s]"
+
+        return np.arange(n, dtype=float), "Sample index"
+
     def compute_fft_blocks(self):
         """Compute blocked FFT using Welch's method."""
         if "q" not in self.data:

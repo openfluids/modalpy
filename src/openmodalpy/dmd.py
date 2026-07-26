@@ -338,6 +338,23 @@ class DMDAnalyzer(BaseAnalyzer):
                 self.data["Nz"] = int(f.attrs["Nz"])
         print(f"DMD results loaded from {path}")
 
+    def _mode_freq(self, eigvals):
+        """Return mode frequencies in Hz, or ``None`` when ``dt`` is unusable.
+
+        Computes ``angle(eigvals) / (2π · dt)`` when ``self.data["dt"]`` is a
+        positive finite scalar. Returns ``None`` (never raises) when ``dt`` is
+        missing, ``None``, zero, or non-finite — suitable for optional title
+        annotations. Physics-bearing plots must use :meth:`_require_dt` instead.
+        """
+        dt = self.data.get("dt") if self.data else None
+        try:
+            dt_f = float(dt)
+        except (TypeError, ValueError):
+            return None
+        if not np.isfinite(dt_f) or dt_f <= 0.0:
+            return None
+        return np.angle(eigvals) / (2 * np.pi * dt_f)
+
     def plot_eigenvalues(self):
         """Plot DMD eigenvalues in the complex plane."""
         if self.eigenvalues.size == 0:
@@ -364,7 +381,7 @@ class DMDAnalyzer(BaseAnalyzer):
         if self.eigenvalues.size == 0 or self.amplitudes.size == 0:
             print("No eigenvalue data to plot. Run perform_dmd() first.")
             return
-        dt = self.data.get("dt", 1.0)
+        dt = self._require_dt()
         eigvals = self.eigenvalues
         amps = self.amplitudes
         amps_norm = amps / np.max(amps)
@@ -481,10 +498,8 @@ class DMDAnalyzer(BaseAnalyzer):
         y_coords = self.data.get("y", np.arange(ny))
         fig_aspect = get_fig_aspect_ratio(self.data)
         var_name = self.data.get("metadata", {}).get("var_name", "q")
-        # Compute mode frequencies (Hz) for annotation purposes
-        dt = self.data.get("dt", 1.0)
-        eigvals_subset = self.eigenvalues[:n_modes]
-        freq = np.angle(eigvals_subset) / (2 * np.pi * dt)
+        # Optional frequency annotation; modes still plot without a usable dt
+        freq = self._mode_freq(self.eigenvalues[:n_modes])
 
         fig, axes = plt.subplots(4, n_modes, figsize=(3 * n_modes * fig_aspect, 12), squeeze=False)
         row_labels = ["real", "imaginary", "magnitude", "phase"]
@@ -576,8 +591,10 @@ class DMDAnalyzer(BaseAnalyzer):
                     # Column header annotations
                     if m == 0:
                         header = "1 (mean)"
-                    else:
+                    elif freq is not None:
                         header = f"{m + 1} (f={freq[m]:.2f})"
+                    else:
+                        header = f"{m + 1}"
                     ax.set_title(header)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
@@ -747,13 +764,14 @@ class DMDAnalyzer(BaseAnalyzer):
         x_coords = self.data.get("x")
         y_coords = self.data.get("y")
         z_coords = self.data.get("z")
-        dt = self.data.get("dt", 1.0)
-        eigvals_subset = self.eigenvalues[:n_modes]
-        freq = np.angle(eigvals_subset) / (2 * np.pi * dt)
+        freq = self._mode_freq(self.eigenvalues[:n_modes])
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx].real, self.data, block_index=delay_idx)
             delay_suffix = f" | delay={delay_idx}" if lifted_delays > 1 else ""
-            title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
+            if freq is not None:
+                title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
+            else:
+                title = f"DMD Mode {mode_idx + 1}{delay_suffix}"
             output_path = os.path.join(self.figures_dir, f"{self.data_root}_dmd_mode_{mode_idx + 1}_slices.png")
             plot_orthogonal_slices_3d(
                 mode_3d,
@@ -784,13 +802,14 @@ class DMDAnalyzer(BaseAnalyzer):
         x_coords = self.data.get("x")
         y_coords = self.data.get("y")
         z_coords = self.data.get("z")
-        dt = self.data.get("dt", 1.0)
-        eigvals_subset = self.eigenvalues[:n_modes]
-        freq = np.angle(eigvals_subset) / (2 * np.pi * dt)
+        freq = self._mode_freq(self.eigenvalues[:n_modes])
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx].real, self.data, block_index=delay_idx)
             delay_suffix = f" | delay={delay_idx}" if lifted_delays > 1 else ""
-            title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
+            if freq is not None:
+                title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
+            else:
+                title = f"DMD Mode {mode_idx + 1}{delay_suffix}"
             output_path = os.path.join(self.figures_dir, f"{self.data_root}_dmd_mode_{mode_idx + 1}_isometric.png")
             plot_isometric_slices_3d(
                 mode_3d,
@@ -813,7 +832,7 @@ class DMDAnalyzer(BaseAnalyzer):
             print("No coefficients available to plot.")
             return
         Ns_total = self.time_coefficients.shape[0]
-        t = np.arange(Ns_total) * self.data.get("dt", 1.0)
+        t, xlabel = self._time_axis(Ns_total)
         fig = plt.figure(figsize=(10, 3 * n_coeffs_to_plot))
         for i in range(n_coeffs_to_plot):
             plt.subplot(n_coeffs_to_plot, 1, i + 1)
@@ -831,7 +850,7 @@ class DMDAnalyzer(BaseAnalyzer):
                 coeff_plot = coeff_plot / amp_scale
                 ylabel += " (normalized)"
             plt.plot(t_plot, coeff_plot, linewidth=1.0)
-            plt.xlabel("Time")
+            plt.xlabel(xlabel)
             plt.ylabel(ylabel)
             plt.title(f"Temporal Coefficient for DMD Mode {i + 1}")
             plt.grid(True, linestyle=":")

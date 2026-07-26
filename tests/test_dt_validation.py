@@ -223,3 +223,174 @@ def test_mpod_reload_without_dt_raises():
     a.W = np.ones(Nx * Ny)
     with pytest.raises(ValueError, match=r"timestep"):
         a.perform_mpod()
+
+
+def _analyzer_for_time_axis(dt=_MISSING, t=None):
+    """Minimal PODAnalyzer with data already attached (no load_and_preprocess)."""
+    data = _make_data(dt)
+    if t is not None:
+        data["t"] = t
+    a = PODAnalyzer(
+        file_path="time_axis.npz",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+    )
+    a.data = data
+    return a
+
+
+def test_time_axis_valid_dt_scales_and_labels_seconds():
+    vals, label = _analyzer_for_time_axis(0.25)._time_axis(4)
+    assert np.allclose(vals, [0.0, 0.25, 0.5, 0.75])
+    assert "s" in label.lower()
+    assert "time" in label.lower()
+
+
+@pytest.mark.parametrize(
+    "dt",
+    [_MISSING, None, 0.0, float("nan"), float("inf"), -1.0],
+    ids=["absent", "none", "zero", "nan", "inf", "negative"],
+)
+def test_time_axis_unusable_dt_falls_back_to_sample_index(dt):
+    """Plot abscissa must never raise and must not claim time units."""
+    vals, label = _analyzer_for_time_axis(dt)._time_axis(4)
+    assert np.allclose(vals, [0, 1, 2, 3])
+    assert "time" not in label.lower()
+    assert "[s]" not in label.lower()
+
+
+def test_time_axis_explicit_t_wins():
+    Ns = 12
+    t = np.arange(Ns) * 0.1
+    vals, label = _analyzer_for_time_axis(0.25, t=t)._time_axis(4)
+    assert np.allclose(vals, [0.0, 0.1, 0.2, 0.3])
+    assert "s" in label.lower()
+
+
+def test_dmd_plot_eigenspectra_refuses_missing_dt():
+    """Figure frequencies are physical claims — no fabricated unit timestep."""
+    Ns, Nx, Ny = 24, 4, 3
+    q = np.random.default_rng(0).standard_normal((Ns, Nx * Ny))
+    data = {
+        "q": q,
+        "x": np.arange(Nx, dtype=float),
+        "y": np.arange(Ny, dtype=float),
+        "dt": 0.25,
+        "Nx": Nx,
+        "Ny": Ny,
+        "Ns": Ns,
+    }
+    a = DMDAnalyzer(
+        file_path="case.npz",
+        data_loader=lambda _: dict(data),
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+    )
+    a.load_and_preprocess()
+    a.perform_dmd()
+    del a.data["dt"]
+    with pytest.raises(ValueError, match=r"timestep"):
+        a.plot_eigenspectra()
+
+
+def _dmd_for_mode_freq():
+    """DMD analyzer with eigenvalues ready; caller mutates dt for annotation tests."""
+    Ns, Nx, Ny = 24, 4, 3
+    q = np.random.default_rng(0).standard_normal((Ns, Nx * Ny))
+    data = {
+        "q": q,
+        "x": np.arange(Nx, dtype=float),
+        "y": np.arange(Ny, dtype=float),
+        "dt": 0.25,
+        "Nx": Nx,
+        "Ny": Ny,
+        "Ns": Ns,
+    }
+    a = DMDAnalyzer(
+        file_path="case.npz",
+        data_loader=lambda _: dict(data),
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+    )
+    a.load_and_preprocess()
+    a.perform_dmd()
+    return a
+
+
+def test_mode_freq_usable_dt():
+    """_mode_freq returns angle/(2π·dt) when dt is positive finite."""
+    a = _dmd_for_mode_freq()
+    eig = a.eigenvalues[:2]
+    got = a._mode_freq(eig)
+    assert got is not None
+    assert np.allclose(got, np.angle(eig) / (2 * np.pi * 0.25))
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        pytest.param(lambda d: d.pop("dt", None), id="absent"),
+        pytest.param(lambda d: d.__setitem__("dt", None), id="none"),
+        pytest.param(lambda d: d.__setitem__("dt", 0.0), id="zero"),
+        pytest.param(lambda d: d.__setitem__("dt", float("nan")), id="nan"),
+        pytest.param(lambda d: d.__setitem__("dt", float("inf")), id="inf"),
+        pytest.param(lambda d: d.__setitem__("dt", -1.0), id="negative"),
+    ],
+)
+def test_mode_freq_unusable_dt_returns_none(mutate):
+    """_mode_freq never raises and returns None when dt cannot define Hz."""
+    a = _dmd_for_mode_freq()
+    eig = a.eigenvalues[:2]
+    mutate(a.data)
+    assert a._mode_freq(eig) is None
+
+
+def test_dmd_plot_modes_detailed_renders_without_dt(tmp_path):
+    """Mode-shape figure must draw even when frequency annotation is dropped."""
+    a = _dmd_for_mode_freq()
+    a.figures_dir = str(tmp_path)
+    del a.data["dt"]
+    a.plot_modes_detailed(plot_n_modes=1)  # must not raise
+
+
+def test_pod_time_series_xlabel_not_clobbered_by_strouhal(tmp_path, monkeypatch):
+    """Every mode's time-series panel keeps the _time_axis label (not Strouhal)."""
+    import matplotlib.pyplot as plt
+
+    Ns, Nx, Ny = 32, 4, 2
+    q = np.random.default_rng(0).standard_normal((Ns, Nx * Ny))
+    data = {
+        "q": q,
+        "x": np.arange(Nx, dtype=float),
+        "y": np.arange(Ny, dtype=float),
+        "Nx": Nx,
+        "Ny": Ny,
+        "Ns": Ns,
+        "dt": 0.25,
+    }
+    a = PODAnalyzer(
+        file_path="case.npz",
+        data_loader=lambda _: dict(data),
+        spatial_weight_type="uniform",
+        n_modes_save=3,
+        figures_dir=str(tmp_path),
+        results_dir=str(tmp_path),
+    )
+    a.load_and_preprocess()
+    a.perform_pod()
+
+    calls = []
+    real_xlabel = plt.xlabel
+
+    def spy(label, *args, **kwargs):
+        calls.append(label)
+        return real_xlabel(label, *args, **kwargs)
+
+    monkeypatch.setattr(plt, "xlabel", spy)
+    a.plot_time_coefficients(n_coeffs_to_plot=3)
+
+    n_time = sum(1 for c in calls if "Time" in c or "Sample" in c)
+    n_st = sum(1 for c in calls if "Strouhal" in c)
+    assert n_time == 3, f"expected 3 time-series labels, got {n_time} in {calls}"
+    assert n_st == 3, f"expected 3 Strouhal labels, got {n_st} in {calls}"

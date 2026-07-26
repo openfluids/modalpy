@@ -716,8 +716,7 @@ class STPODAnalyzer(BaseAnalyzer):
         if n_snapshots_plot is None or n_snapshots_plot > m:
             n_snapshots_plot = m
 
-        dt = self.data.get("dt", 1.0)
-        time_vector = np.arange(n_snapshots_plot) * dt
+        time_vector, xlabel = self._time_axis(n_snapshots_plot)
 
         fig, axes = plt.subplots(n_coeffs, 2, figsize=(12, 3 * n_coeffs))
         if n_coeffs == 1:
@@ -728,7 +727,7 @@ class STPODAnalyzer(BaseAnalyzer):
 
             # Time series
             axes[i, 0].plot(time_vector, coeff, ls="-", lw=0.8, marker="o", markersize=1)
-            axes[i, 0].set_xlabel("Time")
+            axes[i, 0].set_xlabel(xlabel)
             axes[i, 0].set_ylabel(f"a_{i + 1}(t)")
             axes[i, 0].set_title(f"ST-POD Coefficient {i + 1}")
             axes[i, 0].grid(True, linestyle=":")

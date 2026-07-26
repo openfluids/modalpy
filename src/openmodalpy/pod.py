@@ -879,18 +879,15 @@ class PODAnalyzer(BaseAnalyzer):
         if n_snapshots_plot is None or n_snapshots_plot > Ns_total:
             n_snapshots_plot = Ns_total
 
-        # Prefer explicit time vector if provided in data
-        if "t" in self.data and len(self.data["t"]) >= n_snapshots_plot:
-            time_vector = self.data["t"][:n_snapshots_plot]
-        else:
-            time_vector = np.arange(n_snapshots_plot) * self.data.get("dt", 1.0)
+        time_vector, time_xlabel = self._time_axis(n_snapshots_plot)
+        st_xlabel = "Strouhal Number (St)"
 
         plt.figure(figsize=(12, 3 * n_coeffs_to_plot))
         for i in range(n_coeffs_to_plot):
             plt.subplot(n_coeffs_to_plot, 2, 2 * i + 1)
             coeff = self.time_coefficients[:n_snapshots_plot, i]
             plt.plot(time_vector, coeff, ls="-", lw=0.8, marker="o", markersize=1)
-            plt.xlabel("Time")
+            plt.xlabel(time_xlabel)
             plt.ylabel(f"Amplitude Mode {i + 1}")
             plt.title(f"Temporal Coefficient for POD Mode {i + 1}")
             plt.grid(True, linestyle=":")
@@ -902,7 +899,6 @@ class PODAnalyzer(BaseAnalyzer):
 
             if L is not None and U is not None:
                 freqs = freqs * L / U
-            xlabel = "Strouhal Number (St)"
             plt.semilogy(freqs, psd)
             if peak_freqs.size > 0:
                 plt.plot(
@@ -922,7 +918,7 @@ class PODAnalyzer(BaseAnalyzer):
             else:
                 plt.xlim(1e-3, self.fs / 2)
             plt.ylim(1e-6, None)
-            plt.xlabel(xlabel)
+            plt.xlabel(st_xlabel)
             plt.ylabel("PSD")
             plt.title(f"Periodogram Mode {i + 1}")
             plt.grid(True, linestyle=":")
