@@ -15,6 +15,8 @@ from tqdm import tqdm
 
 from openmodalpy.core.base import (
     BaseAnalyzer,
+    _verify_qhat_stamp,
+    _write_qhat_stamp,
     add_inset_colorbar,
     auto_detect_weight_type,
     format_mode_title,
@@ -253,7 +255,9 @@ class SPODAnalyzer(BaseAnalyzer):
                 with h5py.File(cache_path, "r") as f:
                     if "FFTBlocks" in f:
                         qhat_cached = f["FFTBlocks"][:]
-                        if qhat_cached.shape[0] == self.nfft // 2 + 1:
+                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
+                            f, self, self.data["q"]
+                        ):
                             self.qhat = qhat_cached
                             self.nblocks = qhat_cached.shape[2]
                             self.qhat_cached = True
@@ -274,6 +278,7 @@ class SPODAnalyzer(BaseAnalyzer):
             if mode == "w":
                 for key, value in self._get_metadata().items():
                     f.attrs[key] = value
+            _write_qhat_stamp(f, self, self.data["q"])
         print(f"Saved FFT blocks to cache at {cache_path}")
 
     ############################################################

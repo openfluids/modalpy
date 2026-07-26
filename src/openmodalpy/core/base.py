@@ -6,6 +6,7 @@ All imports are centralized here to keep the code clean and consistent.
 """
 
 import glob
+import hashlib
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -91,6 +92,82 @@ def make_result_filename(root, nfft, overlap, Ns, analysis):
         str: Result filename (always .hdf5)
     """
     return f"{root}_Nfft{nfft}_ovlap{overlap}_{Ns}snapshots_{analysis}.hdf5"
+
+
+_QHAT_STAMP_ATTR_PREFIX = "_fftcache_"
+
+
+def _qhat_content_digest(q: np.ndarray) -> str:
+    """Return a blake2b digest of ``q``'s raw bytes (plus shape/dtype).
+
+    A full hash is O(n), i.e. cheaper than the O(n log n) FFT it lets us
+    avoid recomputing, so hashing the exact content is affordable here and a
+    sampled/strided checksum is not worth the false-negative risk of two
+    different arrays colliding.
+    """
+    arr = np.ascontiguousarray(q)
+    h = hashlib.blake2b(memoryview(arr).cast("B"), digest_size=16)
+    h.update(str(arr.shape).encode())
+    h.update(arr.dtype.str.encode())
+    return h.hexdigest()
+
+
+def _qhat_cache_stamp(analyzer, q: np.ndarray) -> dict:
+    """Return the parameters that determine the FFT blocks produced for ``q``.
+
+    Note: ``spatial_weight_type`` is deliberately excluded. ``blocksfft`` (see
+    below) only ever receives ``q``, ``nfft``, ``nblocks``, ``novlap``,
+    ``blockwise_mean``, ``normvar``, ``window_norm`` and ``window_type`` — the
+    spatial weights are applied later, in the SPOD/BSMD eigenproblem, never in
+    the FFT block computation. So it cannot affect ``qhat`` and does not need
+    to be stamped.
+    """
+    return {
+        "window_type": str(getattr(analyzer, "window_type", "hamming")),
+        "window_norm": str(getattr(analyzer, "window_norm", "power")),
+        "overlap": float(analyzer.overlap),
+        "nfft": int(analyzer.nfft),
+        "blockwise_mean": bool(getattr(analyzer, "blockwise_mean", False)),
+        "normvar": bool(getattr(analyzer, "normvar", False)),
+        "q_digest": _qhat_content_digest(q),
+    }
+
+
+def _write_qhat_stamp(h5file, analyzer, q: np.ndarray) -> None:
+    """Stamp the parameters that produced ``qhat`` into ``h5file``'s attrs."""
+    for key, value in _qhat_cache_stamp(analyzer, q).items():
+        h5file.attrs[f"{_QHAT_STAMP_ATTR_PREFIX}{key}"] = value
+
+
+def _verify_qhat_stamp(h5file, analyzer, q: np.ndarray) -> bool:
+    """Return whether ``h5file``'s stamped FFT parameters match ``analyzer``/``q``.
+
+    On any mismatch — or an absent stamp (e.g. a cache file from an older
+    build) — this returns False rather than raising. That is the opposite
+    policy from result files (which must raise on staleness): FFT blocks are
+    cheaply re-derivable from the raw data, so silently recomputing them is
+    correct and non-destructive. Do not "harmonise" this with the stricter
+    policy used for saved results/modes.
+    """
+    expected = _qhat_cache_stamp(analyzer, q)
+    for key, exp_value in expected.items():
+        attr_name = f"{_QHAT_STAMP_ATTR_PREFIX}{key}"
+        if attr_name not in h5file.attrs:
+            print(f"FFT cache stamp missing '{key}' (older cache file) — recomputing FFT blocks.")
+            return False
+        actual = h5file.attrs[attr_name]
+        if isinstance(exp_value, bool):
+            actual = bool(actual)
+        elif isinstance(exp_value, int):
+            actual = int(actual)
+        elif isinstance(exp_value, float):
+            actual = float(actual)
+        else:
+            actual = str(actual)
+        if actual != exp_value:
+            print(f"FFT cache stamp mismatch on '{key}': cached={actual!r} != current={exp_value!r} — recomputing FFT blocks.")
+            return False
+    return True
 
 
 def print_summary(analysis: str, results_dir: str, figures_dir: str) -> None:

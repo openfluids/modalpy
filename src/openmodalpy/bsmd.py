@@ -42,6 +42,8 @@ from tqdm import tqdm
 
 from openmodalpy.core.base import (
     BaseAnalyzer,
+    _verify_qhat_stamp,
+    _write_qhat_stamp,
     add_inset_colorbar,
     get_fig_aspect_ratio,
     load_jetles_data,
@@ -380,7 +382,9 @@ class BSMDAnalyzer(BaseAnalyzer):
             with h5py.File(cache_path, "r") as f:
                 if "FFTBlocks" in f:
                     qhat_cached = f["FFTBlocks"][:]
-                    if qhat_cached.shape[0] == self.nfft // 2 + 1:
+                    if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
+                        f, self, self.data["q"]
+                    ):
                         self.qhat = qhat_cached
                         self.nblocks = qhat_cached.shape[2]
                         self.qhat_cached = True
@@ -390,7 +394,11 @@ class BSMDAnalyzer(BaseAnalyzer):
                         self._maybe_offload_qhat()
                         return
 
-        # Otherwise, see if SPOD cached blocks exist to reuse
+        # Otherwise, see if SPOD cached blocks exist to reuse. This goes through
+        # the same stamp verification as our own cache: SPOD's FFT parameters
+        # (window_type, window_norm, blockwise_mean, normvar) must match the
+        # values this BSMD analyzer would itself use, or the reuse is rejected
+        # and we fall through to a fresh computation below.
         fname_spod = make_result_filename(
             self.data_root,
             self.nfft,
@@ -403,7 +411,9 @@ class BSMDAnalyzer(BaseAnalyzer):
             with h5py.File(spod_path, "r") as f:
                 if "FFTBlocks" in f:
                     qhat_cached = f["FFTBlocks"][:]
-                    if qhat_cached.shape[0] == self.nfft // 2 + 1:
+                    if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
+                        f, self, self.data["q"]
+                    ):
                         self.qhat = qhat_cached
                         self.nblocks = qhat_cached.shape[2]
                         self.qhat_cached = True
@@ -418,6 +428,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                             if mode == "w":
                                 for key, value in self._get_metadata().items():
                                     f_bsmd.attrs[key] = value
+                            _write_qhat_stamp(f_bsmd, self, self.data["q"])
                         print(f"Saved FFT blocks to cache at {cache_path}")
                         self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self.fs)
                         self.St = self.freq.copy()
@@ -437,6 +448,7 @@ class BSMDAnalyzer(BaseAnalyzer):
             if mode == "w":
                 for key, value in self._get_metadata().items():
                     f.attrs[key] = value
+            _write_qhat_stamp(f, self, self.data["q"])
         print(f"Saved FFT blocks to cache at {cache_path}")
 
         # Set frequency and Strouhal vectors after qhat is available
