@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   computed at a unit timestep. The mPOD case is the one worth re-checking in existing
   work: a wrong `dt` there moved the band edges, so different modes landed in different
   bands rather than merely being mislabelled.
+- **Plots stop labelling an axis in seconds when no timestep is known.** The
+  time-coefficient plots for POD, ST-POD and DMD used to build their abscissa as
+  `arange(n) * 1.0` and label it `Time` regardless. They now fall back to sample
+  indices labelled `Sample index`, and use an explicit time vector or a real `dt`
+  when one exists. `DMDAnalyzer.plot_eigenspectra` raises without a usable `dt`,
+  since frequency and growth rate are that figure's two axes. The DMD mode-field
+  plots keep drawing and simply omit the `f=...` fragment from their titles — the
+  mode shapes never depended on the timestep.
 - A missing or unusable timestep now raises `ValueError` instead of defaulting to
   `0.1` and continuing. This covers `dt` zero, negative or non-finite, as well as
   absent, `None`, or non-scalar — all of which previously either fabricated a
