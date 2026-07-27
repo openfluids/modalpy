@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The validation suite now enforces its claims. `tests/test_all.py` describes itself as
+  validating mathematical correctness against known analytical solutions, but every one
+  of its 22 checks reported through a helper that printed a tick and appended to a list;
+  the pass/fail decision lived in a `main()` reachable only by running the file as a
+  script, while CI runs pytest. Under pytest the five tests passed unconditionally, and
+  each was wrapped in a bare `except Exception`, so a crash inside POD, DMD or SPOD was
+  still reported as a pass. All 22 checks are now plain assertions with the measured
+  value in the failure message, at their original tolerances, and analyzer output is
+  routed to pytest's `tmp_path` instead of a `./results` directory in the working tree.
+  The conversion was verified by mutation, not by the suite going green: perturbing POD
+  eigenvalues by 5%, DMD eigenvalues by 2%, or shifting the SPOD spectrum by four
+  frequency bins each turns the suite red.
+
 ### Fixed
 - A corrupt or truncated FFT-block cache no longer aborts the analysis. Interrupted
   runs, full disks, and killed jobs can leave a half-written HDF5 cache that still
