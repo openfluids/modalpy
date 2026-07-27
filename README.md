@@ -2,79 +2,65 @@
 
 [![CI](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml/badge.svg)](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
+[![Python](https://img.shields.io/pypi/pyversions/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Modal decomposition of spatiotemporal data in Python.
-Pure NumPy/SciPy — no external solver dependencies.
+**Nine modal decomposition methods for spatiotemporal data, behind one API.**
 
-**Methods:** POD · mPOD · PSD-POD · SPOD · ST-POD · DMD (LS/TLS) · HODMD (LS/TLS) · BSMD
+Extract coherent structures from simulation or experimental data — energy-ranked POD
+modes, frequency-resolved SPOD modes, DMD eigenvalues, nonlinear BSMD triads — without
+switching libraries or rewriting your loading code for each method.
+
+## Why this package
+
+Most Python tools here specialise: [PyDMD](https://github.com/PyDMD/PyDMD) covers DMD
+variants in depth, [PySPOD](https://github.com/MathEXLab/PySPOD) covers SPOD. That depth
+is real, and if you only need one method they are excellent choices.
+
+OpenModalPy trades some of that depth for breadth. Nine methods share one analyzer
+interface, one data contract and one config file, so running POD, SPOD, DMD and BSMD over
+the same dataset — and comparing them directly — is a single command rather than four
+integrations. Bispectral mode decomposition (BSMD) in particular has little open-source
+coverage elsewhere.
+
+It runs on the NumPy/SciPy stack. No compiled solver toolchain (PETSc, SLEPc) to install.
 
 ## Installation
 
 ```bash
-uv add openmodalpy
+uv add openmodalpy                 # library
+uv tool install openmodalpy        # standalone CLI
 ```
 
-The installed package is imported as `openmodalpy`.
+Optional extras:
 
-Or as a standalone CLI:
-
-```bash
-uv tool install openmodalpy
-```
-
-For modern 3D slice/isosurface plotting:
-
-```bash
-uv add "openmodalpy[viz3d]"
-```
-
-## FFT Backend
-
-FFT dispatch is handled by [`fftkit`](https://github.com/openfluids/fftkit), installed
-automatically. It probes the available backends and picks the fastest one, falling back
-to SciPy when nothing else is present — so no configuration is needed.
-
-To pin a backend explicitly:
-
-```bash
-export FFTKIT_BACKEND=mkl      # or scipy, numpy, cupy, accelerate
-```
-
-```python
-from openmodalpy.core.config import FFT_BACKEND
-print(FFT_BACKEND)   # the backend actually in use
-```
-
-Accelerator support comes from the corresponding extra:
-
-```bash
-uv add "openmodalpy[mkl]"   # Intel MKL
-uv add "openmodalpy[gpu]"   # CuPy / PyTorch
-```
-
-> The legacy `PYMODAL_FFT_BACKEND` variable is still honoured as a fallback, but
-> `FFTKIT_BACKEND` is the supported name.
+| Extra | Adds |
+|-------|------|
+| `openmodalpy[viz3d]` | 3D slice and isosurface plotting (PyVista) |
+| `openmodalpy[mkl]` | Intel MKL FFT backend |
+| `openmodalpy[gpu]` | CuPy / PyTorch FFT backends |
 
 ## Quick Start
 
 ```python
-from openmodalpy import PODAnalyzer, DMDAnalyzer, SPODAnalyzer
+from openmodalpy import PODAnalyzer, SPODAnalyzer, DMDAnalyzer
 
 pod = PODAnalyzer(file_path="data.mat", n_modes_save=10)
 pod.run_analysis()
 
+spod = SPODAnalyzer(file_path="data.mat", nfft=256, overlap=0.5)
+spod.run_analysis()
+
+# DMD is driven in two steps, so the fit method can be chosen after loading.
 dmd = DMDAnalyzer(file_path="data.mat", n_modes_save=10)
 dmd.load_and_preprocess()
 dmd.perform_dmd(method="ls")
-
-spod = SPODAnalyzer(file_path="data.mat", nfft=256, overlap=0.5)
-spod.run_analysis()
 ```
 
 ## Configuration-Driven Workflow
 
-A single JSONC file runs multiple methods on one dataset:
+One JSONC file runs several methods over the same dataset — the main reason to reach for
+this package over a single-method library:
 
 ```jsonc
 {
@@ -84,11 +70,11 @@ A single JSONC file runs multiple methods on one dataset:
     "n_modes_save": 10, "nfft": 128, "overlap": 0.5
   },
   "runs": [
-    { "id": "pod",  "method": "pod" },
-    { "id": "spod", "method": "spod" },
-    { "id": "dmd",  "method": "dmd", "params": { "method": "ls" } },
-    { "id": "hodmd","method": "hodmd", "params": { "delays": 4 } },
-    { "id": "bsmd", "method": "bsmd" }
+    { "id": "pod",   "method": "pod" },
+    { "id": "spod",  "method": "spod" },
+    { "id": "dmd",   "method": "dmd",   "params": { "method": "ls" } },
+    { "id": "hodmd", "method": "hodmd", "params": { "delays": 4 } },
+    { "id": "bsmd",  "method": "bsmd" }
   ]
 }
 ```
@@ -100,48 +86,45 @@ openmodalpy run --config analysis.jsonc
 ## CLI
 
 ```bash
-openmodalpy analyze pod --config case.jsonc         # one method
-openmodalpy run --config suite.jsonc                # full suite
-openmodalpy run --config suite.jsonc --dry-run      # preview
-openmodalpy methods list                            # supported methods
-openmodalpy examples list                           # bundled examples
-openmodalpy results inspect output.hdf5             # inspect result
+openmodalpy analyze pod --config case.jsonc     # one method
+openmodalpy run --config suite.jsonc            # full suite
+openmodalpy run --config suite.jsonc --dry-run  # preview without computing
+openmodalpy methods list                        # supported methods
+openmodalpy examples list                       # bundled examples
+openmodalpy results inspect output.hdf5         # inspect a result file
 ```
 
-## Bundled Example Configs
+Three example cases ship with the package and need no external data — `double_gyre`,
+`cylinder_wake` and `taylor_green` generate their fields analytically. A fourth config,
+`run_benchmarks`, runs all three as a suite. So `openmodalpy examples list` gives you
+something runnable immediately, with nothing to download.
 
-The public package ships only self-contained generator-backed example configs:
+## Methods
 
-- `double_gyre.jsonc`
-- `cylinder_wake.jsonc`
-- `taylor_green.jsonc`
-- `run_benchmarks.jsonc`
+These are the names `openmodalpy methods list` reports and the values the `method` field
+takes in a config file.
 
-These configs do not depend on repository-local benchmark datasets.
+| `method` | Class | What it extracts | Reference |
+|----------|-------|------------------|-----------|
+| `pod` | variance-optimal | energy-ranked spatial modes | Lumley (1967); Sirovich (1987) |
+| `mpod` | variance-optimal | scale-separated modes across non-overlapping bands | [Mendez et al. (2019)](https://doi.org/10.1017/jfm.2019.212) |
+| `psd-pod` | variance-optimal | POD of blockwise Fourier realizations | — |
+| `spod` | variance-optimal | frequency-local modes (Welch blocks) | [Towne, Schmidt & Colonius (2018)](https://doi.org/10.1017/jfm.2018.283) |
+| `stpod` | variance-optimal | space-time structures via delay embedding | — |
+| `dmd` | evolution-fit | modes with frequency and growth rate | [Schmid (2010)](https://doi.org/10.1017/S0022112010001217); [Tu et al. (2014)](https://doi.org/10.3934/jcd.2014.1.391) |
+| `hodmd` | evolution-fit | delay-embedded (Hankel) DMD | [Le Clainche & Vega (2017)](https://doi.org/10.1137/15M1054924) |
+| `tls-hodmd` | evolution-fit | delay-embedded DMD, total-least-squares fit | [Hemati et al. (2017)](https://doi.org/10.1007/s00162-017-0432-2) |
+| `bsmd` | triadic interaction | nonlinear triad structures | [Schmidt (2020)](https://doi.org/10.1007/s11071-020-06037-z) |
 
-## Supported Methods
+`dmd` accepts `method: "ls"` (least squares) or `method: "tls"` (total least squares,
+de-biased for noisy data).
 
-| Method | Class | What it extracts |
-|--------|-------|-----------------|
-| POD | variance-optimal | energy-ranked spatial modes |
-| mPOD | variance-optimal | scale-separated modes |
-| PSD-POD | variance-optimal | broadband spectral modes |
-| SPOD | variance-optimal | frequency-local modes |
-| ST-POD | variance-optimal | space-time structures (delay embedding) |
-| DMD (LS) | evolution-fit | modes with frequency and growth rate |
-| DMD (TLS) | evolution-fit | de-biased DMD for noisy data |
-| HODMD | evolution-fit | delay-embedded DMD |
-| TLS-HODMD | evolution-fit | de-biased delay-embedded DMD |
-| BSMD | triadic interaction | nonlinear triad structures |
-
-The BSMD implementation follows
-[Schmidt (2020)](https://doi.org/10.1007/s11071-020-06037-z) and was
-inspired by the reference
+The BSMD implementation follows Schmidt (2020) and was inspired by the reference
 [MATLAB implementation](https://github.com/olivertschmidt/bmd).
 
 ## Data Format
 
-OpenModalPy auto-detects `.mat` and `.npz` files:
+`.mat` and `.npz` files are auto-detected and must provide:
 
 ```python
 {
@@ -154,7 +137,7 @@ OpenModalPy auto-detects `.mat` and `.npz` files:
 }
 ```
 
-Custom loaders:
+Anything else can be read with a custom loader returning the same dictionary:
 
 ```python
 def my_loader(path):
@@ -163,19 +146,27 @@ def my_loader(path):
 pod = PODAnalyzer(file_path="ignored", data_loader=my_loader)
 ```
 
-## References
+## FFT Backend
 
-| Method | Key reference |
-|--------|--------------|
-| POD | Lumley (1967); Sirovich (1987) |
-| mPOD | [Mendez et al. (2019)](https://doi.org/10.1017/jfm.2019.212) |
-| SPOD | [Towne, Schmidt & Colonius (2018)](https://doi.org/10.1017/jfm.2018.283) |
-| DMD | [Schmid (2010)](https://doi.org/10.1017/S0022112010001217); [Tu et al. (2014)](https://doi.org/10.3934/jcd.2014.1.391) |
-| TLS-DMD | [Hemati et al. (2017)](https://doi.org/10.1007/s00162-017-0432-2) |
-| HODMD | [Le Clainche & Vega (2017)](https://doi.org/10.1137/15M1054924) |
-| BSMD | [Schmidt (2020)](https://doi.org/10.1007/s11071-020-06037-z) |
+FFT dispatch comes from [`fftkit`](https://github.com/openfluids/fftkit), installed
+automatically. It probes the available backends, picks the fastest, and falls back to
+SciPy when nothing else is present — so this section is optional reading.
+
+To pin a backend:
+
+```bash
+export FFTKIT_BACKEND=mkl      # or scipy, numpy, cupy, accelerate
+```
+
+```python
+from openmodalpy.core.config import FFT_BACKEND
+print(FFT_BACKEND)   # the backend actually in use
+```
+
+The legacy `PYMODAL_FFT_BACKEND` variable still works as a fallback, but
+`FFTKIT_BACKEND` is the supported name.
 
 ## License
 
-This project is licensed under Apache-2.0.
-Originally developed by Ricardo A S Frantz. See `LICENSE` and `NOTICE` for license terms and attribution notices.
+Apache-2.0. Originally developed by Ricardo A S Frantz — see [LICENSE](LICENSE) and
+[NOTICE](NOTICE) for terms and attribution.
