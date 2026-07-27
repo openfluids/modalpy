@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from openmodalpy.core.base import (
     BaseAnalyzer,
+    _hdf5_write_mode,
     _verify_qhat_stamp,
     _write_qhat_stamp,
     add_inset_colorbar,
@@ -270,7 +271,7 @@ class SPODAnalyzer(BaseAnalyzer):
         super().compute_fft_blocks()
 
         os.makedirs(self.results_dir, exist_ok=True)
-        mode = "a" if os.path.exists(cache_path) else "w"
+        mode = _hdf5_write_mode(cache_path)
         with h5py.File(cache_path, mode) as f:
             if "FFTBlocks" in f:
                 del f["FFTBlocks"]
@@ -373,9 +374,9 @@ class SPODAnalyzer(BaseAnalyzer):
         save_path = os.path.join(self.results_dir, filename)
         os.makedirs(self.results_dir, exist_ok=True)
 
-        # Check if the file exists from a previous BaseAnalyzer save
-        # If it does, open in append mode, otherwise write mode
-        mode = "a" if os.path.exists(save_path) else "w"
+        # Append only if save_path is already a readable HDF5 file; otherwise
+        # overwrite (covers missing and corrupt/truncated paths).
+        mode = _hdf5_write_mode(save_path)
 
         print(f"Saving SPOD-specific results to {save_path} (mode: {mode})")
         with h5py.File(save_path, mode) as f:

@@ -153,3 +153,80 @@ def test_matching_cache_hit_is_still_used(tmp_path, capsys):
     assert analyzer2.qhat_cached
     assert "Loaded cached FFT blocks" in captured.out
     np.testing.assert_array_equal(analyzer2.qhat, analyzer1.qhat)
+
+
+def test_corrupt_truncated_spod_cache_recomputes_without_raising(tmp_path, capsys):
+    """A truncated (corrupt) SPOD cache must recompute and rewrite, not raise.
+
+    Exercises the unreadable-file path (h5py OSError on open), not the
+    stamp-mismatch path covered by ``test_stamp_mismatch_recomputes_without_raising``.
+    """
+    np.random.seed(4)
+    q = np.random.randn(32, 4)
+
+    cold = _make_spod(tmp_path, q, file_path="dummy.h5")
+    assert not cold.qhat_cached
+    ref = np.array(cold.qhat, copy=True)
+
+    fname = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
+    cache_file = tmp_path / fname
+    assert cache_file.exists()
+    with open(cache_file, "r+b") as fh:
+        fh.truncate(64)
+
+    warm = _make_spod(tmp_path, q, file_path="dummy.h5")
+    captured = capsys.readouterr()
+
+    assert not warm.qhat_cached
+    assert "Failed to load cached FFT blocks" in captured.out
+    np.testing.assert_allclose(warm.qhat, ref)
+
+    # Third run must hit the rewritten cache.
+    again = _make_spod(tmp_path, q, file_path="dummy.h5")
+    assert again.qhat_cached
+    np.testing.assert_allclose(again.qhat, ref)
+
+
+def _make_bsmd(tmp_path, q, *, nfft=8, overlap=0.0, file_path="dummy.h5"):
+    from openmodalpy import BSMDAnalyzer
+
+    data = _make_data(q)
+    analyzer = BSMDAnalyzer(
+        file_path=file_path,
+        nfft=nfft,
+        overlap=overlap,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    return analyzer
+
+
+def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsys):
+    """A truncated BSMD cache must recompute rather than raise on the read."""
+    np.random.seed(5)
+    q = np.random.randn(32, 4)
+
+    cold = _make_bsmd(tmp_path, q, file_path="dummy.h5")
+    assert not cold.qhat_cached
+    ref = np.array(cold.qhat, copy=True)
+
+    fname = "dummy_Nfft8_ovlap0.0_32snapshots_bsmd.hdf5"
+    cache_file = tmp_path / fname
+    assert cache_file.exists()
+    with open(cache_file, "r+b") as fh:
+        fh.truncate(64)
+
+    warm = _make_bsmd(tmp_path, q, file_path="dummy.h5")
+    captured = capsys.readouterr()
+
+    assert not warm.qhat_cached
+    assert "Failed to load cached FFT blocks" in captured.out
+    np.testing.assert_allclose(warm.qhat, ref)
+
+    again = _make_bsmd(tmp_path, q, file_path="dummy.h5")
+    assert again.qhat_cached
+    np.testing.assert_allclose(again.qhat, ref)

@@ -42,6 +42,7 @@ from tqdm import tqdm
 
 from openmodalpy.core.base import (
     BaseAnalyzer,
+    _hdf5_write_mode,
     _verify_qhat_stamp,
     _write_qhat_stamp,
     add_inset_colorbar,
@@ -378,20 +379,23 @@ class BSMDAnalyzer(BaseAnalyzer):
 
         # Try loading cached FFT blocks from a previous BSMD run first
         if os.path.exists(cache_path):
-            with h5py.File(cache_path, "r") as f:
-                if "FFTBlocks" in f:
-                    qhat_cached = f["FFTBlocks"][:]
-                    if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
-                        f, self, self.data["q"]
-                    ):
-                        self.qhat = qhat_cached
-                        self.nblocks = qhat_cached.shape[2]
-                        self.qhat_cached = True
-                        print(f"Loaded cached FFT blocks from {cache_path}")
-                        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
-                        self.St = self.freq.copy()
-                        self._maybe_offload_qhat()
-                        return
+            try:
+                with h5py.File(cache_path, "r") as f:
+                    if "FFTBlocks" in f:
+                        qhat_cached = f["FFTBlocks"][:]
+                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
+                            f, self, self.data["q"]
+                        ):
+                            self.qhat = qhat_cached
+                            self.nblocks = qhat_cached.shape[2]
+                            self.qhat_cached = True
+                            print(f"Loaded cached FFT blocks from {cache_path}")
+                            self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
+                            self.St = self.freq.copy()
+                            self._maybe_offload_qhat()
+                            return
+            except OSError as exc:
+                print(f"Failed to load cached FFT blocks ({exc}), recomputing.")
 
         # Otherwise, see if SPOD cached blocks exist to reuse. This goes through
         # the same stamp verification as our own cache: SPOD's FFT parameters
@@ -419,7 +423,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                         print(f"Reusing cached FFT blocks from {spod_path}")
                         # Save a copy for future BSMD runs
                         os.makedirs(self.results_dir, exist_ok=True)
-                        mode = "a" if os.path.exists(cache_path) else "w"
+                        mode = _hdf5_write_mode(cache_path)
                         with h5py.File(cache_path, mode) as f_bsmd:
                             if "FFTBlocks" in f_bsmd:
                                 del f_bsmd["FFTBlocks"]
@@ -439,7 +443,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         self.qhat_cached = False
 
         os.makedirs(self.results_dir, exist_ok=True)
-        mode = "a" if os.path.exists(cache_path) else "w"
+        mode = _hdf5_write_mode(cache_path)
         with h5py.File(cache_path, mode) as f:
             if "FFTBlocks" in f:
                 del f["FFTBlocks"]

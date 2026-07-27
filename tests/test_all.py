@@ -376,12 +376,12 @@ def test_spod():
     # --- Test 4: Comparison with Welch PSD ---
     # First SPOD eigenvalue should show similar spectral structure to Welch PSD
 
-    # Multi-tone signal with different parameters to avoid cache collision
+    # Multi-tone signal (two tones) for Welch/SPOD spectral comparison
     f1, f2 = 5.0, 15.0
     signal_data = np.sin(2*np.pi*f1*t) + 0.5*np.sin(2*np.pi*f2*t)
     q_multi = np.outer(signal_data, spatial)
 
-    nfft = 512  # Different from single tone test to avoid cache
+    nfft = 512  # finer frequency grid for resolving the two tones
     overlap_frac = 0.5
     loader = make_test_loader(q_multi, Nx, Ny, dt)
     analyzer = SPODAnalyzer("dummy", nfft=nfft, overlap=overlap_frac, data_loader=loader)

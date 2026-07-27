@@ -170,6 +170,29 @@ def _verify_qhat_stamp(h5file, analyzer, q: np.ndarray) -> bool:
     return True
 
 
+def _hdf5_write_mode(path: str) -> str:
+    """Return ``"a"`` if ``path`` is a readable HDF5 file, else ``"w"``.
+
+    File existence is the wrong predicate: a truncated or otherwise corrupt
+    cache still exists on disk, so ``os.path.exists`` would open it in append
+    mode and die with an uncaught ``OSError``.
+
+    ``h5py.is_hdf5`` is the first filter (False for a missing path → ``"w"``).
+    It is not sufficient alone: a truncated file often still carries a valid
+    HDF5 signature at offset 0, so ``is_hdf5`` returns True even though any
+    open in ``"a"``/``"r"`` raises. Probe a read-only open and only then
+    return ``"a"``; on ``OSError`` return ``"w"`` so the caller overwrites.
+    """
+    if not h5py.is_hdf5(path):
+        return "w"
+    try:
+        with h5py.File(path, "r"):
+            pass
+    except OSError:
+        return "w"
+    return "a"
+
+
 def print_summary(analysis: str, results_dir: str, figures_dir: str) -> None:
     """Print a short summary of where results and figures were saved."""
     print(f"✅ {analysis} analysis finished!")
