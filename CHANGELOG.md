@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- A corrupt or truncated FFT-block cache no longer aborts the analysis. Interrupted
+  runs, full disks, and killed jobs can leave a half-written HDF5 cache that still
+  exists on disk; opening it for append used to raise and stop SPOD or BSMD even though
+  the blocks are re-derivable from the raw data. Write mode is now chosen by whether the
+  file is actually readable as HDF5, not by whether it exists, so an unreadable cache is
+  overwritten after a recompute. The same recovery applies when BSMD tries to reuse a
+  SPOD cache that turns out to be truncated: it prints a reason and recomputes rather
+  than raising. Reading a saved results file keeps the opposite policy and still raises,
+  since results are not re-derivable from the raw data the way FFT blocks are.
 - The sampling rate `fs` fails with a diagnosis instead of an accident. `fs` starts at
   `0.0` until a dataset is loaded, and on paths that never load one — reopening saved
   results, for instance — that zero used to reach the frequency code, where a periodogram

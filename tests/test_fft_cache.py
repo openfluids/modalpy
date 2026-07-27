@@ -230,3 +230,45 @@ def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsy
     again = _make_bsmd(tmp_path, q, file_path="dummy.h5")
     assert again.qhat_cached
     np.testing.assert_allclose(again.qhat, ref)
+
+
+def test_corrupt_spod_cache_does_not_stop_bsmd(tmp_path, monkeypatch, capsys):
+    """A truncated SPOD cache must not abort BSMD; recompute and match cold run.
+
+    BSMD reuses SPOD FFT blocks when the path and stamp match. That open must
+    catch OSError and fall through to a fresh computation — the same policy as
+    the BSMD self-cache read — rather than raising on a corrupt SPOD file.
+    """
+    import openmodalpy.bsmd as bsmd_mod
+
+    np.random.seed(6)
+    q = np.random.randn(32, 4)
+
+    spod_dir = tmp_path / "spod"
+    spod_dir.mkdir()
+    ref_dir = tmp_path / "ref"
+    ref_dir.mkdir()
+    bsmd_dir = tmp_path / "bsmd"
+    bsmd_dir.mkdir()
+
+    # Cold reference with no SPOD cache in play.
+    monkeypatch.setattr(bsmd_mod, "RESULTS_DIR_SPOD", str(ref_dir))
+    cold = _make_bsmd(ref_dir, q, file_path="dummy.h5")
+    assert not cold.qhat_cached
+    ref = np.array(cold.qhat, copy=True)
+
+    # Real SPOD cache, then truncate it so the reuse open would raise.
+    _make_spod(spod_dir, q, file_path="dummy.h5")
+    fname = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
+    spod_cache = spod_dir / fname
+    assert spod_cache.exists()
+    with open(spod_cache, "r+b") as fh:
+        fh.truncate(64)
+
+    monkeypatch.setattr(bsmd_mod, "RESULTS_DIR_SPOD", str(spod_dir))
+    warm = _make_bsmd(bsmd_dir, q, file_path="dummy.h5")
+    captured = capsys.readouterr()
+
+    assert not warm.qhat_cached
+    assert "Failed to load cached FFT blocks" in captured.out
+    np.testing.assert_allclose(warm.qhat, ref)
