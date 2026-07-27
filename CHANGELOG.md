@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The sampling rate `fs` fails with a diagnosis instead of an accident. `fs` starts at
+  `0.0` until a dataset is loaded, and on paths that never load one — reopening saved
+  results, for instance — that zero used to reach the frequency code, where a periodogram
+  rejected it with a message naming nothing and an `rfftfreq` axis raised
+  `ZeroDivisionError`. Both now raise a single `ValueError` naming the data source and
+  saying what to supply, matching the message the timestep already used. Frequency axes
+  are unchanged whenever the sampling rate is valid.
+
 ## [0.3.0] - 2026-07-27
 
 ### Breaking

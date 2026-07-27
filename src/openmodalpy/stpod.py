@@ -717,6 +717,7 @@ class STPODAnalyzer(BaseAnalyzer):
             n_snapshots_plot = m
 
         time_vector, xlabel = self._time_axis(n_snapshots_plot)
+        fs = self._require_fs()
 
         fig, axes = plt.subplots(n_coeffs, 2, figsize=(12, 3 * n_coeffs))
         if n_coeffs == 1:
@@ -734,7 +735,7 @@ class STPODAnalyzer(BaseAnalyzer):
             axes[i, 0].set_xlim(time_vector.min(), time_vector.max())
 
             # Periodogram
-            freqs, psd = periodogram_rfft(coeff, self.fs)
+            freqs, psd = periodogram_rfft(coeff, fs)
             peak_freqs, peak_psd = find_peaks(freqs, psd)
 
             if L is not None and U is not None:

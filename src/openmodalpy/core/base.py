@@ -1149,6 +1149,29 @@ class BaseAnalyzer:
             )
         return dt_f
 
+    def _require_fs(self) -> float:
+        """Return a validated positive finite sampling rate from ``self.fs``.
+
+        Does not write to ``self.fs``. Physics-bearing consumers (periodograms,
+        ``rfftfreq`` axes, Nyquist limits) must call this instead of reading
+        ``self.fs`` directly — the ``0.0`` default is a not-yet-computed
+        sentinel, not a valid rate.
+        """
+        fs = self.fs
+        try:
+            fs_f = float(fs)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Missing or non-scalar sampling rate fs={fs!r} for data source {self.file_path!r}; "
+                "provide a positive finite scalar fs (via load_and_preprocess from a valid dt)."
+            ) from None
+        if not np.isfinite(fs_f) or fs_f <= 0.0:
+            raise ValueError(
+                f"Invalid sampling rate fs={fs!r} for data source {self.file_path!r}; "
+                "provide a positive finite scalar fs (via load_and_preprocess from a valid dt)."
+            )
+        return fs_f
+
     def _time_axis(self, n: int) -> tuple[np.ndarray, str]:
         """Return abscissa values and an honest x-axis label of length ``n``.
 

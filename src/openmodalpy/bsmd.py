@@ -252,7 +252,6 @@ class BSMDAnalyzer(BaseAnalyzer):
         self.W = np.array([])
         self.novlap = int(overlap * nfft)
         self.nblocks = 0
-        self.fs = 0.0
         self.qhat = np.array([])
         self.qhat_cached = False
         self.triads = []
@@ -389,7 +388,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                         self.nblocks = qhat_cached.shape[2]
                         self.qhat_cached = True
                         print(f"Loaded cached FFT blocks from {cache_path}")
-                        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self.fs)
+                        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
                         self.St = self.freq.copy()
                         self._maybe_offload_qhat()
                         return
@@ -430,7 +429,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                                     f_bsmd.attrs[key] = value
                             _write_qhat_stamp(f_bsmd, self, self.data["q"])
                         print(f"Saved FFT blocks to cache at {cache_path}")
-                        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self.fs)
+                        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
                         self.St = self.freq.copy()
                         self._maybe_offload_qhat()
                         return
@@ -452,7 +451,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         print(f"Saved FFT blocks to cache at {cache_path}")
 
         # Set frequency and Strouhal vectors after qhat is available
-        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self.fs)
+        self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
         self.St = self.freq.copy()  # Default: Strouhal equals frequency if no scaling
         self._maybe_offload_qhat()
 
@@ -622,7 +621,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         if self.freq is None or self.St is None:
             n_freq = self._n_freq_bins
             if n_freq > 0:
-                self.freq = np.fft.rfftfreq(n_freq * 2 - 2, d=1.0 / self.fs)[:n_freq]
+                self.freq = np.fft.rfftfreq(n_freq * 2 - 2, d=1.0 / self._require_fs())[:n_freq]
                 self.St = self.freq.copy()
 
         # Pre-fetch frequency bins from HDF5 into RAM cache before threading.

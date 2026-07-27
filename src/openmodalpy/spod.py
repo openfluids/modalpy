@@ -316,7 +316,7 @@ class SPODAnalyzer(BaseAnalyzer):
                 f"Warning: self.freq length ({len(self.freq)}) mismatch with qhat bins ({num_freq_bins}). Recalculating."
             )
             # Recalculate freq and St based on nfft and fs (from BaseAnalyzer)
-            self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self.fs)[:num_freq_bins]
+            self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())[:num_freq_bins]
             self.St = self.freq * self.L / self.U
             print(f"Realigned self.freq to {len(self.freq)} elements and self.St.")
 

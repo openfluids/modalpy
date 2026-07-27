@@ -881,6 +881,7 @@ class PODAnalyzer(BaseAnalyzer):
 
         time_vector, time_xlabel = self._time_axis(n_snapshots_plot)
         st_xlabel = "Strouhal Number (St)"
+        fs = self._require_fs()
 
         plt.figure(figsize=(12, 3 * n_coeffs_to_plot))
         for i in range(n_coeffs_to_plot):
@@ -894,7 +895,7 @@ class PODAnalyzer(BaseAnalyzer):
             plt.xlim(time_vector.min(), time_vector.max())
 
             plt.subplot(n_coeffs_to_plot, 2, 2 * i + 2)
-            freqs, psd = periodogram_rfft(coeff, self.fs)
+            freqs, psd = periodogram_rfft(coeff, fs)
             peak_freqs, peak_psd = find_peaks(freqs, psd)
 
             if L is not None and U is not None:
@@ -914,9 +915,9 @@ class PODAnalyzer(BaseAnalyzer):
             plt.xscale("log")
             if peak_freqs.size > 0:
                 xlim_min = 0.7 * peak_freqs[0]
-                plt.xlim(xlim_min, self.fs / 2)
+                plt.xlim(xlim_min, fs / 2)
             else:
-                plt.xlim(1e-3, self.fs / 2)
+                plt.xlim(1e-3, fs / 2)
             plt.ylim(1e-6, None)
             plt.xlabel(st_xlabel)
             plt.ylabel("PSD")
