@@ -65,48 +65,80 @@ def _independent_hankel(data_centered: np.ndarray, embedding_dim: int) -> np.nda
 
 
 # ---------------------------------------------------------------------------
-# DMD: delay machinery is a no-op at d=1
+# DMD: exact DMD at delays=1 vs independent numpy; delays=2 is a real lift
 # ---------------------------------------------------------------------------
 
 
-def test_dmd_delays_one_is_noop():
-    """delays=1 must match the default (no embedding).
+def test_dmd_delays_one_matches_independent_exact_dmd():
+    """delays=1 must match exact DMD built with plain numpy in the test.
 
-    WHY: the delay-embed helper at depth 1 returns its input unchanged (dmd.py).
-    At d=1 the Hankel lift is the identity, so eigenvalues and |modes| are the
-    same arithmetic as plain exact DMD — not a statistical agreement.
-    Sign/phase of modes is not canonicalized yet; compare |modes| only.
+    WHY: exact DMD is the eigendecomposition of the projected companion
+    A_tilde = U^H X2 V S^{-1} from the thin SVD of X1 = q.T[:, :-1]. Building
+    that operator here with np.linalg (not dmd.py helpers) is an independent
+    oracle: agreement proves perform_dmd(delays=1) implements exact DMD, not
+    that two aliases of the same call match. Sorted by |lambda| descending.
     """
     rng = np.random.default_rng(0)
     q = rng.standard_normal((32, 4))
     data = _make_data(q)
     n_modes = 3
 
-    base = DMDAnalyzer(
-        file_path="meta_dmd_base",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=n_modes,
-    )
-    base.load_and_preprocess()
-    base.perform_dmd()
-
-    delayed = DMDAnalyzer(
+    analyzer = DMDAnalyzer(
         file_path="meta_dmd_d1",
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=n_modes,
     )
-    delayed.load_and_preprocess()
-    delayed.perform_dmd(delays=1)
+    analyzer.load_and_preprocess()
+    analyzer.perform_dmd(delays=1)
+
+    # Independent exact-DMD reference (no library helpers).
+    X = q.T  # (n_space, n_time) — same layout as dmd.py
+    X1, X2 = X[:, :-1], X[:, 1:]
+    r = min(n_modes, min(X1.shape))
+    u, s, vh = np.linalg.svd(X1, full_matrices=False)
+    u_r, s_r, v_r = u[:, :r], s[:r], vh[:r].conj().T
+    a_tilde = (u_r.conj().T @ X2 @ v_r) / s_r  # U^H X2 V S^{-1}
+    ref_eigs = np.linalg.eigvals(a_tilde)
+    ref_eigs = ref_eigs[np.argsort(np.abs(ref_eigs))[::-1]][:n_modes]
 
     np.testing.assert_allclose(
-        delayed.eigenvalues, base.eigenvalues, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
+        analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
     )
-    # Phase not canonicalized yet — compare magnitudes only.
-    np.testing.assert_allclose(
-        np.abs(delayed.modes), np.abs(base.modes), rtol=_RTOL_EXACT, atol=_ATOL_EXACT
+
+
+def test_dmd_delays_two_differs_from_one():
+    """delays=2 must change the spectrum relative to delays=1.
+
+    WHY: delays=1 regresses in R^{n_space}; delays=2 stacks consecutive
+    snapshots into R^{2 n_space} before forming (X1, X2), so A_tilde is a
+    different operator. On broadband random data the lifted eigenvalues are
+    not a permutation of the plain ones — if the delay path silently
+    degraded to the identity (the old tautology), this assert would fail.
+    """
+    rng = np.random.default_rng(0)
+    q = rng.standard_normal((32, 4))
+    data = _make_data(q)
+    n_modes = 3
+
+    common = dict(
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=n_modes,
     )
+    d1 = DMDAnalyzer(file_path="meta_dmd_d1_vs", **common)
+    d1.load_and_preprocess()
+    d1.perform_dmd(delays=1)
+
+    d2 = DMDAnalyzer(file_path="meta_dmd_d2", **common)
+    d2.load_and_preprocess()
+    d2.perform_dmd(delays=2)
+
+    # Positive: embedding ran — spectra must differ on this data.
+    assert d2._dmd_delays == 2
+    assert not np.allclose(
+        d2.eigenvalues, d1.eigenvalues, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
+    ), "delays=2 spectrum matched delays=1; delay path looks like a no-op"
 
 
 # ---------------------------------------------------------------------------
@@ -190,13 +222,14 @@ def test_stpod_d2_matches_independent_hankel_pod():
     ],
 )
 def test_spod_function_serial_parallel(n_space, nblocks, dst):
-    """spod_function serial and parallel paths must agree.
+    """spod_function default and optimized paths must agree.
 
     WHY: When PARALLEL_AVAILABLE, use_parallel=True routes through
-    spod_single_frequency_optimized; use_parallel=False runs the pure-numpy
-    eigh path. Both implement the same weighted CSD eigenproblem
-    (X^H W X) / (nblocks * dst), so eigenvalues and |modes| must match to
-    machine precision — any drift means one path was maintained alone.
+    spod_single_frequency_optimized (a second independent serial BLAS/eigh
+    implementation of the same eigenproblem); use_parallel=False runs the
+    pure-numpy eigh path. Both solve the weighted CSD (X^H W X) /
+    (nblocks * dst), so eigenvalues and |modes| must match to machine
+    precision — any drift means one path was maintained alone.
     """
     assert PARALLEL_AVAILABLE is True
     rng = np.random.default_rng(10 + nblocks)
@@ -212,7 +245,7 @@ def test_spod_function_serial_parallel(n_space, nblocks, dst):
         qhat, nblocks=nblocks, dst=dst, w=w, return_psi=True, use_parallel=True
     )
 
-    # Same floating-point arithmetic up to BLAS/thread rounding; atol at ~1 ulp of O(1).
+    # Same floating-point arithmetic up to BLAS/library rounding; atol at ~1 ulp of O(1).
     np.testing.assert_allclose(lam_p, lam_s, rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.abs(phi_p), np.abs(phi_s), rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.abs(psi_p), np.abs(psi_s), rtol=0, atol=1e-12)
@@ -349,16 +382,17 @@ def test_scaling_mpod_eigenvalues_quadratic(alpha):
     """mPOD eigenvalues scale as alpha^2 (band-limited POD of q).
 
     WHY: mPOD is POD on band-filtered snapshots. Filtering is linear in q,
-    POD eigenvalues are quadratic, so the composition is alpha^2. A single
-    full-band edge set reduces mPOD to POD and inherits the same power.
+    POD eigenvalues are quadratic, so the composition is alpha^2. Edges are
+    strictly interior to [0, Nyquist] so the multi-band filter path runs
+    (full-span edges take the POD shortcut and would not test mPOD).
     """
     rng = np.random.default_rng(32)
     q = rng.standard_normal((32, 4))
     n_modes = 3
-    # One wide band → full-band mPOD; still quadratic in amplitude.
-    band_edges = [0.0, 5.0]
+    # dt=0.1 → Nyquist 5 Hz; interior edge at 2 Hz forces multi-band filtering.
+    band_edges = [0.0, 2.0, 5.0]
 
-    def eigs(field: np.ndarray) -> np.ndarray:
+    def run(field: np.ndarray) -> MPODAnalyzer:
         a = MPODAnalyzer(
             file_path="meta_scale_mpod",
             data_loader=lambda _: _make_data(field),
@@ -368,12 +402,19 @@ def test_scaling_mpod_eigenvalues_quadratic(alpha):
         )
         a.load_and_preprocess()
         a.perform_mpod()
-        return a.eigenvalues
+        return a
 
-    base = eigs(q)
-    scaled = eigs(alpha * q)
+    base = run(q)
+    # Positive: filtering path ran — more than one band contributed modes.
+    assert len(np.unique(base.mode_band_indices)) > 1, (
+        "mode_band_indices has a single band; mPOD took the full-band POD shortcut"
+    )
+    scaled = run(alpha * q)
     np.testing.assert_allclose(
-        scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
+        scaled.eigenvalues,
+        (alpha**2) * base.eigenvalues,
+        rtol=_RTOL_EXACT,
+        atol=_ATOL_EXACT,
     )
 
 
