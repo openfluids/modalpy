@@ -20,6 +20,12 @@ jobs:
       - name: Lint
         run: uv run --group lint ruff check .
 
+      - name: Format
+        run: uv run --group lint ruff format --check .
+
+      - name: Lockfile
+        run: uv lock --check
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -46,6 +52,34 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv run --group test --python "$PYTHON_VERSION" pytest -q
+
+  # Single coverage job (not matrix): keep CI minutes down. Floor 50% with current
+  # total ~52%; ratchet later. Ubuntu + Python 3.14 only.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Coverage floor
+        run: uv run --group test --python 3.14 pytest -q --cov=openmodalpy --cov-fail-under=50
+
+  # Fastest analytic shipped suite: taylor_green (64×64×100). ~30s wall locally.
+  # Writes under results/ and figures/ (hdf5/figures gitignored); no commit risk on CI.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Analytic example end-to-end
+        env:
+          MPLBACKEND: Agg
+        run: |
+          MPLBACKEND=Agg uv run openmodalpy examples run taylor_green
+          test -f results/taylor_green/pod/taylor_green_100snapshots_pod.hdf5
 
   # The package must import from a plain wheel install, with no dev group and no
   # repository checkout on sys.path — this catches missing runtime dependencies
