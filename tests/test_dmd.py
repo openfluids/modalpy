@@ -1,3 +1,5 @@
+import warnings
+
 import h5py
 import matplotlib
 import numpy as np
@@ -41,8 +43,10 @@ def test_perform_dmd_simple():
     )
     analyzer.load_and_preprocess()
     analyzer.perform_dmd()
-    assert analyzer.modes.shape == (2, 2)
-    assert analyzer.time_coefficients.shape == (3, 2)
+    # Snapshot pairs are rank-1 (col2 = 2 * col1); relative floor keeps one mode.
+    assert analyzer.effective_rank == 1
+    assert analyzer.modes.shape == (2, 1)
+    assert analyzer.time_coefficients.shape == (3, 1)
     assert np.isclose(analyzer.eigenvalues[0], 2.0, atol=1e-6)
 
 
@@ -336,11 +340,14 @@ def test_dmd_with_delays():
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    analyzer.perform_dmd(delays=3)
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(delays=3)
 
-    assert analyzer.eigenvalues.size == 4
+    # Order-2 linear system → numerical rank 2 even after delay lift.
+    assert analyzer.effective_rank == 2
+    assert analyzer.eigenvalues.size == 2
     assert analyzer.modes.shape[0] == 2 * 3  # n_spatial * delays
-    assert analyzer.omega.size == 4
+    assert analyzer.omega.size == 2
     # All eigenvalues should be finite
     assert np.all(np.isfinite(analyzer.eigenvalues))
 
@@ -504,3 +511,149 @@ def test_hodmd_plot_modes_uses_2d_slice(monkeypatch, tmp_path):
 
     assert line_calls["count"] == 0
     assert (tmp_path / "dummy_dmd_modes_1_to_2_u.png").exists()
+
+
+def _rank3_kicked_snapshots(scale=1.0, kick=1e-3, seed=0):
+    """Exactly rank-3 sequence with a kick only on the last snapshot (X2 ∉ range(X1))."""
+    rng = np.random.default_rng(seed)
+    nx, ny, ns, dt = 12, 10, 40, 0.1
+    t = np.arange(ns) * dt
+    p = rng.standard_normal((nx * ny, 3))
+    a = np.column_stack(
+        [
+            np.cos(2 * np.pi * 0.5 * t),
+            np.sin(2 * np.pi * 1.1 * t),
+            np.exp(-0.3 * t),
+        ]
+    )
+    q = a @ p.T
+    q[-1] += kick * rng.standard_normal(nx * ny)
+    return q * scale, nx, ny, dt
+
+
+def test_dmd_rank_deficient_floors_singular_values():
+    """Rank-3 data + final-snapshot kick must not amplify noise via tiny s_r."""
+    q, nx, ny, dt = _rank3_kicked_snapshots()
+    data = {
+        "q": q,
+        "x": np.arange(nx, dtype=float),
+        "y": np.arange(ny, dtype=float),
+        "dt": dt,
+        "Nx": nx,
+        "Ny": ny,
+        "Ns": q.shape[0],
+    }
+    analyzer = DMDAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=10,
+    )
+    analyzer.load_and_preprocess()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
+
+    assert analyzer.effective_rank == 3
+    assert analyzer.modes.shape[1] == 3
+    assert float(np.abs(analyzer.eigenvalues).max()) <= 10.0
+    assert float(np.abs(analyzer.modes).max()) <= 1e3
+    assert np.all(np.isfinite(analyzer.eigenvalues))
+    assert np.all(np.isfinite(analyzer.modes))
+
+
+def test_dmd_effective_rank_scale_invariant():
+    """Same dynamics at 1e-8 and 1e+8 must report the same effective rank."""
+    ranks = []
+    for scale in (1e-8, 1.0, 1e8):
+        q, nx, ny, dt = _rank3_kicked_snapshots(scale=scale)
+        data = {
+            "q": q,
+            "x": np.arange(nx, dtype=float),
+            "y": np.arange(ny, dtype=float),
+            "dt": dt,
+            "Nx": nx,
+            "Ny": ny,
+            "Ns": q.shape[0],
+        }
+        analyzer = DMDAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+            n_modes_save=10,
+        )
+        analyzer.load_and_preprocess()
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
+        ranks.append(analyzer.effective_rank)
+        assert float(np.abs(analyzer.eigenvalues).max()) <= 10.0
+
+    assert ranks == [3, 3, 3]
+
+
+def test_dmd_full_rank_path_silent_and_untruncated():
+    """Well-conditioned data keeps every requested mode and does not warn."""
+    rng = np.random.default_rng(7)
+    nsp = 120
+    tt = np.arange(60) * 0.1
+    q = (
+        np.column_stack([np.cos(2 * np.pi * f * tt) for f in (0.3, 0.7, 1.3, 1.9, 2.4)])
+        @ rng.standard_normal((5, nsp))
+    )
+    q = q + 1e-2 * rng.standard_normal((60, nsp))
+    data = {
+        "q": q,
+        "x": np.arange(12, dtype=float),
+        "y": np.arange(10, dtype=float),
+        "dt": 0.1,
+        "Nx": 12,
+        "Ny": 10,
+        "Ns": q.shape[0],
+    }
+    analyzer = DMDAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=5,
+    )
+    analyzer.load_and_preprocess()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        analyzer.perform_dmd()
+    rank_warnings = [w for w in caught if "effective rank" in str(w.message)]
+    assert rank_warnings == []
+    assert analyzer.effective_rank == 5
+    assert analyzer.modes.shape[1] == 5
+
+
+def test_dmd_degenerate_all_zero_returns_empty_without_raising():
+    """An all-zero field has no usable spectrum: warn and return empty, do not crash.
+
+    The relative test always keeps s[0] (s[0] > rcond * s[0] reduces to 1 > rcond),
+    so effective_rank reaches 0 only when the spectrum itself is unusable. Before the
+    guard was ordered correctly this divided by a zero s[0] and surfaced as
+    ``LinAlgError: Array must not contain infs or NaNs`` out of np.linalg.eig.
+    """
+    q = np.zeros((20, 60))
+    data = {
+        "q": q,
+        "x": np.arange(10, dtype=float),
+        "y": np.arange(6, dtype=float),
+        "dt": 0.1,
+        "Nx": 10,
+        "Ny": 6,
+        "Ns": q.shape[0],
+    }
+    analyzer = DMDAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=5,
+    )
+    analyzer.load_and_preprocess()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
+
+    assert analyzer.effective_rank == 0
+    assert analyzer.eigenvalues.size == 0
+    assert analyzer.modes.size == 0
+    assert analyzer.time_coefficients.size == 0

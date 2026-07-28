@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- DMD no longer amplifies noise into modes when the snapshot pair is ill-conditioned.
+  The reduced operator and the mode recovery both divide by the singular values of the
+  first snapshot matrix, and the number kept was whatever you asked for rather than
+  whatever the data supports. A rank-deficient sequence alone is harmless — the small
+  singular values cancel — but as soon as the second snapshot matrix carries content the
+  first one cannot represent, which is what a transient, an arriving structure or a
+  truncated record produces, the division has nothing to cancel against. On a rank-3
+  sequence with a perturbation applied to the final snapshot this returned eigenvalues of
+  magnitude 6.7e9 and modes of magnitude 1.9e9, all finite, so nothing raised. Singular
+  values are now kept only above a threshold relative to the largest one, following the
+  `numpy.linalg.pinv` convention, which makes the cut invariant to the overall scale of
+  the data; both `pinv` calls pass that same conditioning explicitly instead of relying
+  on a default. Well-conditioned data is unaffected.
+- DMD reports the rank it actually used as `effective_rank`, and warns when that is below
+  the number of modes requested. Asking for more modes than the data supports is normal,
+  so this is a `RuntimeWarning` about the data rather than an error.
+- An all-zero or otherwise degenerate field returns empty results with that warning
+  instead of failing inside the eigensolver with `LinAlgError: Array must not contain
+  infs or NaNs`.
+
 ### Added
 - The three built-in synthetic generators are now checked against the closed-form
   answers they already carry. `example_data.py` has always returned the double gyre's

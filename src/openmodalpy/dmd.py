@@ -77,6 +77,26 @@ def _delay_embed(X, d):
     return out
 
 
+def _dmd_pinv_rcond(shape, dtype) -> float:
+    """Return ``max(shape) * finfo(dtype).eps`` (numpy.linalg.pinv default).
+
+    Used as the relative singular-value floor: keep ``s_j > rcond * s[0]``.
+    Not a public constructor parameter.
+    """
+    dt = np.dtype(dtype)
+    if np.issubdtype(dt, np.complexfloating):
+        dt = np.dtype(dt.type(0).real.dtype)
+    elif not np.issubdtype(dt, np.floating):
+        dt = np.dtype(np.float64)
+    return max(shape) * np.finfo(dt).eps
+
+
+# Relative SVD / pinv cutoff policy: numpy.linalg.pinv rcond convention.
+# rcond = max(M, N) * finfo(dtype).eps; rank keeps s_j > rcond * s[0].
+# Shape/dtype-dependent — computed per call via _dmd_pinv_rcond. Not a user knob.
+DMD_PINV_RCOND = _dmd_pinv_rcond
+
+
 class DMDAnalyzer(BaseAnalyzer):
     """Exact Dynamic Mode Decomposition analyzer.
 
@@ -115,6 +135,8 @@ class DMDAnalyzer(BaseAnalyzer):
         self.amplitudes = np.array([])
         # Continuous-time eigenvalues: omega = log(lambda) / dt
         self.omega = np.array([])
+        # Numerical rank used by the last perform_dmd() (relative SVD floor)
+        self.effective_rank = 0
         # Algorithm settings (written by perform_dmd, read by metadata)
         self._dmd_method = "ls"
         self._dmd_delays = 1
@@ -170,9 +192,45 @@ class DMDAnalyzer(BaseAnalyzer):
         X1 = X[:, :-1]
         X2 = X[:, 1:]
 
-        # SVD of X1
-        r = min(self.n_modes_save, min(X1.shape))
-        u, s, vh = compute_reduced_svd(X1, r)
+        # SVD of X1; request up to n_modes_save, then floor by relative threshold
+        r_requested = min(self.n_modes_save, min(X1.shape))
+        u, s, vh = compute_reduced_svd(X1, r_requested)
+        # Relative floor: keep s_j > rcond * s[0] (numpy.linalg.pinv convention)
+        rcond = DMD_PINV_RCOND(X1.shape, s.dtype if s.size else X1.dtype)
+        if s.size == 0 or not np.isfinite(s[0]) or s[0] <= 0.0:
+            r = 0
+        else:
+            r = int(np.sum(s[:r_requested] > (rcond * s[0])))
+            r = min(r, r_requested)
+        # Order matters. The relative test always keeps s[0] (s[0] > rcond * s[0]
+        # reduces to 1 > rcond), so r reaches 0 only when the spectrum itself is
+        # unusable: empty, non-finite, or all zero. Bumping r back to 1 there would
+        # divide by that unusable s[0] and surface as an opaque LinAlgError out of
+        # np.linalg.eig, so the degenerate case has to return before the bump.
+        if r < r_requested:
+            # RuntimeWarning, not UserWarning: this reports a numerical property of
+            # the data, not a misuse of the API. The caller asking for more modes
+            # than the data supports is normal and expected -- the analytic cases
+            # are rank-1 by construction -- so it belongs in the same category numpy
+            # uses for conditioning and precision notices.
+            warnings.warn(
+                f"DMD effective rank {r} is below the requested {r_requested} "
+                f"(relative singular-value threshold rcond={rcond:.3e}).",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        self.effective_rank = int(r)
+        if r == 0:
+            self.eigenvalues = np.array([])
+            self.omega = np.array([])
+            self.modes = np.array([])
+            self.time_coefficients = np.array([])
+            self.amplitudes = np.array([])
+            self._dmd_method = method
+            self._dmd_delays = delays
+            self._dmd_named_variant = named_variant or "dmd"
+            return
+
         u_r = u[:, :r]
         s_r = s[:r]
         v_r = vh[:r].conj().T
@@ -186,7 +244,8 @@ class DMDAnalyzer(BaseAnalyzer):
             U11 = Uz[:n1, :]
             U21 = Uz[n1:, :]
             # Project into the reduced basis so atilde is (r, r)
-            atilde = (u_r.conj().T @ U21) @ np.linalg.pinv(u_r.conj().T @ U11)
+            u_r_H_U11 = u_r.conj().T @ U11
+            atilde = (u_r.conj().T @ U21) @ np.linalg.pinv(u_r_H_U11, rcond=rcond)
         else:
             atilde = (u_r.conj().T @ X2 @ v_r) / s_r
 
@@ -205,16 +264,17 @@ class DMDAnalyzer(BaseAnalyzer):
         omega = np.log(safe_eigvals.astype(complex)) / dt
 
         # Amplitudes and time dynamics (use original snapshot count)
-        b = np.linalg.pinv(modes) @ X[:, 0]
+        b = np.linalg.pinv(modes, rcond=rcond) @ X[:, 0]
         t = np.arange(n_snapshots)
         time_dynamics = (b[:, None] * eigvals[:, None] ** t).T
 
         idx = np.argsort(np.abs(eigvals))[::-1]
-        self.eigenvalues = eigvals[idx][: self.n_modes_save]
-        self.omega = omega[idx][: self.n_modes_save]
-        self.modes = modes[:, idx][:, : self.n_modes_save]
-        self.time_coefficients = time_dynamics[:, idx][:, : self.n_modes_save]
-        self.amplitudes = np.abs(b[idx][: self.n_modes_save])
+        n_keep = min(self.n_modes_save, r)
+        self.eigenvalues = eigvals[idx][:n_keep]
+        self.omega = omega[idx][:n_keep]
+        self.modes = modes[:, idx][:, :n_keep]
+        self.time_coefficients = time_dynamics[:, idx][:, :n_keep]
+        self.amplitudes = np.abs(b[idx][:n_keep])
         self._dmd_method = method
         self._dmd_delays = delays
         self._dmd_named_variant = named_variant or "dmd"
