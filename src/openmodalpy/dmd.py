@@ -120,12 +120,7 @@ def svht_lambda(beta):
     beta = float(beta)
     if not (0.0 < beta <= 1.0):
         raise ValueError(f"svht_lambda requires 0 < beta <= 1, got {beta!r}")
-    return float(
-        np.sqrt(
-            2.0 * (beta + 1.0)
-            + 8.0 * beta / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))
-        )
-    )
+    return float(np.sqrt(2.0 * (beta + 1.0) + 8.0 * beta / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))))
 
 
 class DMDAnalyzer(BaseAnalyzer):
@@ -195,9 +190,7 @@ class DMDAnalyzer(BaseAnalyzer):
             return min(int(rank), max_r)
         if rank in ("svht", "energy"):
             return max_r
-        raise ValueError(
-            f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'."
-        )
+        raise ValueError(f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'.")
 
     def _resolve_rank(self, s, shape, rcond):
         """Map singular values + ``self.rank`` to ``(effective_r, r_requested)``.
@@ -239,9 +232,7 @@ class DMDAnalyzer(BaseAnalyzer):
         if rank == "energy":
             frac = self.energy_fraction
             if not (0.0 < frac <= 1.0):
-                raise ValueError(
-                    f"energy_fraction must be in (0, 1], got {frac!r}"
-                )
+                raise ValueError(f"energy_fraction must be in (0, 1], got {frac!r}")
             energy = np.cumsum(s.astype(np.float64) ** 2)
             total = float(energy[-1])
             if total <= 0.0 or not np.isfinite(total):
@@ -252,9 +243,7 @@ class DMDAnalyzer(BaseAnalyzer):
             r = min(r_energy, r_numeric)
             return r, r_energy
 
-        raise ValueError(
-            f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'."
-        )
+        raise ValueError(f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'.")
 
     def perform_dmd(self, method="ls", delays=1, named_variant=None):
         """Compute DMD on raw shifted snapshots.
@@ -382,9 +371,7 @@ class DMDAnalyzer(BaseAnalyzer):
 
         # Continuous-time eigenvalues (guard against log(0))
         dt = self._require_dt()
-        safe_eigvals = np.where(
-            np.abs(eigvals) > 0, eigvals, np.finfo(float).tiny
-        )
+        safe_eigvals = np.where(np.abs(eigvals) > 0, eigvals, np.finfo(float).tiny)
         omega = np.log(safe_eigvals.astype(complex)) / dt
 
         # Amplitudes and time dynamics (use original snapshot count)
@@ -481,6 +468,7 @@ class DMDAnalyzer(BaseAnalyzer):
                 return  # Or: raise FileNotFoundError("No DMD results file found for plotting.")
 
         with h5py.File(path, "r") as f:
+
             def _decode_attr(name, default=None):
                 if name not in f.attrs:
                     return default
@@ -894,9 +882,7 @@ class DMDAnalyzer(BaseAnalyzer):
                     # Plot filled contour
                     cf = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
                     # Contour lines
-                    _ = ax.contour(
-                        x_mesh, y_mesh, mode_plot, levels=levels[::4], colors="k", linewidths=0.5, alpha=0.5
-                    )
+                    _ = ax.contour(x_mesh, y_mesh, mode_plot, levels=levels[::4], colors="k", linewidths=0.5, alpha=0.5)
                     # Optionally add cylinder overlay
                     if show_cylinder:
                         cylinder = plt.Circle(

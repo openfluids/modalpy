@@ -24,8 +24,7 @@ def test_arpack_path_bit_identical():
     X = rng.standard_normal((300, 300))
     min_dim = min(X.shape)
     assert rank < min_dim and min_dim >= 256, (
-        "test no longer exercises the ARPACK branch "
-        f"(rank={rank}, min_dim={min_dim})"
+        f"test no longer exercises the ARPACK branch (rank={rank}, min_dim={min_dim})"
     )
 
     u1, s1, vh1 = compute_reduced_svd(X, rank)
@@ -45,9 +44,7 @@ def test_generate_dummy_data_like_jetles_honours_seed(tmp_path):
 
     def make(seed: int) -> np.ndarray:
         path = tmp_path / f"dummy_seed_{seed}.h5"
-        generate_dummy_data_like_jetles(
-            str(path), Ns=16, Nx=8, Ny=6, seed=seed, save_mat=False
-        )
+        generate_dummy_data_like_jetles(str(path), Ns=16, Nx=8, Ny=6, seed=seed, save_mat=False)
         with h5py.File(path, "r") as f:
             return np.array(f["p"])
 

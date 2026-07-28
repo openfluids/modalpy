@@ -21,8 +21,7 @@ def test_blocksfft_serial_parallel_window_identity(window_type):
     ser = blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type=window_type, use_parallel=False)
     par = blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type=window_type, use_parallel=True)
     assert np.allclose(ser, par, rtol=0, atol=1e-12), (
-        f"serial/parallel disagree for window_type={window_type!r}: "
-        f"max|diff|={np.max(np.abs(ser - par)):.3e}"
+        f"serial/parallel disagree for window_type={window_type!r}: max|diff|={np.max(np.abs(ser - par)):.3e}"
     )
 
 
@@ -44,4 +43,3 @@ def test_blocksfft_unsupported_window_raises():
         blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type="not_a_window")
     # The offending name must appear, so an unrelated ValueError cannot satisfy this.
     assert "not_a_window" in str(exc_info.value)
-

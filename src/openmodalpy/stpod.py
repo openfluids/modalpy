@@ -158,9 +158,7 @@ class STPODAnalyzer(BaseAnalyzer):
                 raise ValueError(f"Unexpected weight shape: {self.W.shape}")
         return self.W
 
-    def _unweight_modes(
-        self, U_weighted: np.ndarray, sqrt_weights_extended: np.ndarray
-    ) -> np.ndarray:
+    def _unweight_modes(self, U_weighted: np.ndarray, sqrt_weights_extended: np.ndarray) -> np.ndarray:
         """Remove weights from modes.
 
         Args:
@@ -195,13 +193,13 @@ class STPODAnalyzer(BaseAnalyzer):
         if self.embedding_dim < 2:
             raise ValueError(f"embedding_dim must be >= 2, got {self.embedding_dim}")
         if self.embedding_dim >= Ns:
-            raise ValueError(
-                f"embedding_dim ({self.embedding_dim}) must be < number of snapshots ({Ns})"
-            )
+            raise ValueError(f"embedding_dim ({self.embedding_dim}) must be < number of snapshots ({Ns})")
 
         m = Ns - self.embedding_dim + 1  # Number of Hankel columns
-        print(f"Performing ST-POD: d={self.embedding_dim}, m={m} columns, "
-              f"Hankel shape=({self.embedding_dim * Nspace}, {m})")
+        print(
+            f"Performing ST-POD: d={self.embedding_dim}, m={m} columns, "
+            f"Hankel shape=({self.embedding_dim * Nspace}, {m})"
+        )
         start_time = time.time()
 
         # 1. Subtract temporal mean
@@ -232,7 +230,7 @@ class STPODAnalyzer(BaseAnalyzer):
         del H  # free Hankel memory
 
         # 5. Store results
-        self.eigenvalues = (sigma ** 2) / m
+        self.eigenvalues = (sigma**2) / m
 
         # 6. Unweight modes
         self.modes = self._unweight_modes(U, sqrt_weights_extended)
@@ -273,7 +271,7 @@ class STPODAnalyzer(BaseAnalyzer):
         if self.modes.size == 0:
             raise ValueError("No modes available. Run perform_stpod() first.")
         if delay_idx < 0 or delay_idx >= self.embedding_dim:
-            raise ValueError(f"delay_idx must be in [0, {self.embedding_dim-1}]")
+            raise ValueError(f"delay_idx must be in [0, {self.embedding_dim - 1}]")
 
         Nspace = self.modes.shape[0] // self.embedding_dim
         start = delay_idx * Nspace
@@ -301,7 +299,9 @@ class STPODAnalyzer(BaseAnalyzer):
     def save_results(self, filename: Optional[str] = None) -> None:
         """Save ST-POD results to HDF5 file."""
         if not filename:
-            filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
+            filename = (
+                f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
+            )
 
         save_path = os.path.join(self.results_dir, filename)
         print(f"Saving ST-POD results to {save_path}")
@@ -333,13 +333,16 @@ class STPODAnalyzer(BaseAnalyzer):
     def load_results(self, filename: Optional[str] = None) -> None:
         """Load ST-POD results from HDF5 file."""
         if not filename:
-            filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
+            filename = (
+                f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
+            )
 
         load_path = os.path.join(self.results_dir, filename)
         print(f"Loading ST-POD results from {load_path}")
 
         if not os.path.isfile(load_path):
             import glob
+
             pattern = os.path.join(self.results_dir, f"*_{self.analysis_type}.hdf5")
             matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
             if matches:
@@ -405,9 +408,7 @@ class STPODAnalyzer(BaseAnalyzer):
             ax.set_title(f"ST-POD Eigenvalue Spectrum (d={self.embedding_dim})")
             ax.grid(True, which="both", ls="--")
 
-            plot_filename = os.path.join(
-                self.figures_dir, f"{self.data_root}_stpod_eigenvalues.png"
-            )
+            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_eigenvalues.png")
             plt.savefig(plot_filename, dpi=FIG_DPI, bbox_inches="tight")
             print(f"Saving figure {plot_filename}")
         finally:
@@ -451,7 +452,8 @@ class STPODAnalyzer(BaseAnalyzer):
         nrows = int(np.ceil(n_modes / ncols))
 
         fig, axes = plt.subplots(
-            nrows, ncols,
+            nrows,
+            ncols,
             figsize=(4 * ncols * fig_aspect, 4 * nrows),
             squeeze=False,
             constrained_layout=True,
@@ -479,14 +481,14 @@ class STPODAnalyzer(BaseAnalyzer):
                 mode_plot = mode_2d
 
             from openmodalpy.core.base import get_robust_clim
+
             vmin, vmax = get_robust_clim(mode_plot, method="percentile")
             levels = np.linspace(vmin, vmax, 21)
 
             cf = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
 
             if show_cylinder:
-                cyl = plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray",
-                                edgecolor="black", linewidth=0.5)
+                cyl = plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray", edgecolor="black", linewidth=0.5)
                 ax.add_patch(cyl)
 
             ax.set_aspect("equal", "box")
@@ -497,9 +499,8 @@ class STPODAnalyzer(BaseAnalyzer):
             ax.grid(True, linestyle="--", alpha=0.3)
 
             energy_pct = 100.0 * self.eigenvalues[k] / total_energy
-            cum_pct = 100.0 * np.sum(self.eigenvalues[:k + 1]) / total_energy
-            ax.set_title(f"Mode {k + 1} (τ={delay_idx})\nE={energy_pct:.2f}% Cum={cum_pct:.2f}%",
-                        fontsize=9)
+            cum_pct = 100.0 * np.sum(self.eigenvalues[: k + 1]) / total_energy
+            ax.set_title(f"Mode {k + 1} (τ={delay_idx})\nE={energy_pct:.2f}% Cum={cum_pct:.2f}%", fontsize=9)
 
             fig.colorbar(cf, ax=ax, shrink=0.8)
 
@@ -509,9 +510,7 @@ class STPODAnalyzer(BaseAnalyzer):
             axes[r, c].axis("off")
 
         fig.suptitle(f"ST-POD Modes (d={self.embedding_dim}, delay={delay_idx})", fontsize=12)
-        plot_filename = os.path.join(
-            self.figures_dir, f"{self.data_root}_stpod_modes_delay{delay_idx}.png"
-        )
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_modes_delay{delay_idx}.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
         print(f"Saving figure {plot_filename}")
@@ -540,7 +539,9 @@ class STPODAnalyzer(BaseAnalyzer):
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx} | E={energy_pct:.2f}%"
             else:
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_slices.png")
+            output_path = os.path.join(
+                self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_slices.png"
+            )
             plot_orthogonal_slices_3d(
                 mode_3d,
                 x_coords,
@@ -576,7 +577,9 @@ class STPODAnalyzer(BaseAnalyzer):
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx} | E={energy_pct:.2f}%"
             else:
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_isometric.png")
+            output_path = os.path.join(
+                self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_isometric.png"
+            )
             plot_isometric_slices_3d(
                 mode_3d,
                 x_coords,
@@ -631,7 +634,8 @@ class STPODAnalyzer(BaseAnalyzer):
         nrows = int(np.ceil(len(delay_indices) / ncols))
 
         fig, axes = plt.subplots(
-            nrows, ncols,
+            nrows,
+            ncols,
             figsize=(4 * ncols * fig_aspect, 4 * nrows),
             squeeze=False,
             constrained_layout=True,
@@ -664,8 +668,7 @@ class STPODAnalyzer(BaseAnalyzer):
             _ = ax.contourf(x_mesh, y_mesh, mode_plot, levels=levels, cmap=CMAP_DIV, extend="both")
 
             if show_cylinder:
-                cyl = plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray",
-                                edgecolor="black", linewidth=0.5)
+                cyl = plt.Circle((0, 0), 0.5, fill=True, facecolor="lightgray", edgecolor="black", linewidth=0.5)
                 ax.add_patch(cyl)
 
             ax.set_aspect("equal", "box")
@@ -684,9 +687,7 @@ class STPODAnalyzer(BaseAnalyzer):
         energy_pct = 100.0 * self.eigenvalues[mode_idx] / np.sum(self.eigenvalues)
         fig.suptitle(f"ST-POD Mode {mode_idx + 1} Evolution (E={energy_pct:.2f}%)", fontsize=12)
 
-        plot_filename = os.path.join(
-            self.figures_dir, f"{self.data_root}_stpod_spacetime_mode{mode_idx + 1}.png"
-        )
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_spacetime_mode{mode_idx + 1}.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
         print(f"Saving figure {plot_filename}")
@@ -763,9 +764,7 @@ class STPODAnalyzer(BaseAnalyzer):
             axes[i, 1].grid(True, linestyle=":")
 
         plt.tight_layout()
-        plot_filename = os.path.join(
-            self.figures_dir, f"{self.data_root}_stpod_time_coeffs.png"
-        )
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_time_coeffs.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
         print(f"Saving figure {plot_filename}")
@@ -791,9 +790,7 @@ class STPODAnalyzer(BaseAnalyzer):
         ax.grid(True, which="both", ls="--")
         ax.set_ylim(0, 105)
 
-        plot_filename = os.path.join(
-            self.figures_dir, f"{self.data_root}_stpod_cumulative_energy.png"
-        )
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_cumulative_energy.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
         print(f"Saving figure {plot_filename}")
@@ -884,12 +881,9 @@ class STPODAnalyzer(BaseAnalyzer):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ST-POD analysis")
-    parser.add_argument("--data", type=str, default=None,
-                       help="Path to data file")
-    parser.add_argument("--embedding-dim", type=int, default=10,
-                       help="Time delay embedding dimension")
-    parser.add_argument("--n-modes", type=int, default=10,
-                       help="Number of modes to save")
+    parser.add_argument("--data", type=str, default=None, help="Path to data file")
+    parser.add_argument("--embedding-dim", type=int, default=10, help="Time delay embedding dimension")
+    parser.add_argument("--n-modes", type=int, default=10, help="Number of modes to save")
     parser.add_argument("--compute", action="store_true", help="Compute analysis")
     parser.add_argument("--plot", action="store_true", help="Generate plots only")
     args = parser.parse_args()

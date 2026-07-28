@@ -23,4 +23,3 @@ def test_spod_function_per_component_weights():
     assert psi.shape == (1, 1)
     assert np.allclose(lam, 9.0)
     assert np.allclose(phi[:, 0], [1 / 3, 2 / 3])
-

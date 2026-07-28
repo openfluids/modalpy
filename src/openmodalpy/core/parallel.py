@@ -95,7 +95,9 @@ def _calculate_weights_openmp(x, y):
     return _calculate_weights_numpy(x, y)
 
 
-def blocksfft_optimized(q, nfft, nblocks, novlap, blockwise_mean=False, normvar=False, window_norm="power", window_type="hamming"):
+def blocksfft_optimized(
+    q, nfft, nblocks, novlap, blockwise_mean=False, normvar=False, window_norm="power", window_type="hamming"
+):
     """
     Optimized blocked FFT computation.
 
@@ -344,7 +346,9 @@ def get_threadpool_summary():
     """Return a short description of active thread pools."""
     try:
         pools = threadpool_info()
-        return ", ".join(f"{p.get('prefix', '')}{p.get('internal_api')}={p.get('num_threads')}" for p in pools) or "none"
+        return (
+            ", ".join(f"{p.get('prefix', '')}{p.get('internal_api')}={p.get('num_threads')}" for p in pools) or "none"
+        )
     except Exception:
         return "unavailable"
 

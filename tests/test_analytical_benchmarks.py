@@ -46,9 +46,7 @@ class TestPODAnalytical:
         mode2_space = np.sin(2 * np.pi * x)
 
         # Data matrix: (Ns, Nspace)
-        data_matrix = np.outer(mode1_time, mode1_space) + 0.5 * np.outer(
-            mode2_time, mode2_space
-        )
+        data_matrix = np.outer(mode1_time, mode1_space) + 0.5 * np.outer(mode2_time, mode2_space)
 
         data = {
             "q": data_matrix,
@@ -75,7 +73,7 @@ class TestPODAnalytical:
         energy_fraction = energy_in_2_modes / total_energy
 
         assert energy_fraction > 0.9999, (
-            f"Rank-2 data should have >99.99% energy in 2 modes, got {energy_fraction*100:.4f}%"
+            f"Rank-2 data should have >99.99% energy in 2 modes, got {energy_fraction * 100:.4f}%"
         )
 
         # Verify: mode 3+ eigenvalues are essentially zero (numerical noise)
@@ -134,9 +132,7 @@ class TestPODAnalytical:
 
         # Verify monotonic decrease
         for i in range(len(errors) - 1):
-            assert errors[i + 1] <= errors[i] + 1e-10, (
-                f"Error should decrease: {errors[i]:.6f} -> {errors[i+1]:.6f}"
-            )
+            assert errors[i + 1] <= errors[i] + 1e-10, f"Error should decrease: {errors[i]:.6f} -> {errors[i + 1]:.6f}"
 
     def test_pod_modes_orthonormal(self):
         """POD spatial modes must be orthonormal with respect to weights.
@@ -222,7 +218,7 @@ class TestPODAnalytical:
         # Eigenvalues in descending order
         for i in range(len(analyzer.eigenvalues) - 1):
             assert analyzer.eigenvalues[i] >= analyzer.eigenvalues[i + 1] - 1e-14, (
-                f"Eigenvalues not sorted: λ[{i}]={analyzer.eigenvalues[i]} < λ[{i+1}]={analyzer.eigenvalues[i+1]}"
+                f"Eigenvalues not sorted: λ[{i}]={analyzer.eigenvalues[i]} < λ[{i + 1}]={analyzer.eigenvalues[i + 1]}"
             )
 
 
@@ -357,9 +353,8 @@ class TestDMDAnalytical:
         # Two traveling waves with different frequencies
         f1, f2 = 3.0, 7.0
         k1, k2 = 1, 2
-        data_matrix = (
-            np.cos(k1 * x[None, :] - 2 * np.pi * f1 * t[:, None])
-            + 0.5 * np.cos(k2 * x[None, :] - 2 * np.pi * f2 * t[:, None])
+        data_matrix = np.cos(k1 * x[None, :] - 2 * np.pi * f1 * t[:, None]) + 0.5 * np.cos(
+            k2 * x[None, :] - 2 * np.pi * f2 * t[:, None]
         )
 
         data = {
@@ -387,9 +382,7 @@ class TestDMDAnalytical:
         # At least the dominant modes should be on/near unit circle
         dominant_mags = np.sort(magnitudes)[-4:]  # top 4 eigenvalues
         for mag in dominant_mags:
-            assert np.abs(mag - 1.0) < 0.1, (
-                f"Periodic data should have |λ|≈1, got |λ|={mag:.3f}"
-            )
+            assert np.abs(mag - 1.0) < 0.1, f"Periodic data should have |λ|≈1, got |λ|={mag:.3f}"
 
 
 # =============================================================================
@@ -538,7 +531,7 @@ class TestSTPODAnalytical:
         energy_fraction = energy_first_4 / total_energy
 
         assert energy_fraction > 0.99, (
-            f"Traveling wave should have >99% energy in first 4 modes, got {energy_fraction*100:.2f}%"
+            f"Traveling wave should have >99% energy in first 4 modes, got {energy_fraction * 100:.2f}%"
         )
 
     def test_stpod_reconstruction_error_decreases(self):
@@ -600,9 +593,7 @@ class TestSTPODAnalytical:
 
         # Verify monotonic decrease (with small tolerance for numerical noise)
         for i in range(len(errors) - 1):
-            assert errors[i + 1] <= errors[i] + 1e-8, (
-                f"Error should decrease: {errors[i]:.6f} -> {errors[i+1]:.6f}"
-            )
+            assert errors[i + 1] <= errors[i] + 1e-8, f"Error should decrease: {errors[i]:.6f} -> {errors[i + 1]:.6f}"
 
     def test_stpod_modes_orthonormal(self):
         """ST-POD modes must be orthonormal with respect to extended weights.
@@ -690,5 +681,5 @@ class TestSTPODAnalytical:
         # Descending order
         for i in range(len(analyzer.eigenvalues) - 1):
             assert analyzer.eigenvalues[i] >= analyzer.eigenvalues[i + 1] - 1e-14, (
-                f"Not sorted: λ[{i}]={analyzer.eigenvalues[i]} < λ[{i+1}]={analyzer.eigenvalues[i+1]}"
+                f"Not sorted: λ[{i}]={analyzer.eigenvalues[i]} < λ[{i + 1}]={analyzer.eigenvalues[i + 1]}"
             )

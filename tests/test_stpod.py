@@ -252,9 +252,7 @@ class TestSTPODBasic:
 
         np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
         np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
-        np.testing.assert_array_equal(
-            reloaded.time_coefficients, analyzer.time_coefficients
-        )
+        np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)
 
     def test_plot_spacetime_mode_writes_file(self, tmp_path):
         """Smoke: plot_spacetime_mode produces a PNG for a 2-D field."""

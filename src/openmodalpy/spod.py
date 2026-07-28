@@ -256,9 +256,7 @@ class SPODAnalyzer(BaseAnalyzer):
                 with h5py.File(cache_path, "r") as f:
                     if "FFTBlocks" in f:
                         qhat_cached = f["FFTBlocks"][:]
-                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(
-                            f, self, self.data["q"]
-                        ):
+                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(f, self, self.data["q"]):
                             self.qhat = qhat_cached
                             self.nblocks = qhat_cached.shape[2]
                             self.qhat_cached = True

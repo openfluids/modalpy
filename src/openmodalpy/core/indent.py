@@ -124,14 +124,21 @@ def format_code(path, check_only=False, sort_imports=True, non_recursive=False):
 
 def main():
     parser = argparse.ArgumentParser(description="Format Python files using ruff with clear output")
-    parser.add_argument("path", nargs="?", default=".", help="Path to file or directory to format (default: current directory, non-recursive)")
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        help="Path to file or directory to format (default: current directory, non-recursive)",
+    )
     parser.add_argument("--check", action="store_true", help="Check if files are formatted without making changes")
     parser.add_argument("--no-sort-imports", action="store_true", help="Skip sorting imports")
     args = parser.parse_args()
 
     # If the path argument is default ('.') and not explicitly given, only format *.py in current dir
     non_recursive = False
-    if "path" not in sys.argv or (len(sys.argv) > 1 and sys.argv[1] == "."):  # covers both 'indent.py' and 'indent.py .' cases
+    if "path" not in sys.argv or (
+        len(sys.argv) > 1 and sys.argv[1] == "."
+    ):  # covers both 'indent.py' and 'indent.py .' cases
         # If user did not specify a path, or specified '.', do non-recursive
         non_recursive = True
 

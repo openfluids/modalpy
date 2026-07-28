@@ -29,7 +29,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     analyze = subparsers.add_parser("analyze", help="Run one analysis family from a case config.")
-    analyze.add_argument("analysis_method", help="Method to run (pod, mpod, psd-pod, dmd, hodmd, tls-hodmd, spod, bsmd, stpod).")
+    analyze.add_argument(
+        "analysis_method", help="Method to run (pod, mpod, psd-pod, dmd, hodmd, tls-hodmd, spod, bsmd, stpod)."
+    )
     analyze.add_argument("--config", type=Path, required=True, help="Path to the case JSONC config file.")
     analyze.add_argument("--run-id", type=str, default=None, help="Custom run id for outputs.")
     analyze.add_argument("--dry-run", action="store_true", help="Print the resolved analysis without executing it.")

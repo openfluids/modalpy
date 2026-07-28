@@ -61,20 +61,20 @@ def test_perform_dmd_simple():
 def test_plot_eigenspectra_stem_compat(monkeypatch, tmp_path):
     np.random.seed(10)
     data = {
-        'q': np.random.randn(8, 4),
-        'x': np.linspace(0, 1, 2),
-        'y': np.linspace(0, 1, 2),
-        'dt': 1.0,
-        'Nx': 2,
-        'Ny': 2,
-        'Ns': 8,
+        "q": np.random.randn(8, 4),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": 8,
     }
     analyzer = DMDAnalyzer(
-        file_path='dummy.h5',
+        file_path="dummy.h5",
         results_dir=tmp_path,
         figures_dir=tmp_path,
         data_loader=lambda _: data,
-        spatial_weight_type='uniform',
+        spatial_weight_type="uniform",
     )
     analyzer.load_and_preprocess()
     analyzer.perform_dmd()
@@ -82,24 +82,24 @@ def test_plot_eigenspectra_stem_compat(monkeypatch, tmp_path):
     calls = []
 
     def stem_no_use(self, x, y, linefmt=None, markerfmt=None, basefmt=None):
-        calls.append('no_use')
+        calls.append("no_use")
         return None
 
-    monkeypatch.setattr(matplotlib.axes.Axes, 'stem', stem_no_use)
+    monkeypatch.setattr(matplotlib.axes.Axes, "stem", stem_no_use)
     analyzer.plot_eigenspectra()
-    assert 'no_use' in calls
+    assert "no_use" in calls
 
     calls.clear()
 
     def stem_use(self, x, y, linefmt=None, markerfmt=None, basefmt=None, use_line_collection=True):
-        calls.append('use_line_collection' if use_line_collection else 'use')
+        calls.append("use_line_collection" if use_line_collection else "use")
         return None
 
-    monkeypatch.setattr(matplotlib.axes.Axes, 'stem', stem_use)
+    monkeypatch.setattr(matplotlib.axes.Axes, "stem", stem_use)
     analyzer.plot_eigenspectra()
-    assert 'use_line_collection' in calls
+    assert "use_line_collection" in calls
 
-    expected = tmp_path / 'dummy_dmd_eigenspectra.png'
+    expected = tmp_path / "dummy_dmd_eigenspectra.png"
     assert expected.exists()
 
 
@@ -337,9 +337,7 @@ def test_tls_noise_robustness():
     err_tls = np.linalg.norm(np.sort(analyzer_tls.eigenvalues) - true_eigvals)
 
     # TLS should not be worse (allow small tolerance for edge cases)
-    assert err_tls <= err_ls * 1.1, (
-        f"TLS error {err_tls:.6e} exceeded LS error {err_ls:.6e} by more than 10%"
-    )
+    assert err_tls <= err_ls * 1.1, f"TLS error {err_tls:.6e} exceeded LS error {err_ls:.6e} by more than 10%"
 
 
 # ---------------------------------------------------------------------------
@@ -442,9 +440,7 @@ def test_dmd_save_load_roundtrip_arrays(tmp_path):
 
     np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
     np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
-    np.testing.assert_array_equal(
-        reloaded.time_coefficients, analyzer.time_coefficients
-    )
+    np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)
     np.testing.assert_array_equal(reloaded.amplitudes, analyzer.amplitudes)
 
 
@@ -631,10 +627,7 @@ def test_dmd_full_rank_path_silent_and_untruncated():
     rng = np.random.default_rng(7)
     nsp = 120
     tt = np.arange(60) * 0.1
-    q = (
-        np.column_stack([np.cos(2 * np.pi * f * tt) for f in (0.3, 0.7, 1.3, 1.9, 2.4)])
-        @ rng.standard_normal((5, nsp))
-    )
+    q = np.column_stack([np.cos(2 * np.pi * f * tt) for f in (0.3, 0.7, 1.3, 1.9, 2.4)]) @ rng.standard_normal((5, nsp))
     q = q + 1e-2 * rng.standard_normal((60, nsp))
     data = {
         "q": q,
@@ -784,11 +777,7 @@ def test_svht_lambda_beta_dependent():
     def ref(beta):
         beta = float(beta)
         return float(
-            np.sqrt(
-                2.0 * (beta + 1.0)
-                + 8.0 * beta
-                / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))
-            )
+            np.sqrt(2.0 * (beta + 1.0) + 8.0 * beta / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0)))
         )
 
     for beta in (1.0, 0.5, 0.1, 0.01, 0.001):
@@ -839,10 +828,6 @@ def test_energy_rank_criterion():
     s = np.linalg.svd(q.T[:, :-1], compute_uv=False)
     cum = np.cumsum(s**2) / np.sum(s**2)
     r = energy.effective_rank
-    assert cum[r - 1] >= 0.99, (
-        f"rank {r} retains only {cum[r - 1]:.6f} of the energy, below the 0.99 asked for"
-    )
+    assert cum[r - 1] >= 0.99, f"rank {r} retains only {cum[r - 1]:.6f} of the energy, below the 0.99 asked for"
     if r > 1:
-        assert cum[r - 2] < 0.99, (
-            f"rank {r} is not minimal: {r - 1} modes already retain {cum[r - 2]:.6f}"
-        )
+        assert cum[r - 2] < 0.99, f"rank {r} is not minimal: {r - 1} modes already retain {cum[r - 2]:.6f}"

@@ -219,9 +219,7 @@ def _coerce_rank(value: Any) -> int | str | None:
     try:
         return int(text)
     except ValueError:
-        raise ValueError(
-            f"rank must be null, a positive int, 'svht', or 'energy'; got {value!r}"
-        ) from None
+        raise ValueError(f"rank must be null, a positive int, 'svht', or 'energy'; got {value!r}") from None
 
 
 def _load_case_spec_from_payload(payload: dict[str, Any], config_path: Path) -> CaseSpec:
@@ -318,14 +316,10 @@ def _apply_case_overrides(case: CaseSpec, overrides: dict[str, Any]) -> CaseSpec
         use_parallel=bool(overrides.get("use_parallel", case.use_parallel)),
         generate_plots=bool(overrides.get("generate_plots", case.generate_plots)),
         results_root=(
-            Path(overrides["results_root"]).expanduser().resolve()
-            if "results_root" in overrides
-            else case.results_root
+            Path(overrides["results_root"]).expanduser().resolve() if "results_root" in overrides else case.results_root
         ),
         figures_root=(
-            Path(overrides["figures_root"]).expanduser().resolve()
-            if "figures_root" in overrides
-            else case.figures_root
+            Path(overrides["figures_root"]).expanduser().resolve() if "figures_root" in overrides else case.figures_root
         ),
     )
 
@@ -809,7 +803,9 @@ def _run_dmd(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         if delays < 2:
             raise ValueError(f"{spec.method} requires delays >= 2.")
         analyzer.perform_dmd(
-            method=_hodmd_variants[spec.method], delays=delays, named_variant=spec.method,
+            method=_hodmd_variants[spec.method],
+            delays=delays,
+            named_variant=spec.method,
         )
     else:
         analyzer.perform_dmd(
@@ -929,11 +925,17 @@ def analyze_from_spec(spec: AnalyzeSpec, *, dry_run: bool = False) -> RunOutcome
     """Run one analysis spec or print the dry-run plan."""
     dispatch = {
         "pod": lambda: _run_pod_like(
-            spec, PODAnalyzer, "perform_pod", dry_run=dry_run,
+            spec,
+            PODAnalyzer,
+            "perform_pod",
+            dry_run=dry_run,
             extra_kwargs={"n_modes_save": spec.case.n_modes_save},
         ),
         "mpod": lambda: _run_pod_like(
-            spec, MPODAnalyzer, "perform_mpod", dry_run=dry_run,
+            spec,
+            MPODAnalyzer,
+            "perform_mpod",
+            dry_run=dry_run,
             extra_kwargs={
                 "n_modes_save": spec.case.n_modes_save,
                 "band_edges": spec.params.get("band_edges"),
@@ -948,7 +950,10 @@ def analyze_from_spec(spec: AnalyzeSpec, *, dry_run: bool = False) -> RunOutcome
         "spod": lambda: _run_spod(spec, dry_run=dry_run),
         "bsmd": lambda: _run_bsmd(spec, dry_run=dry_run),
         "stpod": lambda: _run_pod_like(
-            spec, STPODAnalyzer, "perform_stpod", dry_run=dry_run,
+            spec,
+            STPODAnalyzer,
+            "perform_stpod",
+            dry_run=dry_run,
             extra_kwargs={
                 "embedding_dim": int(spec.params.get("embedding_dim", spec.case.embedding_dim)),
                 "n_modes_save": spec.case.n_modes_save,
@@ -1099,9 +1104,7 @@ def inspect_results(path: str | Path) -> dict[str, Any]:
     """Inspect one result file or result directory and return a plain summary."""
     resolved = Path(path).expanduser().resolve()
     if resolved.is_dir():
-        files = sorted(
-            [candidate for candidate in resolved.iterdir() if candidate.suffix in {".hdf5", ".h5", ".json"}]
-        )
+        files = sorted([candidate for candidate in resolved.iterdir() if candidate.suffix in {".hdf5", ".h5", ".json"}])
         return {
             "path": str(resolved),
             "type": "directory",

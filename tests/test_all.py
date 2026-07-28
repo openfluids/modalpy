@@ -45,12 +45,14 @@ def make_test_loader(q, Nx, Ny, dt, x=None, y=None):
             "Ns": Ns,
             "metadata": {"format": "test", "var_name": "q"},
         }
+
     return loader
 
 
 # =============================================================================
 # POD TESTS
 # =============================================================================
+
 
 def test_pod(tmp_path):
     """Test Proper Orthogonal Decomposition."""
@@ -62,8 +64,8 @@ def test_pod(tmp_path):
     Nx, Ny, Ns = 40, 40, 200  # Higher resolution: 1600 spatial DOF
 
     # 3 orthogonal spatial patterns
-    x = np.linspace(0, 2*np.pi, Nx)
-    y = np.linspace(0, 2*np.pi, Ny)
+    x = np.linspace(0, 2 * np.pi, Nx)
+    y = np.linspace(0, 2 * np.pi, Ny)
     X, Y = np.meshgrid(x, y)
 
     pattern1 = np.sin(X).flatten()
@@ -72,15 +74,15 @@ def test_pod(tmp_path):
 
     # Time coefficients with different energies
     t = np.linspace(0, 10, Ns)
-    a1 = 3.0 * np.sin(2*np.pi*0.5*t)  # Highest energy
-    a2 = 2.0 * np.sin(2*np.pi*1.0*t)  # Medium energy
-    a3 = 1.0 * np.sin(2*np.pi*1.5*t)  # Lowest energy
+    a1 = 3.0 * np.sin(2 * np.pi * 0.5 * t)  # Highest energy
+    a2 = 2.0 * np.sin(2 * np.pi * 1.0 * t)  # Medium energy
+    a3 = 1.0 * np.sin(2 * np.pi * 1.5 * t)  # Lowest energy
 
     # Construct rank-3 data: q[time, space]
     q = np.outer(a1, pattern1) + np.outer(a2, pattern2) + np.outer(a3, pattern3)
 
     # Use custom loader (no temp file needed for data)
-    loader = make_test_loader(q, Nx, Ny, dt=t[1]-t[0], x=x, y=y)
+    loader = make_test_loader(q, Nx, Ny, dt=t[1] - t[0], x=x, y=y)
 
     # BaseAnalyzer makedirs(results_dir) on init — keep tree clean
     analyzer = PODAnalyzer(
@@ -102,9 +104,7 @@ def test_pod(tmp_path):
 
     # Test 2: Eigenvalues should be positive and sorted descending
     assert np.all(eigenvalues >= -TOL), f"Eigenvalues positive: min={eigenvalues.min()}"
-    assert np.all(np.diff(eigenvalues) <= TOL), (
-        f"Eigenvalues sorted descending: diffs={np.diff(eigenvalues)[:5]}"
-    )
+    assert np.all(np.diff(eigenvalues) <= TOL), f"Eigenvalues sorted descending: diffs={np.diff(eigenvalues)[:5]}"
 
     # Test 3: Modes should be approximately W-orthonormal (Φᵀ W Φ ≈ I)
     # Note: POD stores unweighted modes but they come from weighted eigendecomposition
@@ -115,31 +115,26 @@ def test_pod(tmp_path):
     gram = (modes.T * W) @ modes  # Efficient: (W * Φ)ᵀ Φ
     identity_error = np.linalg.norm(gram - np.eye(n_modes)) / n_modes
     # Relaxed tolerance for numerical reasons (modes stored unweighted)
-    assert identity_error < 0.5, (
-        f"Modes approx W-orthonormal: error={identity_error:.2e}"
-    )
+    assert identity_error < 0.5, f"Modes approx W-orthonormal: error={identity_error:.2e}"
 
     # Test 4: Reconstruction error for rank-3 data with 3 modes
     time_coeffs = analyzer.time_coefficients  # [time, modes]
     q_reconstructed = time_coeffs[:, :3] @ modes[:, :3].T
     recon_error = np.linalg.norm(q - q_reconstructed) / np.linalg.norm(q)
-    assert recon_error < TOL_LOOSE, (
-        f"Reconstruction (3 modes): error={recon_error:.2e}"
-    )
+    assert recon_error < TOL_LOOSE, f"Reconstruction (3 modes): error={recon_error:.2e}"
 
     # Test 5: Energy conservation - sum of eigenvalues = Frobenius norm squared
     # For snapshot POD: eigenvalues are squared singular values / Ns
-    total_energy_data = np.linalg.norm(q, 'fro')**2 / Ns
+    total_energy_data = np.linalg.norm(q, "fro") ** 2 / Ns
     total_energy_modes = np.sum(eigenvalues)
     energy_ratio = total_energy_modes / total_energy_data
-    assert abs(energy_ratio - 1.0) < TOL_LOOSE, (
-        f"Energy conservation: ratio={energy_ratio:.6f}"
-    )
+    assert abs(energy_ratio - 1.0) < TOL_LOOSE, f"Energy conservation: ratio={energy_ratio:.6f}"
 
 
 # =============================================================================
 # DMD TESTS
 # =============================================================================
+
 
 def test_dmd(tmp_path):
     """Test Dynamic Mode Decomposition."""
@@ -176,8 +171,7 @@ def test_dmd(tmp_path):
     dominant_eigval = np.abs(analyzer.eigenvalues[0])
     eigval_error = abs(dominant_eigval - expected_eigval)
     assert eigval_error < TOL_LOOSE, (
-        f"Exponential decay eigenvalue: expected={expected_eigval:.6f}, "
-        f"got={dominant_eigval:.6f}"
+        f"Exponential decay eigenvalue: expected={expected_eigval:.6f}, got={dominant_eigval:.6f}"
     )
 
     # --- Test 2: Pure oscillation ---
@@ -189,8 +183,8 @@ def test_dmd(tmp_path):
     k = 2 * np.pi / (Nx * 0.5)  # Spatial wavenumber
 
     # Create traveling wave in 2D
-    x_grid = np.linspace(0, 2*np.pi, Nx)
-    y_grid = np.linspace(0, 2*np.pi, Ny)
+    x_grid = np.linspace(0, 2 * np.pi, Nx)
+    y_grid = np.linspace(0, 2 * np.pi, Ny)
     X_grid, Y_grid = np.meshgrid(x_grid, y_grid)
 
     q_osc = np.zeros((Ns_osc, Nspace))
@@ -213,17 +207,13 @@ def test_dmd(tmp_path):
     eigvals = analyzer.eigenvalues
     magnitudes = np.abs(eigvals)
     unit_circle = np.any(np.abs(magnitudes - 1.0) < 0.1)
-    assert unit_circle, (
-        f"Oscillation on unit circle: magnitudes={magnitudes[:3]}"
-    )
+    assert unit_circle, f"Oscillation on unit circle: magnitudes={magnitudes[:3]}"
 
     # Check frequency recovery
     angles = np.angle(eigvals)
     recovered_freq = np.abs(angles) / (2 * np.pi * dt)
     freq_match = np.any(np.abs(recovered_freq - 1.0) < 0.2)  # 1 Hz
-    assert freq_match, (
-        f"Oscillation frequency recovery: frequencies={recovered_freq[:3]}"
-    )
+    assert freq_match, f"Oscillation frequency recovery: frequencies={recovered_freq[:3]}"
 
     # --- Test 3: Decaying oscillation ---
     # q(t) = e^{-αt} * cos(ωt)
@@ -252,16 +242,14 @@ def test_dmd(tmp_path):
     # Find closest eigenvalue to expected magnitude
     mag_error = np.min(np.abs(np.abs(eigvals) - expected_mag))
     assert mag_error < 0.15, (
-        f"Decaying oscillation magnitude: expected |λ|={expected_mag:.4f}, "
-        f"closest={np.abs(eigvals[0]):.4f}"
+        f"Decaying oscillation magnitude: expected |λ|={expected_mag:.4f}, closest={np.abs(eigvals[0]):.4f}"
     )
 
     # --- Test 4: Linear system dx/dt = Ax ---
     # Known 2x2 system with analytical eigenvalues
     from scipy.linalg import expm
 
-    A = np.array([[-0.1, 1.0],
-                  [-1.0, -0.1]])  # Damped oscillator
+    A = np.array([[-0.1, 1.0], [-1.0, -0.1]])  # Damped oscillator
 
     # Analytical continuous eigenvalues: -0.1 ± 1j
     cont_eigvals = np.linalg.eigvals(A)
@@ -294,14 +282,13 @@ def test_dmd(tmp_path):
     dmd_sorted = np.sort(np.abs(dmd_eigvals))
     exp_sorted = np.sort(np.abs(expected_discrete))
     eigval_match = np.allclose(dmd_sorted, exp_sorted, rtol=0.1)
-    assert eigval_match, (
-        f"Linear system eigenvalues: DMD={dmd_sorted}, expected={exp_sorted}"
-    )
+    assert eigval_match, f"Linear system eigenvalues: DMD={dmd_sorted}, expected={exp_sorted}"
 
 
 # =============================================================================
 # SPOD TESTS
 # =============================================================================
+
 
 def test_spod(tmp_path):
     """Test Spectral Proper Orthogonal Decomposition."""
@@ -375,9 +362,7 @@ def test_spod(tmp_path):
 
     # Peak should be near f0
     freq_error = abs(peak_freq - f0)
-    assert freq_error < 1.0, (
-        f"Single tone peak frequency: expected={f0}Hz, got={peak_freq:.1f}Hz"
-    )
+    assert freq_error < 1.0, f"Single tone peak frequency: expected={f0}Hz, got={peak_freq:.1f}Hz"
 
     # At peak frequency, first eigenvalue should dominate (rank-1)
     assert eigenvalues.shape[1] > 1, "Single tone rank-1 at peak: need ≥2 modes"
@@ -406,7 +391,7 @@ def test_spod(tmp_path):
 
     # Check approximate W-orthonormality at a few frequencies
     max_error = 0
-    for fi in [n_freq//4, n_freq//2, 3*n_freq//4]:
+    for fi in [n_freq // 4, n_freq // 2, 3 * n_freq // 4]:
         phi = modes[fi]  # [n_space, n_modes]
         # Weighted Gram: (W * Φ)ᴴ Φ
         gram = (phi.conj().T * W) @ phi
@@ -415,16 +400,14 @@ def test_spod(tmp_path):
         max_error = max(max_error, error)
 
     # Relaxed tolerance - SPOD modes from eigendecomposition
-    assert max_error < 0.5, (
-        f"Modes approx W-orthonormal: max_error={max_error:.2e}"
-    )
+    assert max_error < 0.5, f"Modes approx W-orthonormal: max_error={max_error:.2e}"
 
     # --- Test 4: Comparison with Welch PSD ---
     # First SPOD eigenvalue should show similar spectral structure to Welch PSD
 
     # Multi-tone signal (two tones) for Welch/SPOD spectral comparison
     f1, f2 = 5.0, 15.0
-    signal_data = np.sin(2*np.pi*f1*t) + 0.5*np.sin(2*np.pi*f2*t)
+    signal_data = np.sin(2 * np.pi * f1 * t) + 0.5 * np.sin(2 * np.pi * f2 * t)
     q_multi = np.outer(signal_data, spatial)
 
     nfft = 512  # finer frequency grid for resolving the two tones
@@ -451,14 +434,13 @@ def test_spod(tmp_path):
     peak_freq = spod_freqs[peak_idx]
     # Should find one of the tones (5Hz or 15Hz)
     found_tone = abs(peak_freq - f1) < 2.0 or abs(peak_freq - f2) < 2.0
-    assert found_tone, (
-        f"SPOD finds tonal peak: expected ~{f1}Hz or ~{f2}Hz, got {peak_freq:.1f}Hz"
-    )
+    assert found_tone, f"SPOD finds tonal peak: expected ~{f1}Hz or ~{f2}Hz, got {peak_freq:.1f}Hz"
 
 
 # =============================================================================
 # CROSS-METHOD TESTS
 # =============================================================================
+
 
 def test_cross_method(tmp_path):
     """Test consistency between methods."""
@@ -471,12 +453,12 @@ def test_cross_method(tmp_path):
 
     # Create simple test data
     t = np.arange(Ns) * dt
-    x = np.linspace(0, 2*np.pi, Nx)
-    y = np.linspace(0, 2*np.pi, Ny)
+    x = np.linspace(0, 2 * np.pi, Nx)
+    y = np.linspace(0, 2 * np.pi, Ny)
     X, Y = np.meshgrid(x, y)
     spatial = np.sin(X + Y).flatten()
 
-    temporal = np.sin(2*np.pi*0.5*t)
+    temporal = np.sin(2 * np.pi * 0.5 * t)
     q = np.outer(temporal, spatial)
 
     # --- Test: SPOD with nfft=Ns should approximate POD ---
@@ -517,14 +499,13 @@ def test_cross_method(tmp_path):
 
     # Both should show similar energy concentration in first mode
     energy_diff = abs(pod_energy - spod_energy)
-    assert energy_diff < 0.3, (
-        f"POD ≈ SPOD(nfft=Ns) energy: POD={pod_energy:.3f}, SPOD={spod_energy:.3f}"
-    )
+    assert energy_diff < 0.3, f"POD ≈ SPOD(nfft=Ns) energy: POD={pod_energy:.3f}, SPOD={spod_energy:.3f}"
 
 
 # =============================================================================
 # HEAVY TESTS (Large DOF)
 # =============================================================================
+
 
 def test_heavy(tmp_path):
     """Heavy tests with larger degrees of freedom for real-world validation."""
@@ -547,7 +528,7 @@ def test_heavy(tmp_path):
 
     # Create synthetic cylinder wake: traveling vortices
     x = np.linspace(-2, 10, Nx)  # Domain: -2D to 10D downstream
-    y = np.linspace(-2, 2, Ny)   # Domain: -2D to 2D cross-stream
+    y = np.linspace(-2, 2, Ny)  # Domain: -2D to 2D cross-stream
     X, Y = np.meshgrid(x, y)
     t = np.arange(Ns) * dt
 
@@ -559,9 +540,9 @@ def test_heavy(tmp_path):
     q_wake = np.zeros((Ns, Nspace))
     for i, ti in enumerate(t):
         # Vortex street: alternating vortices
-        vortex = decay * np.sin(k_x * (X - U_conv * ti)) * np.exp(-Y**2 / 0.5)
+        vortex = decay * np.sin(k_x * (X - U_conv * ti)) * np.exp(-(Y**2) / 0.5)
         # Add higher harmonic (characteristic of real wakes)
-        vortex += 0.3 * decay * np.sin(2 * k_x * (X - U_conv * ti)) * np.exp(-Y**2 / 0.3)
+        vortex += 0.3 * decay * np.sin(2 * k_x * (X - U_conv * ti)) * np.exp(-(Y**2) / 0.3)
         q_wake[i] = vortex.flatten()
 
     # Add small noise (simulates turbulence/measurement noise)
@@ -582,9 +563,7 @@ def test_heavy(tmp_path):
     # First 2-4 modes should capture >90% energy (vortex shedding is coherent)
     cumulative_energy = np.cumsum(pod.eigenvalues) / np.sum(pod.eigenvalues)
     energy_4modes = cumulative_energy[3] if len(cumulative_energy) > 3 else cumulative_energy[-1]
-    assert energy_4modes > 0.80, (
-        f"Cylinder POD: 4 modes >80% energy, got {energy_4modes*100:.1f}%"
-    )
+    assert energy_4modes > 0.80, f"Cylinder POD: 4 modes >80% energy, got {energy_4modes * 100:.1f}%"
 
     # DMD test - should find shedding frequency
     loader = make_test_loader(q_wake, Nx, Ny, dt, x=x, y=y)
@@ -604,8 +583,7 @@ def test_heavy(tmp_path):
     freq_error = np.min(np.abs(dmd_freqs - f_shed))
     closest_freq = dmd_freqs[np.argmin(np.abs(dmd_freqs - f_shed))]
     assert freq_error < 0.1, (
-        f"Cylinder DMD: finds shedding freq, St={St}, f_shed={f_shed:.3f}, "
-        f"closest DMD freq={closest_freq:.3f}"
+        f"Cylinder DMD: finds shedding freq, St={St}, f_shed={f_shed:.3f}, closest DMD freq={closest_freq:.3f}"
     )
 
     # --- Test 2: Ginzburg-Landau Equation ---
@@ -631,7 +609,7 @@ def test_heavy(tmp_path):
         # Approximate solution: traveling and spreading Gaussian envelope
         center = x0 + c_u * ti
         width = np.sqrt(sigma**2 + 2 * np.abs(gamma) * ti)
-        envelope = np.exp(-(x_gl - center)**2 / (2 * width**2))
+        envelope = np.exp(-((x_gl - center) ** 2) / (2 * width**2))
         # Carrier wave
         k0 = 1.0
         omega0 = c_u * k0
@@ -654,9 +632,7 @@ def test_heavy(tmp_path):
 
     # Traveling wave should be relatively low-rank (spreading reduces concentration)
     energy_2modes = np.sum(pod_gl.eigenvalues[:2]) / np.sum(pod_gl.eigenvalues)
-    assert energy_2modes > 0.60, (
-        f"Ginzburg-Landau POD: 2 modes >60% energy, got {energy_2modes*100:.1f}%"
-    )
+    assert energy_2modes > 0.60, f"Ginzburg-Landau POD: 2 modes >60% energy, got {energy_2modes * 100:.1f}%"
 
     # --- Test 3: Large-scale SPOD (Jet-like) ---
     # Inspired by turbulent jet databases (Schmidt & Towne)
@@ -671,8 +647,8 @@ def test_heavy(tmp_path):
     X_jet, Y_jet = np.meshgrid(x_jet, y_jet)
 
     # Create spatial patterns (axisymmetric-like modes)
-    mode1 = np.exp(-Y_jet**2 / 1.0) * np.sin(np.pi * X_jet / 5)  # Low-freq mode
-    mode2 = np.exp(-Y_jet**2 / 0.5) * np.sin(2 * np.pi * X_jet / 5)  # Higher-freq mode
+    mode1 = np.exp(-(Y_jet**2) / 1.0) * np.sin(np.pi * X_jet / 5)  # Low-freq mode
+    mode2 = np.exp(-(Y_jet**2) / 0.5) * np.sin(2 * np.pi * X_jet / 5)  # Higher-freq mode
 
     # Time signals at different frequencies
     f1, f2 = 2.0, 8.0  # Hz
@@ -702,6 +678,7 @@ def test_heavy(tmp_path):
 
     # Find peaks
     from scipy.signal import find_peaks
+
     peaks, _ = find_peaks(spod_psd, height=np.max(spod_psd) * 0.1)
     peak_freqs = spod_freqs[peaks]
 
@@ -709,8 +686,7 @@ def test_heavy(tmp_path):
     found_f1 = np.any(np.abs(peak_freqs - f1) < 1.0)
     found_f2 = np.any(np.abs(peak_freqs - f2) < 1.0)
     assert found_f1 and found_f2, (
-        f"Jet SPOD: finds both frequencies, looking for {f1}Hz and {f2}Hz "
-        f"in peaks {peak_freqs[:5]}"
+        f"Jet SPOD: finds both frequencies, looking for {f1}Hz and {f2}Hz in peaks {peak_freqs[:5]}"
     )
 
     # --- Test 4: Reconstruction accuracy at scale ---
@@ -734,6 +710,4 @@ def test_heavy(tmp_path):
 
     # Relative reconstruction error
     recon_error = np.linalg.norm(q_wake - q_reconstructed) / np.linalg.norm(q_wake)
-    assert recon_error < 0.3, (
-        f"Large-scale reconstruction (10 modes): relative error = {recon_error:.3f}"
-    )
+    assert recon_error < 0.3, f"Large-scale reconstruction (10 modes): relative error = {recon_error:.3f}"

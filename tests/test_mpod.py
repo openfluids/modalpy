@@ -140,9 +140,7 @@ def test_mpod_modes_not_orthonormal_across_bands():
     assert cross, "no cross-band mode pairs to check"
     max_cross = max(cross)
     # Materially nonzero: not a floating-point residual of orthonormality.
-    assert max_cross > 1e-2, (
-        f"expected material cross-band W-inner product, got max |ΦᵀWΦ|_cross = {max_cross}"
-    )
+    assert max_cross > 1e-2, f"expected material cross-band W-inner product, got max |ΦᵀWΦ|_cross = {max_cross}"
 
 
 def test_mpod_save_results_records_band_metadata(tmp_path):
@@ -230,8 +228,6 @@ def test_mpod_save_load_roundtrip_arrays(tmp_path):
 
     np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
     np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
-    np.testing.assert_array_equal(
-        reloaded.time_coefficients, analyzer.time_coefficients
-    )
+    np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)
     np.testing.assert_array_equal(reloaded.mode_band_indices, analyzer.mode_band_indices)
     np.testing.assert_array_equal(reloaded.band_mode_counts, analyzer.band_mode_counts)

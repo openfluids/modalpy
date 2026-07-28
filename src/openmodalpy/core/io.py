@@ -286,9 +286,7 @@ def _apply_snapshot_axis_reversals(arr: np.ndarray, reverse_axes: list[str]) -> 
             raise ValueError(f"Unsupported snapshot axis name '{axis_name}' in reverse_axes.")
         axis = axis_map[axis_name]
         if axis >= transformed.ndim:
-            raise ValueError(
-                f"Cannot reverse axis '{axis_name}' for snapshot array with shape {transformed.shape}."
-            )
+            raise ValueError(f"Cannot reverse axis '{axis_name}' for snapshot array with shape {transformed.shape}.")
         transformed = np.flip(transformed, axis=axis)
     return transformed
 

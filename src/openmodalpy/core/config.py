@@ -57,6 +57,7 @@ def require_existing_data_path(data_file: str | None) -> str:
         raise FileNotFoundError(f"Input data path does not exist: {data_file}")
     return data_file
 
+
 # Figure saving options
 FIG_DPI = 500
 FIG_FORMAT = "png"  # or "pdf"

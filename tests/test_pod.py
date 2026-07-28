@@ -46,7 +46,6 @@ def test_plot_time_coefficients_strouhal(monkeypatch, tmp_path):
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=2,
-
     )
     analyzer.load_and_preprocess()
     analyzer.perform_pod()
@@ -171,16 +170,38 @@ def test_run_analysis_uses_3d_slice_plots_for_volumetric_data(monkeypatch, tmp_p
 
     slice_calls = []
     iso_calls = []
-    monkeypatch.setattr(PODAnalyzer, "plot_modes_3d_slices", lambda self, plot_n_modes=4: slice_calls.append(plot_n_modes))
-    monkeypatch.setattr(PODAnalyzer, "plot_modes_3d_isometric", lambda self, plot_n_modes=4: iso_calls.append(plot_n_modes))
+    monkeypatch.setattr(
+        PODAnalyzer, "plot_modes_3d_slices", lambda self, plot_n_modes=4: slice_calls.append(plot_n_modes)
+    )
+    monkeypatch.setattr(
+        PODAnalyzer, "plot_modes_3d_isometric", lambda self, plot_n_modes=4: iso_calls.append(plot_n_modes)
+    )
     monkeypatch.setattr(PODAnalyzer, "plot_eigenvalues", lambda self: None)
     monkeypatch.setattr(PODAnalyzer, "plot_time_coefficients", lambda self, **kwargs: None)
     monkeypatch.setattr(PODAnalyzer, "plot_cumulative_energy", lambda self: None)
     monkeypatch.setattr(PODAnalyzer, "plot_reconstruction_error", lambda self: None)
-    monkeypatch.setattr(PODAnalyzer, "plot_reconstruction_comparison", lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("2D reconstruction comparison should not be used for 3D data")))
-    monkeypatch.setattr(PODAnalyzer, "plot_modes_pair_detailed", lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("2D mode plotting should not be used for 3D data")))
-    monkeypatch.setattr(PODAnalyzer, "plot_modes_grid", lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("2D grid plotting should not be used for 3D data")))
-    monkeypatch.setattr(PODAnalyzer, "plot_mode_pair_phase", lambda self: (_ for _ in ()).throw(AssertionError("2D pair-phase plotting should not be used for 3D data")))
+    monkeypatch.setattr(
+        PODAnalyzer,
+        "plot_reconstruction_comparison",
+        lambda self, **kwargs: (_ for _ in ()).throw(
+            AssertionError("2D reconstruction comparison should not be used for 3D data")
+        ),
+    )
+    monkeypatch.setattr(
+        PODAnalyzer,
+        "plot_modes_pair_detailed",
+        lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("2D mode plotting should not be used for 3D data")),
+    )
+    monkeypatch.setattr(
+        PODAnalyzer,
+        "plot_modes_grid",
+        lambda self, **kwargs: (_ for _ in ()).throw(AssertionError("2D grid plotting should not be used for 3D data")),
+    )
+    monkeypatch.setattr(
+        PODAnalyzer,
+        "plot_mode_pair_phase",
+        lambda self: (_ for _ in ()).throw(AssertionError("2D pair-phase plotting should not be used for 3D data")),
+    )
 
     analyzer.run_analysis(plot_n_modes_spatial=2, plot_n_coeffs_time=1)
 

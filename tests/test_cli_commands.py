@@ -72,7 +72,14 @@ def test_analyze_from_config_routes_hodmd_aliases(tmp_path: Path, monkeypatch) -
             return None
 
         def perform_dmd(self, *, method: str, delays: int, named_variant: str | None = None):
-            captured.append({"method": method, "delays": delays, "named_variant": named_variant, "results_dir": self._kwargs["results_dir"]})
+            captured.append(
+                {
+                    "method": method,
+                    "delays": delays,
+                    "named_variant": named_variant,
+                    "results_dir": self._kwargs["results_dir"],
+                }
+            )
 
         def save_results(self):
             Path(self._kwargs["results_dir"]).mkdir(parents=True, exist_ok=True)

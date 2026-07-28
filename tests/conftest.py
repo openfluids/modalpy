@@ -29,11 +29,7 @@ def _analytic_rank2_field(Ns: int, Nspace: int) -> dict:
     """
     t = np.linspace(0.0, 2.0 * np.pi, Ns, endpoint=False)
     x = np.linspace(0.0, 1.0, Nspace)
-    q = (
-        1.0
-        + np.outer(np.sin(t), np.sin(2.0 * np.pi * x))
-        + 0.4 * np.outer(np.cos(3.0 * t), np.cos(2.0 * np.pi * x))
-    )
+    q = 1.0 + np.outer(np.sin(t), np.sin(2.0 * np.pi * x)) + 0.4 * np.outer(np.cos(3.0 * t), np.cos(2.0 * np.pi * x))
     return {
         "q": np.ascontiguousarray(q, dtype=float),
         "x": x,

@@ -174,7 +174,9 @@ def _verify_qhat_stamp(h5file, analyzer, q: np.ndarray) -> bool:
         else:
             actual = str(actual)
         if actual != exp_value:
-            print(f"FFT cache stamp mismatch on '{key}': cached={actual!r} != current={exp_value!r} — recomputing FFT blocks.")
+            print(
+                f"FFT cache stamp mismatch on '{key}': cached={actual!r} != current={exp_value!r} — recomputing FFT blocks."
+            )
             return False
     return True
 

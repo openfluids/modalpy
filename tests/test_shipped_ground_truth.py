@@ -49,9 +49,7 @@ def test_taylor_green_dmd_eigenvalue_matches_metadata(tmp_path):
     companion eigenvalue is the analytic discrete multiplier.
     """
     # Goal table size: 24×24, Nt=60 — far smaller than generator defaults.
-    payload = generate_example_dataset(
-        "taylor_green", {"Nx": 24, "Ny": 24, "Nt": 60}
-    )
+    payload = generate_example_dataset("taylor_green", {"Nx": 24, "Ny": 24, "Nt": 60})
     expected = payload["metadata"]["dmd_eigenvalue"]
 
     analyzer = DMDAnalyzer(
@@ -90,9 +88,7 @@ def test_cylinder_wake_dmd_frequency_matches_metadata(tmp_path):
     (verified by mutation), so the bound is a tenth of a bin: still 55x the measured
     error, and tight enough to catch a 1% regression.
     """
-    payload = generate_example_dataset(
-        "cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400}
-    )
+    payload = generate_example_dataset("cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400})
     expected = payload["metadata"]["f_shed"]
     dt = float(payload["dt"])
     Ns = int(payload["Ns"])
@@ -149,9 +145,7 @@ def test_cylinder_wake_spod_peak_matches_metadata(tmp_path):
     spectrum by one bin passed unnoticed (verified by mutation). Half a bin admits
     only the true neighbour, with 17% margin.
     """
-    payload = generate_example_dataset(
-        "cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400}
-    )
+    payload = generate_example_dataset("cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400})
     expected = payload["metadata"]["f_shed"]
     dt = float(payload["dt"])
     nfft = 256
@@ -251,9 +245,7 @@ def test_cylinder_wake_dmd_spod_frequency_cross_agreement(tmp_path):
     coarser of the two resolutions, SPOD's fs/nfft, since that is the floor on how
     closely a bin-limited method can track an eigenproblem-based one.
     """
-    payload = generate_example_dataset(
-        "cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400}
-    )
+    payload = generate_example_dataset("cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400})
     expected = payload["metadata"]["f_shed"]
     dt = float(payload["dt"])
     Ns = int(payload["Ns"])

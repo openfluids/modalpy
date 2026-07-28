@@ -86,9 +86,14 @@ def test_different_q_arrays_do_not_share_cache(tmp_path):
     novlap = int(0.0 * 8)
     nblocks = int(np.ceil((q2.shape[0] - novlap) / (8 - novlap)))
     reference = blocksfft(
-        q2, 8, nblocks, novlap,
-        blockwise_mean=False, normvar=False,
-        window_norm="power", window_type="hamming",
+        q2,
+        8,
+        nblocks,
+        novlap,
+        blockwise_mean=False,
+        normvar=False,
+        window_norm="power",
+        window_type="hamming",
         use_parallel=False,
     )
 
@@ -126,9 +131,14 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, capsys):
     novlap = 0
     nblocks = int(np.ceil((q.shape[0] - novlap) / (8 - novlap)))
     reference = blocksfft(
-        q, 8, nblocks, novlap,
-        blockwise_mean=False, normvar=False,
-        window_norm="power", window_type="hamming",
+        q,
+        8,
+        nblocks,
+        novlap,
+        blockwise_mean=False,
+        normvar=False,
+        window_norm="power",
+        window_type="hamming",
         use_parallel=False,
     )
     np.testing.assert_allclose(analyzer2.qhat, reference)

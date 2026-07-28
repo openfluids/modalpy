@@ -101,7 +101,7 @@ def _make_field(locked: bool, seed=987):
         c4 = D * np.cos(2.0 * np.pi * K4 * t_local / NFFT + th4)
 
         block = np.outer(c1, f1) + np.outer(c2, f2) + np.outer(c3, f3) + np.outer(c4, f4)
-        q[b * NFFT:(b + 1) * NFFT, :] = block
+        q[b * NFFT : (b + 1) * NFFT, :] = block
 
     return q
 
@@ -168,6 +168,7 @@ def _print_table(title, table):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_resonant_triad_dominates(tmp_path):
     q_locked = _make_field(locked=True, seed=1)
     analyzer = _make_analyzer(tmp_path, q_locked, ALL_TRIADS, tag="locked")
@@ -197,8 +198,7 @@ def test_resonant_triad_dominates(tmp_path):
         for resonant in RESONANT_TRIADS:
             ratio = table[resonant] / table[triad]
             print(
-                f"resonant {resonant} vs populated-unlocked {triad}: "
-                f"|lambda|={table[triad]:.6e}, ratio = {ratio:.3e}"
+                f"resonant {resonant} vs populated-unlocked {triad}: |lambda|={table[triad]:.6e}, ratio = {ratio:.3e}"
             )
             assert table[resonant] >= 4.0 * table[triad], (
                 f"Resonant triad {resonant} did not clear the statistical floor of "
@@ -270,9 +270,11 @@ def test_seed_invariance_of_resonant_eigenvalue(tmp_path):
     lam_ref = eigenvalues[1]
     for seed in (7, 99):
         np.testing.assert_allclose(
-            eigenvalues[seed], lam_ref, rtol=1e-10,
+            eigenvalues[seed],
+            lam_ref,
+            rtol=1e-10,
             err_msg=f"Resonant eigenvalue not seed-invariant: seed={seed} lambda={eigenvalues[seed]!r} "
-                    f"vs seed=1 lambda={lam_ref!r}",
+            f"vs seed=1 lambda={lam_ref!r}",
         )
 
 
@@ -290,9 +292,7 @@ def test_resonant_eigenvalue_is_real(tmp_path):
     lam = analyzer.eigenvalues[0]
     rel_imag = abs(lam.imag) / abs(lam)
     print(f"lambda={lam!r}, |Im lambda|/|lambda|={rel_imag:.3e}")
-    assert rel_imag < 1e-12, (
-        f"Resonant eigenvalue is not real: |Im lambda|/|lambda|={rel_imag:.3e} >= 1e-12"
-    )
+    assert rel_imag < 1e-12, f"Resonant eigenvalue is not real: |Im lambda|/|lambda|={rel_imag:.3e} >= 1e-12"
 
 
 @pytest.mark.parametrize("alpha", [2.0, 3.0])
@@ -308,6 +308,6 @@ def test_cubic_amplitude_scaling(tmp_path, alpha):
     analyzer_scaled._perform_static_bsmd_core()
     lam_scaled = analyzer_scaled.eigenvalues[0]
 
-    predicted = (alpha ** 3) * lam_base
+    predicted = (alpha**3) * lam_base
     print(f"alpha={alpha}: lam_base={lam_base}, lam_scaled={lam_scaled}, predicted={predicted}")
     np.testing.assert_allclose(lam_scaled, predicted, rtol=1e-8)

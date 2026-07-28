@@ -58,9 +58,7 @@ def _independent_hankel(data_centered: np.ndarray, embedding_dim: int) -> np.nda
     m = ns - embedding_dim + 1
     hankel = np.empty((embedding_dim * n_space, m), dtype=data_centered.dtype)
     for lag in range(embedding_dim):
-        hankel[lag * n_space : (lag + 1) * n_space, :] = data_centered[
-            lag : lag + m, :
-        ].T
+        hankel[lag * n_space : (lag + 1) * n_space, :] = data_centered[lag : lag + m, :].T
     return hankel
 
 
@@ -103,9 +101,7 @@ def test_dmd_delays_one_matches_independent_exact_dmd():
     ref_eigs = np.linalg.eigvals(a_tilde)
     ref_eigs = ref_eigs[np.argsort(np.abs(ref_eigs))[::-1]][:n_modes]
 
-    np.testing.assert_allclose(
-        analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
+    np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
 
 
 def test_dmd_delays_two_differs_from_one():
@@ -137,9 +133,9 @@ def test_dmd_delays_two_differs_from_one():
 
     # Positive: embedding ran — spectra must differ on this data.
     assert d2._dmd_delays == 2
-    assert not np.allclose(
-        d2.eigenvalues, d1.eigenvalues, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    ), "delays=2 spectrum matched delays=1; delay path looks like a no-op"
+    assert not np.allclose(d2.eigenvalues, d1.eigenvalues, rtol=_RTOL_EXACT, atol=_ATOL_EXACT), (
+        "delays=2 spectrum matched delays=1; delay path looks like a no-op"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -201,12 +197,8 @@ def test_stpod_d2_matches_independent_hankel_pod():
     ref_eigs = (sigma[:n_modes] ** 2) / m_cols
     ref_modes = u[:, :n_modes]
 
-    np.testing.assert_allclose(
-        analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
-    np.testing.assert_allclose(
-        np.abs(analyzer.modes), np.abs(ref_modes), rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
+    np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
+    np.testing.assert_allclose(np.abs(analyzer.modes), np.abs(ref_modes), rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
 
 
 # ---------------------------------------------------------------------------
@@ -234,17 +226,11 @@ def test_spod_function_serial_parallel(n_space, nblocks, dst):
     """
     assert PARALLEL_AVAILABLE is True
     rng = np.random.default_rng(10 + nblocks)
-    qhat = rng.standard_normal((n_space, nblocks)) + 1j * rng.standard_normal(
-        (n_space, nblocks)
-    )
+    qhat = rng.standard_normal((n_space, nblocks)) + 1j * rng.standard_normal((n_space, nblocks))
     w = np.ones((n_space, 1))
 
-    phi_s, lam_s, psi_s = spod_function(
-        qhat, nblocks=nblocks, dst=dst, w=w, return_psi=True, use_parallel=False
-    )
-    phi_p, lam_p, psi_p = spod_function(
-        qhat, nblocks=nblocks, dst=dst, w=w, return_psi=True, use_parallel=True
-    )
+    phi_s, lam_s, psi_s = spod_function(qhat, nblocks=nblocks, dst=dst, w=w, return_psi=True, use_parallel=False)
+    phi_p, lam_p, psi_p = spod_function(qhat, nblocks=nblocks, dst=dst, w=w, return_psi=True, use_parallel=True)
 
     # Same floating-point arithmetic up to BLAS/library rounding; atol at ~1 ulp of O(1).
     np.testing.assert_allclose(lam_p, lam_s, rtol=0, atol=1e-12)
@@ -296,15 +282,9 @@ def test_bsmd_serial_parallel(tmp_path, nfft, n_space, triads):
     parallel._perform_static_bsmd_core()
 
     # Exact same triad arithmetic; only scheduling differs.
-    np.testing.assert_allclose(
-        parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12
-    )
-    np.testing.assert_allclose(
-        np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12
-    )
-    np.testing.assert_allclose(
-        np.abs(parallel.modes2), np.abs(serial.modes2), rtol=0, atol=1e-12
-    )
+    np.testing.assert_allclose(parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.abs(parallel.modes2), np.abs(serial.modes2), rtol=0, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -338,9 +318,7 @@ def test_scaling_pod_eigenvalues_quadratic(alpha):
 
     base = eigs(q)
     scaled = eigs(alpha * q)
-    np.testing.assert_allclose(
-        scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
+    np.testing.assert_allclose(scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
 
 
 @pytest.mark.parametrize("alpha", _SCALE_ALPHAS)
@@ -373,9 +351,7 @@ def test_scaling_spod_eigenvalues_quadratic(alpha, tmp_path):
 
     base = eigs(q, "1")
     scaled = eigs(alpha * q, f"a{alpha}")
-    np.testing.assert_allclose(
-        scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
+    np.testing.assert_allclose(scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
 
 
 @pytest.mark.parametrize("alpha", _SCALE_ALPHAS)
@@ -445,6 +421,4 @@ def test_scaling_stpod_eigenvalues_quadratic(alpha):
 
     base = eigs(q)
     scaled = eigs(alpha * q)
-    np.testing.assert_allclose(
-        scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT
-    )
+    np.testing.assert_allclose(scaled, (alpha**2) * base, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)

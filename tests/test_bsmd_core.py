@@ -21,13 +21,13 @@ def _make_analyzer(
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
     data = {
-        'q': np.random.randn(Ns, Nspace),
-        'x': np.linspace(0, 1, Nx),
-        'y': np.linspace(0, 1, Ny),
-        'dt': 1.0,
-        'Nx': Nx,
-        'Ny': Ny,
-        'Ns': Ns,
+        "q": np.random.randn(Ns, Nspace),
+        "x": np.linspace(0, 1, Nx),
+        "y": np.linspace(0, 1, Ny),
+        "dt": 1.0,
+        "Nx": Nx,
+        "Ny": Ny,
+        "Ns": Ns,
     }
     kwargs = {}
     if max_qhat_gb is not None:
@@ -39,7 +39,7 @@ def _make_analyzer(
         results_dir=tmp_path,
         figures_dir=tmp_path,
         data_loader=lambda _: data,
-        spatial_weight_type='uniform',
+        spatial_weight_type="uniform",
         use_static_triads=use_static,
         static_triads=triads,
         use_parallel=use_parallel,
@@ -100,9 +100,7 @@ def test_one_bin_past_nyquist_raises(tmp_path):
 
 def test_dynamic_triad_selection_raises(tmp_path):
     """Dynamic triad selection is unimplemented and must say so, not return empty arrays."""
-    analyzer = _make_analyzer(
-        tmp_path, triads=[], nfft=8, Ns=32, use_static=False
-    )
+    analyzer = _make_analyzer(tmp_path, triads=[], nfft=8, Ns=32, use_static=False)
     # Pin the public dispatch: use_static_triads=False must raise, not empty-return.
     assert analyzer.use_static_triads is False
     with pytest.raises(NotImplementedError):
@@ -171,15 +169,9 @@ def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, capsys):
     parallel_out = capsys.readouterr().out
     assert "Thread-parallel BSMD" in parallel_out
 
-    np.testing.assert_allclose(
-        parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12
-    )
-    np.testing.assert_allclose(
-        np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12
-    )
-    np.testing.assert_allclose(
-        np.abs(parallel.modes2), np.abs(serial.modes2), rtol=0, atol=1e-12
-    )
+    np.testing.assert_allclose(parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12)
+    np.testing.assert_allclose(np.abs(parallel.modes2), np.abs(serial.modes2), rtol=0, atol=1e-12)
 
 
 def test_energy_map_keeps_triads_beyond_the_default_range(tmp_path):
@@ -214,7 +206,7 @@ def test_multiple_triads_with_negatives(tmp_path):
     assert analyzer.modes2.shape == (len(triads), 4)
     # All valid triads should produce finite eigenvalues
     for idx, (p1, p2, p3) in enumerate(triads):
-        assert not np.isnan(analyzer.eigenvalues[idx]), f"Triad {(p1,p2,p3)} produced NaN"
+        assert not np.isnan(analyzer.eigenvalues[idx]), f"Triad {(p1, p2, p3)} produced NaN"
 
 
 def test_bispectral_correlation_uses_all_three_frequencies(tmp_path):
