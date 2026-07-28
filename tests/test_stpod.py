@@ -275,3 +275,37 @@ class TestSTPODValidation:
 
         with pytest.raises(ValueError, match="Data not loaded"):
             analyzer.perform_stpod()
+
+
+def test_check_mode_orthogonality_true_and_false(small_stpod_field, tmp_path):
+    analyzer = STPODAnalyzer(
+        file_path="stpod_ortho",
+        embedding_dim=5,
+        n_modes_save=4,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: small_stpod_field,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_stpod()
+
+    assert analyzer.check_mode_orthogonality()
+
+    analyzer.modes = analyzer.modes + 0.5
+    assert not analyzer.check_mode_orthogonality()
+
+
+def test_check_mode_orthogonality_empty(small_stpod_field, tmp_path):
+    analyzer = STPODAnalyzer(
+        file_path="stpod_ortho_empty",
+        embedding_dim=5,
+        n_modes_save=4,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: small_stpod_field,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+    assert not analyzer.check_mode_orthogonality()

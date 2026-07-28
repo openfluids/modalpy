@@ -209,3 +209,114 @@ def test_subset_volume_focus_3d_respects_volume_xlim():
     np.testing.assert_array_equal(x_focus, np.array([0.0, 0.5, 1.0]))
     np.testing.assert_array_equal(y_focus, y)
     np.testing.assert_array_equal(z_focus, z)
+
+
+def _make_pod_analyzer(data, tmp_path, n_modes_save=3):
+    return PODAnalyzer(
+        file_path="pod_check",
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=n_modes_save,
+        use_parallel=False,
+    )
+
+
+def test_check_spatial_mode_orthogonality_true_and_false(small_pod_field, tmp_path):
+    analyzer = _make_pod_analyzer(small_pod_field, tmp_path)
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+
+    assert analyzer.check_spatial_mode_orthogonality()
+
+    # Deliberate corruption: break W-orthonormality of stored modes
+    analyzer.modes = analyzer.modes + 1.0
+    assert not analyzer.check_spatial_mode_orthogonality()
+
+
+def test_check_spatial_mode_orthogonality_empty_modes(small_pod_field, tmp_path):
+    analyzer = _make_pod_analyzer(small_pod_field, tmp_path)
+    # No perform_pod — modes and W remain empty arrays
+    assert not analyzer.check_spatial_mode_orthogonality()
+
+
+def test_check_temporal_coefficient_orthogonality_true_and_false(small_pod_field, tmp_path):
+    analyzer = _make_pod_analyzer(small_pod_field, tmp_path)
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+
+    assert analyzer.check_temporal_coefficient_orthogonality()
+
+    analyzer.time_coefficients = analyzer.time_coefficients + 5.0
+    assert not analyzer.check_temporal_coefficient_orthogonality()
+
+
+def test_check_temporal_coefficient_orthogonality_empty(small_pod_field, tmp_path):
+    analyzer = _make_pod_analyzer(small_pod_field, tmp_path)
+    assert not analyzer.check_temporal_coefficient_orthogonality()
+
+
+def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_path):
+    """Both POD kernels must agree on the same active field.
+
+    Spatial branch: Ns >= Nspace (small_pod_field is built that way).
+    Temporal branch: pad zero spatial columns so Ns < Nspace while leaving the
+    active columns identical — zero columns do not change the Gram spectrum.
+    Branch taken is pinned via the same predicate as pod.py:206
+    (`use_temporal_kernel = num_snapshots < num_space_points`).
+
+    Field is analytically rank-2, so n_modes_save=2 keeps both branches on the
+    energetic subspace (higher modes are pure numerical noise).
+    """
+    n_modes = 2
+    data_spatial = {
+        "q": small_pod_field["q"].copy(),
+        "x": small_pod_field["x"].copy(),
+        "y": small_pod_field["y"].copy(),
+        "dt": small_pod_field["dt"],
+        "Nx": small_pod_field["Nx"],
+        "Ny": small_pod_field["Ny"],
+        "Ns": small_pod_field["Ns"],
+    }
+    Ns_s = data_spatial["Ns"]
+    Nspace_s = data_spatial["Nx"]
+    use_temporal_kernel = Ns_s < Nspace_s
+    assert use_temporal_kernel is False
+
+    analyzer_spatial = _make_pod_analyzer(data_spatial, tmp_path / "spatial", n_modes_save=n_modes)
+    analyzer_spatial.load_and_preprocess()
+    analyzer_spatial.perform_pod()
+
+    # Temporal-kernel case: same active q, zero-padded in space until Ns < Nspace
+    n_pad = Ns_s - Nspace_s + 1  # guarantees Ns < Nspace_padded
+    q_temporal = np.hstack([data_spatial["q"], np.zeros((Ns_s, n_pad))])
+    Nspace_t = q_temporal.shape[1]
+    data_temporal = {
+        "q": q_temporal,
+        "x": np.linspace(0.0, 1.0, Nspace_t),
+        "y": np.array([0.0]),
+        "dt": data_spatial["dt"],
+        "Nx": Nspace_t,
+        "Ny": 1,
+        "Ns": Ns_s,
+    }
+    use_temporal_kernel = data_temporal["Ns"] < data_temporal["Nx"]
+    assert use_temporal_kernel is True
+
+    analyzer_temporal = _make_pod_analyzer(data_temporal, tmp_path / "temporal", n_modes_save=n_modes)
+    analyzer_temporal.load_and_preprocess()
+    analyzer_temporal.perform_pod()
+
+    np.testing.assert_allclose(
+        analyzer_spatial.eigenvalues,
+        analyzer_temporal.eigenvalues,
+        atol=1e-10,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        np.abs(analyzer_spatial.time_coefficients),
+        np.abs(analyzer_temporal.time_coefficients),
+        atol=1e-10,
+        rtol=0.0,
+    )
