@@ -117,7 +117,13 @@ def blocksfft_optimized(
     blockwise_mean : bool
         Subtract blockwise mean if True
     normvar : bool
-        Normalize variance if True
+        If True, divide each block pointwise in space by its variance
+        (unbiased, ``ddof=1``), matching ``spod_matlab`` (``opts.normvar``)
+        and PySPOD (``normalize_data``). This does **not** produce unit
+        variance and is therefore scale-dependent: scaling the input by
+        ``c`` scales the normalized block by ``1/c``. Values below
+        ``4*eps`` are clamped to 1. Implementation option, not a step in
+        Towne, Schmidt & Colonius (2018). Defaults to False.
     window_norm : str
         Window normalization type ('amplitude' or 'power')
     window_type : str

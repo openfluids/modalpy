@@ -124,8 +124,14 @@ class SPODAnalyzer(BaseAnalyzer):
                                          Defaults to `FIGURES_DIR_SPOD` from `configs.py`.
             blockwise_mean (bool, optional): If True, subtracts the mean of each block before FFT.
                                            If False, subtracts the global mean. Defaults to False.
-            normvar (bool, optional): If True, normalizes FFT blocks by variance.
-                                      Defaults to False.
+            normvar (bool, optional): If True, divide each FFT block pointwise
+                in space by its variance (unbiased, ``ddof=1``), matching
+                ``spod_matlab`` (``opts.normvar``) and PySPOD
+                (``normalize_data``). This does **not** produce unit variance
+                and is therefore scale-dependent: scaling the input by ``c``
+                scales the normalized block by ``1/c``. Values below
+                ``4*eps`` are clamped to 1. Implementation option, not a step
+                in Towne, Schmidt & Colonius (2018). Defaults to False.
             window_norm (str, optional): Normalization type for the window function ('amplitude' or 'power').
                                          Defaults to `WINDOW_NORM` from `configs.py`.
             window_type (str, optional): Type of window function to use (e.g., 'hamming', 'hanning', 'sine').
