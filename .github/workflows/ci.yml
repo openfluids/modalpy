@@ -31,6 +31,11 @@ jobs:
           # macOS exercises the Accelerate FFT path fftkit selects on Darwin.
           - os: macos-latest
             python-version: "3.14"
+          # The package advertises "Operating System :: OS Independent", which was
+          # never tested. Windows is where that claim is most likely to break:
+          # path separators and HDF5/.mat file locking behave differently there.
+          - os: windows-latest
+            python-version: "3.14"
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
