@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- DMD operator rank is now a separate constructor/`CaseSpec` parameter `rank`.
+  With an **explicit** `rank`, `n_modes_save` only bounds how many modes are kept
+  after sorting and no longer moves eigenvalues. The **default is unchanged**:
+  `rank=None` still resolves to `min(n_modes_save, min(X1.shape))` then the
+  relative singular-value floor (`s_j > rcond * s[0]`) — bit-for-bit today's
+  behaviour — and emits a `DeprecationWarning` naming `rank`. Pass `rank`
+  explicitly to silence the warning and pin the numerics. Opt-in criteria:
+  positive `int`, `"svht"` (Gavish–Donoho optimal hard threshold, unknown-noise
+  form), and `"energy"` (cumulative `s²` fraction, default
+  `energy_fraction=0.999`). No published number moves under the default path.
+  Full numerical rank was **rejected** as the new default: on the shipped
+  cylinder wake the singular spectrum decays smoothly and never reaches the
+  machine floor, so untruncated DMD surfaces spurious `|λ| > 1` modes that
+  outrank the physical shedding frequency.
+
 ### Fixed
 - DMD no longer amplifies noise into modes when the snapshot pair is ill-conditioned.
   The reduced operator and the mode recovery both divide by the singular values of the

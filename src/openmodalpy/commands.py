@@ -205,6 +205,25 @@ def _decode_hdf5_scalar(value: Any) -> Any:
     return value
 
 
+def _coerce_rank(value: Any) -> int | str | None:
+    """Read a DMD truncation rank from config: null, a positive int, or a criterion name."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return int(value)
+    text = str(value).strip().lower()
+    if text in ("", "none", "null"):
+        return None
+    if text in ("svht", "energy"):
+        return text
+    try:
+        return int(text)
+    except ValueError:
+        raise ValueError(
+            f"rank must be null, a positive int, 'svht', or 'energy'; got {value!r}"
+        ) from None
+
+
 def _load_case_spec_from_payload(payload: dict[str, Any], config_path: Path) -> CaseSpec:
     case_payload = payload.get("case")
     if not isinstance(case_payload, dict):
@@ -256,6 +275,7 @@ def _load_case_spec_from_payload(payload: dict[str, Any], config_path: Path) -> 
         data=data,
         spatial_weight_type=str(case_payload.get("spatial_weight_type", "uniform")),
         n_modes_save=int(case_payload.get("n_modes_save", 10)),
+        rank=_coerce_rank(case_payload.get("rank")),
         nfft=int(case_payload.get("nfft", 128)),
         overlap=float(case_payload.get("overlap", 0.5)),
         embedding_dim=int(case_payload.get("embedding_dim", 10)),
@@ -290,6 +310,8 @@ def _apply_case_overrides(case: CaseSpec, overrides: dict[str, Any]) -> CaseSpec
         data=case.data,
         spatial_weight_type=str(overrides.get("spatial_weight_type", case.spatial_weight_type)),
         n_modes_save=int(overrides.get("n_modes_save", case.n_modes_save)),
+        # Rebuilt field-by-field, so an omitted rank would silently drop it.
+        rank=_coerce_rank(overrides["rank"]) if "rank" in overrides else case.rank,
         nfft=int(overrides.get("nfft", case.nfft)),
         overlap=float(overrides.get("overlap", case.overlap)),
         embedding_dim=int(overrides.get("embedding_dim", case.embedding_dim)),
@@ -775,6 +797,7 @@ def _run_dmd(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         data_loader=data_loader,
         spatial_weight_type=spec.case.spatial_weight_type,
         n_modes_save=int(spec.params.get("n_modes_save", spec.case.n_modes_save)),
+        rank=_coerce_rank(spec.params.get("rank", spec.case.rank)),
         use_parallel=spec.case.use_parallel,
     )
     analyzer.load_and_preprocess()

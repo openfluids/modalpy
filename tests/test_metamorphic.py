@@ -88,6 +88,7 @@ def test_dmd_delays_one_matches_independent_exact_dmd():
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=n_modes,
+        rank=n_modes,  # explicit operator rank (matches independent reference)
     )
     analyzer.load_and_preprocess()
     analyzer.perform_dmd(delays=1)

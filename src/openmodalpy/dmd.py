@@ -97,6 +97,37 @@ def _dmd_pinv_rcond(shape, dtype) -> float:
 DMD_PINV_RCOND = _dmd_pinv_rcond
 
 
+def svht_lambda(beta):
+    """Gavish–Donoho (2014) optimal hard-threshold coefficient (unknown noise).
+
+    Parameters
+    ----------
+    beta : float
+        Aspect ratio ``min(shape) / max(shape)`` of the snapshot-pair matrix,
+        in ``(0, 1]``.
+
+    Returns
+    -------
+    float
+        ``lambda(beta)`` such that the hard threshold is
+        ``tau = lambda(beta) * median(singular values)``.
+
+    Notes
+    -----
+    ``lambda(1) = 4/sqrt(3) ≈ 2.309401`` is the square-matrix value, not a
+    universal constant. As ``beta -> 0``, ``lambda -> sqrt(2)``.
+    """
+    beta = float(beta)
+    if not (0.0 < beta <= 1.0):
+        raise ValueError(f"svht_lambda requires 0 < beta <= 1, got {beta!r}")
+    return float(
+        np.sqrt(
+            2.0 * (beta + 1.0)
+            + 8.0 * beta / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))
+        )
+    )
+
+
 class DMDAnalyzer(BaseAnalyzer):
     """Exact Dynamic Mode Decomposition analyzer.
 
@@ -113,6 +144,8 @@ class DMDAnalyzer(BaseAnalyzer):
         data_loader=None,
         spatial_weight_type="auto",
         n_modes_save=10,
+        rank=None,
+        energy_fraction=0.999,
         use_parallel=True,
     ):
         super().__init__(
@@ -126,6 +159,8 @@ class DMDAnalyzer(BaseAnalyzer):
             use_parallel=use_parallel,
         )
         self.n_modes_save = n_modes_save
+        self.rank = rank
+        self.energy_fraction = float(energy_fraction)
         self.modes = np.array([])
         self.eigenvalues = np.array([])
         self.time_coefficients = np.array([])
@@ -135,12 +170,91 @@ class DMDAnalyzer(BaseAnalyzer):
         self.amplitudes = np.array([])
         # Continuous-time eigenvalues: omega = log(lambda) / dt
         self.omega = np.array([])
-        # Numerical rank used by the last perform_dmd() (relative SVD floor)
+        # Numerical rank used by the last perform_dmd() (after criterion + rcond)
         self.effective_rank = 0
         # Algorithm settings (written by perform_dmd, read by metadata)
         self._dmd_method = "ls"
         self._dmd_delays = 1
         self._dmd_named_variant = "dmd"
+
+    def _svd_request_rank(self, shape) -> int:
+        """How many singular triplets to request from ``compute_reduced_svd``.
+
+        Explicit integer ``rank`` and the deprecated default (``None`` →
+        ``n_modes_save``) can use a truncated path; spectrum-based criteria
+        need the full thin SVD of ``X1``.
+        """
+        max_r = min(shape)
+        rank = self.rank
+        if rank is None:
+            # Deprecated default: same request as pre-decoupling code.
+            return min(int(self.n_modes_save), max_r)
+        if isinstance(rank, (int, np.integer)):
+            if int(rank) < 1:
+                raise ValueError(f"rank must be >= 1 when given as int, got {rank!r}")
+            return min(int(rank), max_r)
+        if rank in ("svht", "energy"):
+            return max_r
+        raise ValueError(
+            f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'."
+        )
+
+    def _resolve_rank(self, s, shape, rcond):
+        """Map singular values + ``self.rank`` to ``(effective_r, r_requested)``.
+
+        Every path floors by the relative threshold ``s_j > rcond * s[0]``.
+        ``r_requested`` is the criterion's target before that floor (used for
+        the under-rank warning).
+
+        ``rank=None`` (deprecated) still resolves to
+        ``min(n_modes_save, min(shape))`` then the rcond floor — bit-for-bit the
+        pre-decoupling default. Explicit int / ``"svht"`` / ``"energy"`` never
+        consult ``n_modes_save``.
+        """
+        max_r = min(shape)
+        if s.size == 0 or not np.isfinite(s[0]) or s[0] <= 0.0:
+            return 0, max_r
+
+        r_numeric = int(np.sum(s > (rcond * s[0])))
+        rank = self.rank
+
+        if rank is None:
+            # Deprecated default: reproduce today's coupling exactly.
+            r_requested = min(int(self.n_modes_save), max_r)
+            r = min(r_requested, r_numeric)
+            return r, r_requested
+
+        if isinstance(rank, (int, np.integer)):
+            r_requested = min(int(rank), max_r)
+            r = min(r_requested, r_numeric)
+            return r, r_requested
+
+        if rank == "svht":
+            beta = min(shape) / max(shape)
+            tau = svht_lambda(beta) * float(np.median(s))
+            r_svht = int(np.sum(s > tau))
+            r = min(r_svht, r_numeric)
+            return r, max(r_svht, 1) if r_svht > 0 else max_r
+
+        if rank == "energy":
+            frac = self.energy_fraction
+            if not (0.0 < frac <= 1.0):
+                raise ValueError(
+                    f"energy_fraction must be in (0, 1], got {frac!r}"
+                )
+            energy = np.cumsum(s.astype(np.float64) ** 2)
+            total = float(energy[-1])
+            if total <= 0.0 or not np.isfinite(total):
+                return 0, max_r
+            # Smallest r with cumulative s^2 fraction >= energy_fraction.
+            r_energy = int(np.searchsorted(energy / total, frac, side="left") + 1)
+            r_energy = min(max(r_energy, 1), max_r, s.size)
+            r = min(r_energy, r_numeric)
+            return r, r_energy
+
+        raise ValueError(
+            f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'."
+        )
 
     def perform_dmd(self, method="ls", delays=1, named_variant=None):
         """Compute DMD on raw shifted snapshots.
@@ -160,6 +274,11 @@ class DMDAnalyzer(BaseAnalyzer):
         - Does not subtract the temporal mean.
         - Does not use the spatial metric ``self.W`` in the regression.
         - Sorts modes by descending ``|lambda|``.
+        - Truncation rank is controlled by ``self.rank``. Default ``rank=None``
+          still uses ``min(n_modes_save, min(X1.shape))`` then the rcond floor
+          (deprecated; pass an explicit int, ``"svht"``, or ``"energy"``).
+          With an explicit ``rank``, ``n_modes_save`` only bounds how many
+          modes are kept after sorting.
         """
         if method not in ("ls", "tls"):
             raise ValueError(f"Unknown method '{method}'; use 'ls' or 'tls'.")
@@ -192,16 +311,21 @@ class DMDAnalyzer(BaseAnalyzer):
         X1 = X[:, :-1]
         X2 = X[:, 1:]
 
-        # SVD of X1; request up to n_modes_save, then floor by relative threshold
-        r_requested = min(self.n_modes_save, min(X1.shape))
-        u, s, vh = compute_reduced_svd(X1, r_requested)
-        # Relative floor: keep s_j > rcond * s[0] (numpy.linalg.pinv convention)
+        # Default rank=None still couples to n_modes_save (deprecated). Explicit
+        # int / "svht" / "energy" select the operator without consulting it.
+        if self.rank is None:
+            warnings.warn(
+                "the DMD truncation rank currently defaults to n_modes_save, which "
+                "couples a plotting parameter to the numerics; pass rank explicitly "
+                "(an int, 'svht', or 'energy'). This default will change in a future "
+                "release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        r_svd = self._svd_request_rank(X1.shape)
+        u, s, vh = compute_reduced_svd(X1, r_svd)
         rcond = DMD_PINV_RCOND(X1.shape, s.dtype if s.size else X1.dtype)
-        if s.size == 0 or not np.isfinite(s[0]) or s[0] <= 0.0:
-            r = 0
-        else:
-            r = int(np.sum(s[:r_requested] > (rcond * s[0])))
-            r = min(r, r_requested)
+        r, r_requested = self._resolve_rank(s, X1.shape, rcond)
         # Order matters. The relative test always keeps s[0] (s[0] > rcond * s[0]
         # reduces to 1 > rcond), so r reaches 0 only when the spectrum itself is
         # unusable: empty, non-finite, or all zero. Bumping r back to 1 there would

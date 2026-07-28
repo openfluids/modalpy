@@ -228,7 +228,7 @@ stpod.run_analysis()
 ```python
 from openmodalpy import DMDAnalyzer
 
-dmd = DMDAnalyzer(file_path="data.mat", n_modes_save=10)
+dmd = DMDAnalyzer(file_path="data.mat", n_modes_save=10, rank=10)
 dmd.load_and_preprocess()
 dmd.perform_dmd(method="ls", delays=1)        # standard DMD
 dmd.perform_dmd(method="tls", delays=1)       # TLS-DMD
@@ -239,12 +239,48 @@ dmd.perform_dmd(method="tls", delays=4,
 dmd.save_results()
 ```
 
+**Rank vs saved modes:**
+- `rank` — SVD truncation of the DMD operator (the reduced system size).
+- `n_modes_save` — how many modes are kept for save/plot after sorting by `|λ|`.
+  With an **explicit** `rank`, changing `n_modes_save` alone must not change
+  eigenvalues. The default still couples them (deprecated).
+
+| `rank` | Criterion |
+|--------|-----------|
+| `None` (default, **deprecated**) | Same as today: `min(n_modes_save, min(X1.shape))`, then the relative floor `s_j > rcond * s[0]` (`rcond = max(shape) * eps`, as in `numpy.linalg.pinv`). Emits a `DeprecationWarning`; pass `rank` explicitly. |
+| `int` | Explicit rank, still floored by `rcond` (never exceeds what the data supports). |
+| `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = λ(β) · median(s)` with `β = min(shape)/max(shape)`. |
+| `"energy"` | Smallest `r` with cumulative `s²` fraction ≥ `energy_fraction` (default `0.999`). |
+
+**Why full numerical rank is not the default:** On the shipped cylinder wake
+(`Nx=40, Ny=24, Nt=400`, so `X1` is 960×399) the singular spectrum decays
+**smoothly** to `σ_min/σ_1 ≈ 4.5×10⁻⁴` and never approaches the machine floor
+(`rcond ≈ 2×10⁻¹³`). Keeping every direction above that floor (rank 399)
+produces **spurious modes with `|λ| > 1`** (growth outside the unit circle)
+that sort *first* by the amplitude ranking — recovered dominant frequency
+**≈ 3.11 Hz** against true shedding **≈ 0.167 Hz**. Truncating at
+`n_modes_save=10`, `"svht"`, or `"energy"` all recover the physical shedding
+mode with `|λ| = 1`. A stability library that manufactures instabilities
+cannot default to untruncated DMD. Full rank remains available only by
+passing an explicit large `int`.
+
+**Why the default is not SVHT either:** SVHT assumes a low-rank signal plus
+**i.i.d. Gaussian noise of constant variance**, and its median-based noise
+estimate requires the **true rank below n/2** — otherwise the median singular
+value is signal, not noise, and the criterion collapses the rank. Neither
+assumption holds for a typical deterministic fluid simulation with a smoothly
+decaying spectrum. SVHT is also computed from `X1` alone, while the DMD
+operator error depends on content of `X2` outside `range(X1)`. So `"svht"`
+ships selectable and documented, not as the default. No automatic criterion is
+free of trade-offs; report `effective_rank` and the criterion you used.
+
 **Key facts:**
 - Eigenvalues encode frequency (angle) and growth/decay (modulus)
 - LS regression assumes noise only in Z+; TLS allows errors on both sides
 - Implementation uses broadcasting (`/ s_r`) instead of `np.diag(1/s_r)`
 - `named_variant` parameter sets metadata; avoids monkey-patching
-- Reference: Schmid (2010), JFM 656; Tu et al. (2014), JCD 1; Hemati et al. (2017), TCFD 31
+- Explicit large `rank` forces the dense SVD path when `min(X1.shape) ≥ 256`
+- Reference: Schmid (2010), JFM 656; Tu et al. (2014), JCD 1; Hemati et al. (2017), TCFD 31; Gavish & Donoho (2014), IEEE TIT
 
 ### 7. HODMD — Higher-Order DMD
 
@@ -307,6 +343,7 @@ rfft bin range) raise `ValueError`. Dynamic triad selection
     },
     "spatial_weight_type": "uniform",  // "uniform", "polar", or "auto"
     "n_modes_save": 10,
+    "rank": null,                  // DMD only: null (deprecated default) | int | "svht" | "energy"
     "nfft": 128,                   // FFT block size (SPOD/BSMD/PSD-POD)
     "overlap": 0.5,                // block overlap fraction
     "embedding_dim": 10,           // delay depth (ST-POD/HODMD)

@@ -184,6 +184,77 @@ def test_analyze_from_config_forwards_dmd_variant_options(tmp_path: Path, monkey
     assert outcome.executed is True
 
 
+def test_config_rank_reaches_the_dmd_analyzer(tmp_path: Path, monkeypatch) -> None:
+    """A rank chosen in the config must arrive at DMDAnalyzer, not be silently dropped.
+
+    ``CaseSpec.rank`` shipped briefly as dead config: nothing read it from the payload,
+    ``_apply_case_overrides`` rebuilt the spec without it, and ``_run_dmd`` never passed
+    it on. Asserting the field merely exists cannot catch that -- this pins the value
+    the analyzer actually receives.
+    """
+
+    def build(case_rank, overrides):
+        config_path = tmp_path / f"case_{case_rank}_{len(overrides)}.jsonc"
+        case: dict[str, object] = {
+            "name": "toy_case",
+            "case_type": "analytical",
+            "data": {
+                "kind": "generator",
+                "name": "double_gyre",
+                "params": {"Nx": 8, "Ny": 4, "Nt": 12},
+            },
+            "spatial_weight_type": "uniform",
+            "results_root": str(tmp_path / "results"),
+            "figures_root": str(tmp_path / "figures"),
+        }
+        if case_rank is not None:
+            case["rank"] = case_rank
+        _write_jsonc(
+            config_path,
+            {
+                "name": "Toy case",
+                "description": "Toy analytical case",
+                "case": case,
+                "runs": [],
+            },
+        )
+        captured: dict[str, object] = {}
+
+        class FakeDMDAnalyzer:
+            def __init__(self, **kwargs):
+                captured["init"] = kwargs
+
+            def load_and_preprocess(self):
+                pass
+
+            def perform_dmd(self, **kwargs):
+                pass
+
+            def save_results(self):
+                results_dir = Path(captured["init"]["results_dir"])
+                results_dir.mkdir(parents=True, exist_ok=True)
+                (results_dir / "fake.hdf5").write_text("fake")
+
+        monkeypatch.setattr("openmodalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
+        analyze_from_config(
+            config_path,
+            method="dmd",
+            overrides={"generate_plots": False, **overrides},
+        )
+        return captured["init"]["rank"]
+
+    # From the case payload, for each accepted spelling.
+    assert build("svht", {}) == "svht"
+    assert build("energy", {}) == "energy"
+    assert build(12, {}) == 12
+    # Absent from the config: the deprecated default.
+    assert build(None, {}) is None
+    # A per-run override must win over the case value.
+    assert build("svht", {"rank": 5}) == 5
+    # And an override must not wipe a case value it does not mention.
+    assert build(7, {"delays": 1}) == 7
+
+
 def test_run_from_config_executes_runs_schema(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "suite.jsonc"
     _write_jsonc(

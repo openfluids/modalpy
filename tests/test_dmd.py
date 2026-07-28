@@ -9,12 +9,19 @@ from openmodalpy import DMDAnalyzer
 from openmodalpy.dmd import _delay_embed
 
 
-def _exact_dmd_eigenvalues(q: np.ndarray, n_modes_save: int) -> np.ndarray:
+def _exact_dmd_eigenvalues(q: np.ndarray, n_modes_save: int, rank=None) -> np.ndarray:
+    """Independent exact-DMD reference.
+
+    ``rank`` is the operator truncation. ``None`` matches the library default:
+    ``min(n_modes_save, full thin rank of X1)``. ``n_modes_save`` also bounds
+    how many eigenvalues are returned after sorting.
+    """
     x = q[:-1, :].T
     y = q[1:, :].T
 
     u, s, vh = np.linalg.svd(x, full_matrices=False)
-    r = min(n_modes_save, len(s))
+    r_full = len(s)
+    r = min(n_modes_save, r_full) if rank is None else min(int(rank), r_full)
     u_r = u[:, :r]
     s_r = np.diag(s[:r])
     v_r = vh.conj().T[:, :r]
@@ -22,7 +29,8 @@ def _exact_dmd_eigenvalues(q: np.ndarray, n_modes_save: int) -> np.ndarray:
     atilde = u_r.conj().T @ y @ v_r @ np.linalg.inv(s_r)
     eigvals, _ = np.linalg.eig(atilde)
     idx = np.argsort(np.abs(eigvals))[::-1]
-    return eigvals[idx][:n_modes_save]
+    n_keep = min(n_modes_save, r)
+    return eigvals[idx][:n_keep]
 
 
 def test_perform_dmd_simple():
@@ -195,7 +203,7 @@ def _make_linear_snapshots(A, x0, n_steps):
     return np.array(snapshots)
 
 
-def _make_analyzer(q, n_modes_save=None):
+def _make_analyzer(q, n_modes_save=None, rank=None):
     """Shorthand to build a DMDAnalyzer from a snapshot array."""
     n_spatial = q.shape[1]
     if n_modes_save is None:
@@ -214,6 +222,7 @@ def _make_analyzer(q, n_modes_save=None):
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=n_modes_save,
+        rank=rank,
     )
     analyzer.load_and_preprocess()
     return analyzer
@@ -278,10 +287,11 @@ def test_default_args_match_original():
         [[10.0, 1.0], [11.0, 2.0], [13.0, 4.0], [16.0, 8.0], [20.0, 16.0]],
         dtype=float,
     )
-    expected = _exact_dmd_eigenvalues(data_q, n_modes_save=2)
+    # Data is 2-D spatial; full numerical rank equals n_modes_save=2.
+    expected = _exact_dmd_eigenvalues(data_q, n_modes_save=2, rank=None)
 
     analyzer = _make_analyzer(data_q, n_modes_save=2)
-    analyzer.perform_dmd()  # defaults: method="ls", delays=1
+    analyzer.perform_dmd()  # defaults: method="ls", delays=1, rank=None
     np.testing.assert_allclose(analyzer.eigenvalues, expected, rtol=1e-10, atol=1e-10)
 
 
@@ -591,7 +601,7 @@ def test_dmd_effective_rank_scale_invariant():
 
 
 def test_dmd_full_rank_path_silent_and_untruncated():
-    """Well-conditioned data keeps every requested mode and does not warn."""
+    """Well-conditioned data at an explicit rank keeps every mode and does not warn."""
     rng = np.random.default_rng(7)
     nsp = 120
     tt = np.arange(60) * 0.1
@@ -614,6 +624,7 @@ def test_dmd_full_rank_path_silent_and_untruncated():
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=5,
+        rank=5,
     )
     analyzer.load_and_preprocess()
     with warnings.catch_warnings(record=True) as caught:
@@ -657,3 +668,155 @@ def test_dmd_degenerate_all_zero_returns_empty_without_raising():
     assert analyzer.eigenvalues.size == 0
     assert analyzer.modes.size == 0
     assert analyzer.time_coefficients.size == 0
+
+
+# ---------------------------------------------------------------------------
+# rank vs n_modes_save (decoupled)
+# ---------------------------------------------------------------------------
+
+
+def test_n_modes_save_does_not_change_eigenvalues():
+    """With rank fixed, changing only n_modes_save leaves eigenvalues bit-identical."""
+    rng = np.random.default_rng(11)
+    n_space, n_time = 80, 30
+    phi, _ = np.linalg.qr(rng.standard_normal((n_space, 6)))
+    lam = 0.95 - 0.02 * np.arange(6)
+    t = np.arange(n_time)
+    q = (phi @ (lam[:, None] ** t[None, :])).T
+    q = q + 1e-4 * rng.standard_normal(q.shape)
+
+    a = _make_analyzer(q, n_modes_save=4, rank=6)
+    b = _make_analyzer(q, n_modes_save=12, rank=6)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        a.perform_dmd()
+        b.perform_dmd()
+
+    assert a.effective_rank == b.effective_rank == 6
+    k = min(a.eigenvalues.size, b.eigenvalues.size)
+    assert k > 0
+    assert np.array_equal(a.eigenvalues[:k], b.eigenvalues[:k])
+    assert a.eigenvalues.size <= 4
+    assert b.eigenvalues.size >= a.eigenvalues.size
+
+
+def test_rank_parameter_changes_eigenvalues():
+    """Changing rank must change the reduced operator / eigenvalues."""
+    rng = np.random.default_rng(12)
+    n_space, n_time = 80, 30
+    phi, _ = np.linalg.qr(rng.standard_normal((n_space, 6)))
+    lam = 0.95 - 0.02 * np.arange(6)
+    t = np.arange(n_time)
+    q = (phi @ (lam[:, None] ** t[None, :])).T
+    q = q + 1e-4 * rng.standard_normal(q.shape)
+
+    lo = _make_analyzer(q, n_modes_save=20, rank=2)
+    hi = _make_analyzer(q, n_modes_save=20, rank=6)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        lo.perform_dmd()
+        hi.perform_dmd()
+
+    assert lo.effective_rank == 2
+    assert hi.effective_rank == 6
+    k = min(lo.eigenvalues.size, hi.eigenvalues.size)
+    assert not np.array_equal(lo.eigenvalues[:k], hi.eigenvalues[:k])
+
+
+def test_default_rank_uses_n_modes_save_and_warns():
+    """rank=None reproduces min(n_modes_save, shape) and emits DeprecationWarning."""
+    rng = np.random.default_rng(13)
+    # Broadband random data so numerical rank exceeds n_modes_save=10.
+    n_space, n_time = 100, 40
+    q = rng.standard_normal((n_time, n_space))
+
+    a = _make_analyzer(q, n_modes_save=10)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        a.perform_dmd()
+    dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert dep, "default rank path raised no DeprecationWarning"
+    assert any("rank" in str(w.message) for w in dep)
+    assert a.effective_rank == 10
+
+    # Explicit rank past n_modes_save is allowed and silent on DeprecationWarning.
+    b = _make_analyzer(q, n_modes_save=5, rank=12)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        b.perform_dmd()
+    dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    assert not dep
+    assert b.effective_rank == 12
+    assert b.eigenvalues.size == 5
+
+
+def test_svht_lambda_beta_dependent():
+    from openmodalpy.dmd import svht_lambda
+
+    # Gavish–Donoho formula: lambda(1)=4/sqrt(3); lambda decreases toward sqrt(2).
+    # Compare against independent evaluation of the same closed form (1e-9).
+    def ref(beta):
+        beta = float(beta)
+        return float(
+            np.sqrt(
+                2.0 * (beta + 1.0)
+                + 8.0 * beta
+                / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))
+            )
+        )
+
+    for beta in (1.0, 0.5, 0.1, 0.01, 0.001):
+        got = float(svht_lambda(beta))
+        want = ref(beta)
+        assert abs(got - want) < 1e-9, f"svht_lambda({beta}) = {got}, want {want}"
+
+    # The loop above compares the implementation against a COPY of the same closed
+    # form, so on its own it cannot detect a wrong formula. These two anchors are
+    # independent published values, and they are what actually pins it:
+    #   lambda(1) = 4/sqrt(3) exactly (the square-matrix case)
+    #   lambda(beta) -> sqrt(2)  as beta -> 0
+    assert abs(svht_lambda(1.0) - 4.0 / np.sqrt(3.0)) < 1e-12
+    assert abs(svht_lambda(1e-12) - np.sqrt(2.0)) < 1e-6
+    # 4/sqrt(3) is lambda(1), not a universal constant. Fluid snapshot matrices sit
+    # near beta ~ 0.01, where using 2.309401 would set the threshold ~61% too high.
+    assert abs(svht_lambda(0.01) - 4.0 / np.sqrt(3.0)) > 0.5
+    assert svht_lambda(0.001) < svht_lambda(0.1) < svht_lambda(0.5) < svht_lambda(1.0)
+
+
+def test_energy_rank_criterion():
+    """rank='energy' keeps the smallest r whose cumulative s^2 meets the fraction."""
+    rng = np.random.default_rng(14)
+    # Plant a steep spectrum so energy_fraction=0.99 is well below full rank.
+    n_space, n_time = 50, 20
+    phi, _ = np.linalg.qr(rng.standard_normal((n_space, 8)))
+    lam = 0.99 ** np.arange(8)
+    amp = 10.0 ** (-0.5 * np.arange(8))
+    t = np.arange(n_time)
+    q = ((phi * amp) @ (lam[:, None] ** t[None, :])).T
+
+    # Explicit large rank for the untruncated reference (not the deprecated default).
+    full = _make_analyzer(q, n_modes_save=20, rank=20)
+    energy = _make_analyzer(q, n_modes_save=20, rank="energy")
+    energy.energy_fraction = 0.99
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        full.perform_dmd()
+        energy.perform_dmd()
+
+    assert energy.effective_rank < full.effective_rank
+    assert energy.effective_rank >= 1
+
+    # Pin the rank by the criterion's DEFINING property rather than by re-running
+    # searchsorted: the kept set must clear the fraction, and dropping one more mode
+    # must fall below it. That is sufficiency plus minimality, which a copy of the
+    # implementation's own arithmetic would not independently establish.
+    s = np.linalg.svd(q.T[:, :-1], compute_uv=False)
+    cum = np.cumsum(s**2) / np.sum(s**2)
+    r = energy.effective_rank
+    assert cum[r - 1] >= 0.99, (
+        f"rank {r} retains only {cum[r - 1]:.6f} of the energy, below the 0.99 asked for"
+    )
+    if r > 1:
+        assert cum[r - 2] < 0.99, (
+            f"rank {r} is not minimal: {r - 1} modes already retain {cum[r - 2]:.6f}"
+        )
