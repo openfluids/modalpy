@@ -1,15 +1,15 @@
 ![openmodalpy banner](https://raw.githubusercontent.com/openfluids/openmodalpy/main/assets/readme-banner-v1.jpg)
 
-[![CI](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml/badge.svg)](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml)
+[![CI](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
 [![Python](https://img.shields.io/pypi/pyversions/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-**Nine modal decomposition methods for spatiotemporal data, behind one API.**
-
-Extract coherent structures from simulation or experimental data — energy-ranked POD
-modes, frequency-resolved SPOD modes, DMD eigenvalues, nonlinear BSMD triads — without
-switching libraries or rewriting your loading code for each method.
+`openmodalpy` puts nine modal decomposition methods for spatiotemporal data
+behind one API. Extract coherent structures from simulation or experimental
+data — energy-ranked POD modes, frequency-resolved SPOD modes, DMD eigenvalues,
+nonlinear BSMD triads — without switching libraries or rewriting your loading
+code for each method.
 
 ## Why this package
 
