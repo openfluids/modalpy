@@ -125,11 +125,13 @@ def test_dmd_delays_two_differs_from_one():
     )
     d1 = DMDAnalyzer(file_path="meta_dmd_d1_vs", **common)
     d1.load_and_preprocess()
-    d1.perform_dmd(delays=1)
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        d1.perform_dmd(delays=1)
 
     d2 = DMDAnalyzer(file_path="meta_dmd_d2", **common)
     d2.load_and_preprocess()
-    d2.perform_dmd(delays=2)
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        d2.perform_dmd(delays=2)
 
     # Positive: embedding ran — spectra must differ on this data.
     assert d2._dmd_delays == 2

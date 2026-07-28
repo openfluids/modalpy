@@ -8,6 +8,7 @@ Validates mathematical correctness using synthetic data with known analytical so
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 # Tolerance for numerical comparisons
 TOL = 1e-10
@@ -164,7 +165,9 @@ def test_dmd(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
     # Dominant eigenvalue should be e^{-α*dt}
     expected_eigval = np.exp(-alpha * dt)
@@ -201,7 +204,9 @@ def test_dmd(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
     # Should have eigenvalue near unit circle
     eigvals = analyzer.eigenvalues
@@ -234,7 +239,9 @@ def test_dmd(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
     eigvals = analyzer.eigenvalues
     # For decaying oscillation: |λ| = e^{-α*dt} < 1
@@ -273,7 +280,8 @@ def test_dmd(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        analyzer.perform_dmd()
 
     dmd_eigvals = analyzer.eigenvalues
 
@@ -575,7 +583,8 @@ def test_heavy(tmp_path):
         figures_dir=tmp_path,
     )
     dmd.load_and_preprocess()
-    dmd.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        dmd.perform_dmd()
 
     # Check if DMD finds the shedding frequency
     angles = np.angle(dmd.eigenvalues)

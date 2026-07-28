@@ -158,8 +158,9 @@ def test_dmd_reload_without_dt_raises():
     )
     a.data = dict(data)
     a.W = np.ones(Nx * Ny)
-    with pytest.raises(ValueError, match=r"timestep"):
-        a.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        with pytest.raises(ValueError, match=r"timestep"):
+            a.perform_dmd()
 
 
 def test_dmd_omega_scales_inversely_with_dt():
@@ -193,7 +194,8 @@ def test_dmd_omega_scales_inversely_with_dt():
             n_modes_save=2,
         )
         a.load_and_preprocess()
-        a.perform_dmd()
+        with pytest.warns(DeprecationWarning, match="n_modes_save"):
+            a.perform_dmd()
         omegas[dt] = np.asarray(a.omega)
 
     assert np.allclose(omegas[0.25] / omegas[0.5], 2.0)
@@ -288,7 +290,8 @@ def test_dmd_plot_eigenspectra_refuses_missing_dt():
         n_modes_save=2,
     )
     a.load_and_preprocess()
-    a.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        a.perform_dmd()
     del a.data["dt"]
     with pytest.raises(ValueError, match=r"timestep"):
         a.plot_eigenspectra()
@@ -314,7 +317,8 @@ def _dmd_for_mode_freq():
         n_modes_save=2,
     )
     a.load_and_preprocess()
-    a.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        a.perform_dmd()
     return a
 
 

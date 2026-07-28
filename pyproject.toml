@@ -55,9 +55,11 @@ dependencies = [
     # >=0.2.0: fftkit 0.1.0's `gpu` extra resolved to the source-only `cupy`
     # sdist, so `openmodalpy[gpu]` triggered a local CUDA toolkit compile
     # instead of installing a wheel. 0.2.0 points it at `cupy-cuda12x`.
-    # openmodalpy is compatible with both releases -- its two FFT call sites
-    # pass axis=0 explicitly, so 0.2.0's axis default change does not reach
-    # them (verified: full suite, 94 passed, no AxisDefaultWarning).
+    # openmodalpy is compatible with later releases: its two FFT call sites
+    # pass axis=0 explicitly, so fftkit's axis-default change does not reach
+    # them. Locked version is 0.4.0; the suite (220 tests) runs with
+    # filterwarnings=error, and tests/test_fft_axis_default.py asserts no
+    # AxisDefaultWarning under a full SPOD FFT path.
     "fftkit>=0.2.0",
 ]
 
@@ -137,3 +139,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# Any uncaught warning is a failure. Intentional library notices are asserted
+# with pytest.warns in the tests that trigger them (never blanket-ignored).
+filterwarnings = ["error"]

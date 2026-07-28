@@ -10,6 +10,7 @@ discretization.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from openmodalpy import DMDAnalyzer, PODAnalyzer, SPODAnalyzer
 from openmodalpy.example_data import generate_example_dataset
@@ -61,7 +62,9 @@ def test_taylor_green_dmd_eigenvalue_matches_metadata(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
     recovered = float(np.abs(analyzer.eigenvalues[0]))
     # Rank-1 pure exponential → machine-precision agreement (measured abs err 0.0).
@@ -106,7 +109,8 @@ def test_cylinder_wake_dmd_frequency_matches_metadata(tmp_path):
         figures_dir=tmp_path,
     )
     analyzer.load_and_preprocess()
-    analyzer.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        analyzer.perform_dmd()
 
     # Eigenvalues are ranked |λ| desc; take the first mode with a finite frequency
     # (pure-real mean/decay modes have arg≈0). Do not pick "closest to expected".
@@ -264,7 +268,8 @@ def test_cylinder_wake_dmd_spod_frequency_cross_agreement(tmp_path):
         figures_dir=tmp_path,
     )
     dmd.load_and_preprocess()
-    dmd.perform_dmd()
+    with pytest.warns(DeprecationWarning, match="n_modes_save"):
+        dmd.perform_dmd()
     f_dmd = None
     for lam in dmd.eigenvalues:
         f = float(np.abs(np.angle(lam)) / (2.0 * np.pi * dt))
