@@ -5,8 +5,9 @@ import pytest
 from openmodalpy import BSMDAnalyzer
 
 
-def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True):
+def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True, max_qhat_gb=None):
     """Helper to build a BSMDAnalyzer with synthetic data."""
+    np.random.seed(20)
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
     data = {
@@ -18,6 +19,9 @@ def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True):
         'Ny': Ny,
         'Ns': Ns,
     }
+    kwargs = {}
+    if max_qhat_gb is not None:
+        kwargs["max_qhat_gb"] = max_qhat_gb
     analyzer = BSMDAnalyzer(
         file_path='dummy.h5',
         nfft=nfft,
@@ -28,6 +32,7 @@ def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True):
         spatial_weight_type='uniform',
         use_static_triads=use_static,
         static_triads=triads,
+        **kwargs,
     )
     analyzer.load_and_preprocess()
     analyzer.compute_fft_blocks()
@@ -141,34 +146,15 @@ def test_bispectral_correlation_uses_all_three_frequencies(tmp_path):
 def test_disk_backed_qhat_matches_ram(tmp_path):
     """Disk-backed mode (max_qhat_gb=0) produces identical results to RAM mode."""
     triads = [(1, -1, 0), (2, -2, 0), (1, 1, 2), (0, 0, 0)]
-    np.random.seed(42)
 
-    # RAM mode (default)
+    # RAM mode (default) — helper seeds so both sides share identical data
     ram = _make_analyzer(tmp_path / "ram", triads=triads, nfft=8, Ns=24)
     ram._perform_static_bsmd_core()
 
     # Disk-backed mode: max_qhat_gb=0 forces offload on any qhat
-    np.random.seed(42)
-    Nspace = 4
-    Nx, Ny = 2, 2
-    data = {
-        'q': np.random.randn(24, Nspace),
-        'x': np.linspace(0, 1, Nx),
-        'y': np.linspace(0, 1, Ny),
-        'dt': 1.0, 'Nx': Nx, 'Ny': Ny, 'Ns': 24,
-    }
     disk_dir = tmp_path / "disk"
     disk_dir.mkdir()
-    disk = BSMDAnalyzer(
-        file_path='dummy.h5', nfft=8, overlap=0.0,
-        results_dir=disk_dir, figures_dir=disk_dir,
-        data_loader=lambda _: data,
-        spatial_weight_type='uniform',
-        use_static_triads=True, static_triads=triads,
-        max_qhat_gb=0,  # force disk-backed
-    )
-    disk.load_and_preprocess()
-    disk.compute_fft_blocks()
+    disk = _make_analyzer(disk_dir, triads=triads, nfft=8, Ns=24, max_qhat_gb=0)
     assert disk._qhat_on_disk, "Expected disk-backed mode with max_qhat_gb=0"
 
     disk._perform_static_bsmd_core()

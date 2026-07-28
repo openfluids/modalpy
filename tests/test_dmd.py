@@ -59,6 +59,7 @@ def test_perform_dmd_simple():
 
 
 def test_plot_eigenspectra_stem_compat(monkeypatch, tmp_path):
+    np.random.seed(10)
     data = {
         'q': np.random.randn(8, 4),
         'x': np.linspace(0, 1, 2),
@@ -235,6 +236,7 @@ def _make_analyzer(q, n_modes_save=None, rank=None):
 
 def test_delay_embed_shape():
     """_delay_embed produces the correct Hankel matrix dimensions."""
+    np.random.seed(11)
     X = np.random.randn(3, 10)
     d = 4
     Xd = _delay_embed(X, d)
@@ -243,6 +245,7 @@ def test_delay_embed_shape():
 
 def test_delay_embed_d1_identity():
     """With d=1, _delay_embed returns the input unchanged."""
+    np.random.seed(12)
     X = np.random.randn(5, 8)
     Xd = _delay_embed(X, 1)
     np.testing.assert_array_equal(Xd, X)
@@ -485,6 +488,7 @@ def test_hodmd_save_load_roundtrip(tmp_path):
 
 def test_hodmd_plot_modes_uses_2d_slice(monkeypatch, tmp_path):
     """Delay-embedded DMD modes should be visualized as 2D maps, not 1D lines."""
+    np.random.seed(13)
     nx, ny = 4, 3
     n_space = nx * ny
     q = np.random.randn(40, n_space)

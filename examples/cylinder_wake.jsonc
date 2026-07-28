@@ -12,7 +12,8 @@
       "params": {
         "Nx": 100,
         "Ny": 50,
-        "Nt": 500
+        "Nt": 500,
+        "seed": 42
       }
     },
     "spatial_weight_type": "uniform",

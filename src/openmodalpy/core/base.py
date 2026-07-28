@@ -39,15 +39,24 @@ except ImportError:
     PARALLEL_AVAILABLE = False
 
 
-def compute_reduced_svd(X: np.ndarray, rank: int):
+def compute_reduced_svd(X: np.ndarray, rank: int, v0_seed: int = 0):
     """Return leading *rank* singular triplets, using truncated SVD for large matrices.
 
     Falls back to ``np.linalg.svd`` when the matrix is small enough that
     dense SVD is faster and more numerically stable than ARPACK.
+
+    The ``min_dim >= 256`` threshold exists because ARPACK (via ``svds``) is only
+    faster for large matrices; below it we use dense SVD. Results differ across
+    this threshold by design (different algorithms) — do not remove it without a
+    separate review of numerical contracts that depend on it.
     """
     min_dim = min(X.shape)
+    # ARPACK for large matrices only; dense SVD below 256 is faster/stabler.
+    # Crossing this threshold changes the algorithm, so numbers will differ.
     if rank < min_dim and min_dim >= 256:
-        u, s, vh = svds(X, k=rank)
+        # Local deterministic start vector — never reseed the caller's global RNG.
+        v0 = np.random.default_rng(v0_seed).standard_normal(min_dim)
+        u, s, vh = svds(X, k=rank, v0=v0)
         order = np.argsort(s)[::-1]
         return u[:, order], s[order], vh[order, :]
     return np.linalg.svd(X, full_matrices=False)
@@ -730,6 +739,7 @@ def generate_dummy_data_like_jetles(
     f2: float = 2.0,
     noise_level: float = 0.05,
     save_mat: bool = False,
+    seed: int = 0,
 ) -> str:
     """Create a small JetLES-like dataset with simple coherent content.
 
@@ -757,6 +767,8 @@ def generate_dummy_data_like_jetles(
         If ``True`` the file is created with ``.mat`` extension, otherwise an
         HDF5 ``.h5`` file is created.  The function does not require SciPy and
         always uses ``h5py`` for writing.
+    seed : int, optional
+        Seed for the local noise RNG. Same seed yields identical arrays.
     Returns
     -------
     str
@@ -783,7 +795,8 @@ def generate_dummy_data_like_jetles(
         + 0.5 * np.sin(2 * np.pi * f2 * t)[:, None, None] * mode2[None, :, :]
     )
 
-    noise = noise_level * np.random.randn(Ns, Nx, Ny)
+    rng = np.random.default_rng(seed)
+    noise = noise_level * rng.standard_normal((Ns, Nx, Ny))
     p = np.transpose(signal + noise, (1, 2, 0))  # (Nx, Ny, Ns)
 
     with h5py.File(output_path, "w") as f:
@@ -1314,6 +1327,8 @@ class BaseAnalyzer:
             "Nz": self.data.get("Nz", 1),
             "spatial_weight_type": self.spatial_weight_type,
         }
+        if "seed" in self.data:
+            meta["data_seed"] = self.data["seed"]
         for attr in ["window_type", "window_norm", "blockwise_mean", "normvar"]:
             if hasattr(self, attr):
                 meta[attr] = getattr(self, attr)

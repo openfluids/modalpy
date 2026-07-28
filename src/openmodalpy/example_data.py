@@ -138,6 +138,7 @@ def generate_cylinder_wake(
         "Ny": Ny,
         "Nz": 1,
         "Ns": Nt,
+        "seed": seed,
         "metadata": {
             "name": "Cylinder Wake",
             "Re": Re,

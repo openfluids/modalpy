@@ -218,6 +218,7 @@ class TestSTPODValidation:
 
     def test_embedding_dim_too_small_raises(self):
         """embedding_dim < 2 should raise ValueError."""
+        np.random.seed(30)
         data = {
             "q": np.random.randn(20, 10),
             "x": np.arange(10),
@@ -241,6 +242,7 @@ class TestSTPODValidation:
 
     def test_embedding_dim_too_large_raises(self):
         """embedding_dim >= Ns should raise ValueError."""
+        np.random.seed(31)
         Ns = 10
         data = {
             "q": np.random.randn(Ns, 5),

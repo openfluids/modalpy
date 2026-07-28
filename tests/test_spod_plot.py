@@ -5,6 +5,7 @@ from openmodalpy import SPODAnalyzer
 
 
 def test_plot_eigenvalues_v2(tmp_path):
+    np.random.seed(0)
     data = {
         "q": np.random.randn(8, 4),
         "x": np.linspace(0, 1, 2),
@@ -32,6 +33,7 @@ def test_plot_eigenvalues_v2(tmp_path):
 
 
 def test_plot_modes_and_timecoeffs(tmp_path):
+    np.random.seed(1)
     data = {
         "q": np.random.randn(8, 4),
         "x": np.linspace(0, 1, 2),
@@ -65,6 +67,7 @@ def test_plot_modes_and_timecoeffs(tmp_path):
 
 
 def test_plot_reconstruction_error(tmp_path):
+    np.random.seed(2)
     data = {
         "q": np.random.randn(8, 4),
         "x": np.linspace(0, 1, 2),
@@ -95,6 +98,7 @@ def test_plot_reconstruction_error(tmp_path):
 
 
 def test_save_results_records_spod_contract(tmp_path):
+    np.random.seed(3)
     data = {
         "q": np.random.randn(8, 4),
         "x": np.linspace(0, 1, 2),

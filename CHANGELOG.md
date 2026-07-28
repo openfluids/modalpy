@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- ARPACK-path SVD (`compute_reduced_svd` with `min_dim >= 256`) is bit-reproducible
+  via a deterministic local start vector. Of the synthetic generators, only the
+  cylinder wake accepts a `seed` and records it into result metadata as
+  `data_seed`; the JetLES-like dummy generator accepts a `seed` for its noise RNG
+  but does not surface it; `double_gyre` and `taylor_green` are deterministic and
+  take no seed. Tests reseed NumPy from `OMPY_TEST_RNG_JITTER` so collection
+  order cannot leak unseeded draws.
+
 ### Changed
 - DMD operator rank is now a separate constructor/`CaseSpec` parameter `rank`.
   With an **explicit** `rank`, `n_modes_save` only bounds how many modes are kept

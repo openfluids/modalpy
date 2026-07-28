@@ -676,6 +676,7 @@ def test_heavy(tmp_path):
 
     # Time signals at different frequencies
     f1, f2 = 2.0, 8.0  # Hz
+    np.random.seed(43)
     a1 = np.sin(2 * np.pi * f1 * t_jet) + 0.3 * np.random.randn(Ns_jet)
     a2 = 0.5 * np.sin(2 * np.pi * f2 * t_jet) + 0.2 * np.random.randn(Ns_jet)
 
