@@ -127,3 +127,49 @@ def test_save_results_records_spod_contract(tmp_path):
         assert bool(handle.attrs["uses_mean_subtraction"])
         assert bool(handle.attrs["uses_spatial_metric_in_second_order_operator"])
         assert handle.attrs["spectral_estimator"] == "welch_block_average"
+
+
+def test_spod_save_load_roundtrip_arrays(tmp_path):
+    """SPOD save_results() → load_results() restores arrays to machine precision.
+
+    Note: save_results takes no filename; load_results uses the same auto-name.
+    """
+    rng = np.random.default_rng(11)
+    data = {
+        "q": rng.standard_normal((8, 4)),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": 8,
+    }
+    analyzer = SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=4,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    analyzer.perform_spod()
+    analyzer.save_results()
+
+    reloaded = SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=4,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    reloaded.load_results()
+
+    np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+    np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
+    np.testing.assert_array_equal(reloaded.freq, analyzer.freq)
+    np.testing.assert_array_equal(reloaded.St, analyzer.St)

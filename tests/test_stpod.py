@@ -212,6 +212,81 @@ class TestSTPODBasic:
             assert handle.attrs["eigenvalue_normalization"] == "sigma_squared_over_n_hankel_cols"
             assert not bool(handle.attrs["is_full_spacetime_pod"])
 
+    def test_stpod_save_load_roundtrip_arrays(self, tmp_path):
+        """ST-POD save → load restores modes, eigenvalues, coefficients exactly."""
+        rng = np.random.default_rng(41)
+        Ns, Nx, Ny = 20, 4, 3
+        Nspace = Nx * Ny
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.linspace(0, 1, Nx),
+            "y": np.linspace(0, 1, Ny),
+            "dt": 0.1,
+            "Nx": Nx,
+            "Ny": Ny,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_roundtrip",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+        analyzer.save_results("stpod_roundtrip.hdf5")
+
+        reloaded = STPODAnalyzer(
+            file_path="test_stpod_roundtrip",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        reloaded.load_results("stpod_roundtrip.hdf5")
+
+        np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
+        np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+        np.testing.assert_array_equal(
+            reloaded.time_coefficients, analyzer.time_coefficients
+        )
+
+    def test_plot_spacetime_mode_writes_file(self, tmp_path):
+        """Smoke: plot_spacetime_mode produces a PNG for a 2-D field."""
+        rng = np.random.default_rng(42)
+        Ns, Nx, Ny = 24, 5, 4
+        Nspace = Nx * Ny
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.linspace(0, 1, Nx),
+            "y": np.linspace(0, 1, Ny),
+            "dt": 0.1,
+            "Nx": Nx,
+            "Ny": Ny,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_spacetime",
+            embedding_dim=4,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+        analyzer.plot_spacetime_mode(mode_idx=0, n_delays_show=2)
+
+        expected = tmp_path / "test_stpod_spacetime_stpod_spacetime_mode1.png"
+        assert expected.is_file()
+        assert expected.stat().st_size > 0
+
 
 class TestSTPODValidation:
     """Validation tests for ST-POD parameters."""

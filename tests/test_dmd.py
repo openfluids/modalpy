@@ -426,6 +426,28 @@ def test_load_results_restores_variant_metadata(tmp_path):
     assert meta["dmd_delays"] == 3
 
 
+def test_dmd_save_load_roundtrip_arrays(tmp_path):
+    """DMD save → load restores eigenvalues, modes, coefficients, amplitudes exactly."""
+    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
+    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
+
+    analyzer = _make_analyzer(q, n_modes_save=2)
+    analyzer.results_dir = tmp_path
+    analyzer.perform_dmd()
+    analyzer.save_results("dmd_array_roundtrip.hdf5")
+
+    reloaded = _make_analyzer(q, n_modes_save=2)
+    reloaded.results_dir = tmp_path
+    reloaded.load_results("dmd_array_roundtrip.hdf5")
+
+    np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+    np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
+    np.testing.assert_array_equal(
+        reloaded.time_coefficients, analyzer.time_coefficients
+    )
+    np.testing.assert_array_equal(reloaded.amplitudes, analyzer.amplitudes)
+
+
 # ---------------------------------------------------------------------------
 # HODMD / TLS-HODMD named variant metadata
 # ---------------------------------------------------------------------------

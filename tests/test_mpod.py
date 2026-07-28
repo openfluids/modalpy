@@ -178,3 +178,60 @@ def test_mpod_save_results_records_band_metadata(tmp_path):
         assert handle.attrs["filter_kind"] == "rectangular"
         np.testing.assert_allclose(handle.attrs["band_edges_hz"], np.array([0.0, 2.0, 5.0]))
         np.testing.assert_array_equal(handle.attrs["mode_band_indices"], analyzer.mode_band_indices)
+
+
+def test_mpod_save_load_roundtrip_arrays(tmp_path):
+    """mPOD inherits PODAnalyzer.save_results; load_results restores arrays + band attrs.
+
+    Note: mPOD does not define its own save_results — it uses POD's. That path
+    still writes modes/eigenvalues/time_coefficients and algorithm metadata, so
+    a full round-trip is possible (contrary to the goal-file expectation that
+    only the base-class stub was available).
+    """
+    data = _make_uniform_data(
+        np.array(
+            [
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+                [1.0, 0.0],
+                [0.0, 1.0],
+            ],
+            dtype=float,
+        ),
+        dt=0.1,
+    )
+    analyzer = MPODAnalyzer(
+        file_path="dummy",
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+        band_edges=[0.0, 2.0, 5.0],
+        filter_kind="rectangular",
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_mpod()
+    analyzer.save_results("mpod_roundtrip.hdf5")
+
+    reloaded = MPODAnalyzer(
+        file_path="dummy",
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+        band_edges=[0.0, 2.0, 5.0],
+        filter_kind="rectangular",
+    )
+    reloaded.load_results("mpod_roundtrip.hdf5")
+
+    np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
+    np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+    np.testing.assert_array_equal(
+        reloaded.time_coefficients, analyzer.time_coefficients
+    )
+    np.testing.assert_array_equal(reloaded.mode_band_indices, analyzer.mode_band_indices)
+    np.testing.assert_array_equal(reloaded.band_mode_counts, analyzer.band_mode_counts)

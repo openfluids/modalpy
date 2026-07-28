@@ -257,14 +257,15 @@ def test_check_temporal_coefficient_orthogonality_empty(small_pod_field, tmp_pat
     assert not analyzer.check_temporal_coefficient_orthogonality()
 
 
-def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_path):
+def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_path, capsys):
     """Both POD kernels must agree on the same active field.
 
     Spatial branch: Ns >= Nspace (small_pod_field is built that way).
     Temporal branch: pad zero spatial columns so Ns < Nspace while leaving the
     active columns identical — zero columns do not change the Gram spectrum.
-    Branch taken is pinned via the same predicate as pod.py:206
-    (`use_temporal_kernel = num_snapshots < num_space_points`).
+    Branch taken is pinned by capturing pod.py's own stdout messages
+    ("Using temporal kernel:" / "Using spatial kernel:"), not by re-deriving
+    the Ns < Nspace predicate in the test.
 
     Field is analytically rank-2, so n_modes_save=2 keeps both branches on the
     energetic subspace (higher modes are pure numerical noise).
@@ -281,12 +282,15 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
     }
     Ns_s = data_spatial["Ns"]
     Nspace_s = data_spatial["Nx"]
-    use_temporal_kernel = Ns_s < Nspace_s
-    assert use_temporal_kernel is False
+    assert Ns_s >= Nspace_s  # fixture setup for the spatial case
 
     analyzer_spatial = _make_pod_analyzer(data_spatial, tmp_path / "spatial", n_modes_save=n_modes)
     analyzer_spatial.load_and_preprocess()
+    capsys.readouterr()  # drop load noise
     analyzer_spatial.perform_pod()
+    spatial_out = capsys.readouterr().out
+    assert "Using spatial kernel:" in spatial_out
+    assert "Using temporal kernel:" not in spatial_out
 
     # Temporal-kernel case: same active q, zero-padded in space until Ns < Nspace
     n_pad = Ns_s - Nspace_s + 1  # guarantees Ns < Nspace_padded
@@ -301,12 +305,15 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
         "Ny": 1,
         "Ns": Ns_s,
     }
-    use_temporal_kernel = data_temporal["Ns"] < data_temporal["Nx"]
-    assert use_temporal_kernel is True
+    assert data_temporal["Ns"] < data_temporal["Nx"]
 
     analyzer_temporal = _make_pod_analyzer(data_temporal, tmp_path / "temporal", n_modes_save=n_modes)
     analyzer_temporal.load_and_preprocess()
+    capsys.readouterr()
     analyzer_temporal.perform_pod()
+    temporal_out = capsys.readouterr().out
+    assert "Using temporal kernel:" in temporal_out
+    assert "Using spatial kernel:" not in temporal_out
 
     np.testing.assert_allclose(
         analyzer_spatial.eigenvalues,
@@ -320,3 +327,18 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
         atol=1e-10,
         rtol=0.0,
     )
+
+
+def test_pod_save_load_roundtrip_arrays(small_pod_field, tmp_path):
+    """POD save → load restores modes, eigenvalues, and time coefficients exactly."""
+    analyzer = _make_pod_analyzer(small_pod_field, tmp_path, n_modes_save=2)
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+    analyzer.save_results("pod_roundtrip.hdf5")
+
+    reloaded = _make_pod_analyzer(small_pod_field, tmp_path, n_modes_save=2)
+    reloaded.load_results("pod_roundtrip.hdf5")
+
+    np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
+    np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+    np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)

@@ -5,7 +5,17 @@ import pytest
 from openmodalpy import BSMDAnalyzer
 
 
-def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True, max_qhat_gb=None):
+def _make_analyzer(
+    tmp_path,
+    triads,
+    nfft=4,
+    Ns=10,
+    Nspace=4,
+    use_static=True,
+    max_qhat_gb=None,
+    use_parallel=False,
+    file_path="dummy.h5",
+):
     """Helper to build a BSMDAnalyzer with synthetic data."""
     np.random.seed(20)
     Nx = int(np.sqrt(Nspace))
@@ -23,7 +33,7 @@ def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True, m
     if max_qhat_gb is not None:
         kwargs["max_qhat_gb"] = max_qhat_gb
     analyzer = BSMDAnalyzer(
-        file_path='dummy.h5',
+        file_path=file_path,
         nfft=nfft,
         overlap=0.0,
         results_dir=tmp_path,
@@ -32,6 +42,7 @@ def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True, m
         spatial_weight_type='uniform',
         use_static_triads=use_static,
         static_triads=triads,
+        use_parallel=use_parallel,
         **kwargs,
     )
     analyzer.load_and_preprocess()
@@ -89,9 +100,86 @@ def test_one_bin_past_nyquist_raises(tmp_path):
 
 def test_dynamic_triad_selection_raises(tmp_path):
     """Dynamic triad selection is unimplemented and must say so, not return empty arrays."""
-    analyzer = _make_analyzer(tmp_path, triads=[], nfft=8, Ns=32, use_static=False)
+    analyzer = _make_analyzer(
+        tmp_path, triads=[], nfft=8, Ns=32, use_static=False
+    )
+    # Pin the public dispatch: use_static_triads=False must raise, not empty-return.
+    assert analyzer.use_static_triads is False
     with pytest.raises(NotImplementedError):
         analyzer.perform_bsmd()
+
+
+def test_perform_bsmd_static_path_shapes_and_nontrivial(tmp_path):
+    """Public perform_bsmd() static-triad path yields shaped, non-trivial results."""
+    triads = [(0, 0, 0), (1, -1, 0), (1, 1, 2)]
+    analyzer = _make_analyzer(tmp_path, triads=triads, nfft=8, Ns=24, Nspace=4)
+    analyzer.perform_bsmd()
+
+    n_triads = len(triads)
+    n_space = 4
+    assert analyzer.modes1.shape == (n_triads, n_space)
+    assert analyzer.modes2.shape == (n_triads, n_space)
+    assert analyzer.eigenvalues.shape == (n_triads,)
+
+    assert np.all(np.isfinite(analyzer.eigenvalues))
+    assert np.all(np.isfinite(analyzer.modes1))
+    assert np.all(np.isfinite(analyzer.modes2))
+    assert not np.allclose(analyzer.modes1, 0.0)
+    assert not np.allclose(analyzer.modes2, 0.0)
+    assert not np.allclose(analyzer.eigenvalues, 0.0)
+
+    # energy_map is a sparse (p1,p2) grid: unfilled slots are NaN by design;
+    # occupied triad slots must be finite and not identically zero.
+    assert analyzer.energy_map.size > 0
+    finite = np.isfinite(analyzer.energy_map)
+    assert np.any(finite), "energy map is all NaN (no triad landed)"
+    assert not np.allclose(analyzer.energy_map[finite], 0.0)
+
+
+def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, capsys):
+    """use_parallel=True must match the serial perform_bsmd path on the same data.
+
+    Branch taken is pinned by capturing bsmd.py's own stdout message
+    ("Thread-parallel BSMD ..."), not by re-deriving the use_parallel flag.
+    """
+    triads = [(0, 0, 0), (1, -1, 0), (1, 1, 2)]
+    serial = _make_analyzer(
+        tmp_path / "serial",
+        triads=triads,
+        nfft=8,
+        Ns=24,
+        Nspace=4,
+        use_parallel=False,
+        file_path="serial.h5",
+    )
+    capsys.readouterr()  # drop load / FFT noise
+    serial.perform_bsmd()
+    serial_out = capsys.readouterr().out
+    assert "Thread-parallel BSMD" not in serial_out
+
+    parallel = _make_analyzer(
+        tmp_path / "parallel",
+        triads=triads,
+        nfft=8,
+        Ns=24,
+        Nspace=4,
+        use_parallel=True,
+        file_path="parallel.h5",
+    )
+    capsys.readouterr()  # drop load / FFT noise
+    parallel.perform_bsmd()
+    parallel_out = capsys.readouterr().out
+    assert "Thread-parallel BSMD" in parallel_out
+
+    np.testing.assert_allclose(
+        parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        np.abs(parallel.modes2), np.abs(serial.modes2), rtol=0, atol=1e-12
+    )
 
 
 def test_energy_map_keeps_triads_beyond_the_default_range(tmp_path):
@@ -220,6 +308,22 @@ def test_load_results_roundtrip_accepts_current_stamp(tmp_path):
     reloaded = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
     reloaded.load_results("bsmd_roundtrip.hdf5")
     np.testing.assert_allclose(reloaded.eigenvalues, analyzer.eigenvalues, rtol=1e-12)
+
+
+def test_bsmd_save_load_roundtrip_arrays(tmp_path):
+    """BSMD save → load restores eigenvalues and modes to machine precision."""
+    triads = [(0, 0, 0), (1, -1, 0), (1, 1, 2)]
+    analyzer = _make_analyzer(tmp_path, triads=triads, nfft=8, Ns=24, Nspace=4)
+    analyzer.perform_bsmd()
+    analyzer.save_results("bsmd_array_roundtrip.hdf5")
+
+    reloaded = _make_analyzer(tmp_path, triads=triads, nfft=8, Ns=24, Nspace=4)
+    reloaded.load_results("bsmd_array_roundtrip.hdf5")
+
+    np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
+    np.testing.assert_array_equal(reloaded.modes1, analyzer.modes1)
+    np.testing.assert_array_equal(reloaded.modes2, analyzer.modes2)
+    np.testing.assert_array_equal(reloaded.triads, analyzer.triads)
 
 
 def test_load_results_rejects_prefix_unconjugated_file(tmp_path):
