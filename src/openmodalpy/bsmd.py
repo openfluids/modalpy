@@ -481,13 +481,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         if self.use_static_triads:
             self._perform_static_bsmd_core()
         else:
-            # self._perform_dynamic_bsmd_core() # This would be the actual dynamic triad computation
-            print("Dynamic BSMD core logic not yet fully implemented in this refactor.")
-            # For now, just set empty results to avoid errors in subsequent steps
-            self.modes1 = np.array([])
-            self.modes2 = np.array([])
-            self.eigenvalues = np.array([])
-            self.triads = np.array([])
+            raise NotImplementedError("Dynamic BSMD is not yet implemented.")
 
         print(f"BSMD analysis completed in {time.time() - start_time:.2f} seconds.")
 
@@ -615,6 +609,19 @@ class BSMDAnalyzer(BaseAnalyzer):
             self.triads = np.array([])
             return
 
+        # Reject triads outside the rfft bin range before any analysis.
+        # rfft stores bins 0..nfft//2 (nfft//2 + 1 bins); |p| > nfft//2 is unanalysable.
+        max_bin = self.nfft // 2
+        n_freq_bins = max_bin + 1
+        for triad in self.static_triads_list:
+            for p in triad:
+                if abs(int(p)) > max_bin:
+                    raise ValueError(
+                        f"Triad component p={int(p)} is outside the rfft bin range "
+                        f"(|p| must be <= nfft//2 = {max_bin}; "
+                        f"{n_freq_bins} bins for nfft={self.nfft})"
+                    )
+
         num_triads = len(self.static_triads_list)
         Nspace = self._n_spatial
         print(f"Using {num_triads} statically defined triads ({Nspace} spatial points).")
@@ -681,11 +688,19 @@ class BSMDAnalyzer(BaseAnalyzer):
         raise NotImplementedError("Dynamic BSMD is not yet implemented.")
 
     def _compute_energy_map(self):
-        """Return a 2D map of eigenvalue magnitudes indexed by (p1,p2)."""
+        """Return a 2D map of eigenvalue magnitudes indexed by (p1,p2).
+
+        Grid half-width is derived from the triads actually analysed
+        (``p_max = max |p1|, |p2|``), so every analysed triad lands on the map.
+        Default ``ALL_TRIADS`` (|p| <= 8) still yields a 17x17 grid.
+        """
         if self.eigenvalues.size == 0:
             return np.array([])
 
-        offset = 8
+        p_max = 0
+        for p1, p2, _p3 in self.triads:
+            p_max = max(p_max, abs(int(p1)), abs(int(p2)))
+        offset = p_max
         size = 2 * offset + 1
         grid = np.full((size, size), np.nan)
         for val, (p1, p2, _p3) in zip(np.abs(self.eigenvalues), self.triads):
@@ -992,7 +1007,8 @@ class BSMDAnalyzer(BaseAnalyzer):
             print("No energy map available. Run perform_bsmd() first.")
             return
 
-        extent = (-8.5, 8.5, -8.5, 8.5)
+        offset = (self.energy_map.shape[0] - 1) // 2
+        extent = (-offset - 0.5, offset + 0.5, -offset - 0.5, offset + 0.5)
         fig, ax = plt.subplots(figsize=(6, 5))
         im = ax.imshow(
             self.energy_map,

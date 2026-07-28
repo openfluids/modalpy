@@ -64,6 +64,13 @@ They differ only in the **operator problem** solved on the lifted data:
 - Evolution-fit (SVD-based regression on paired snapshots)
 - Triadic interaction (cross-bispectral coupling optimization)
 
+**Limitation — uniform W is not a domain integral.** With
+`spatial_weight_type="uniform"`, W is the all-ones vector, not cell volumes or
+grid spacing. Reported "energy" is therefore a **sum over mesh points**, not a
+domain integral, and is **mesh-resolution dependent**: refining the grid changes
+the numerical value even when the continuum field is unchanged. Comparing
+energies across resolutions requires care (or explicit cell-volume weights).
+
 ---
 
 ## Data Contract
@@ -97,6 +104,11 @@ Every analyzer expects a Python dict with these keys:
 | `"uniform"` | Cartesian grids, single-component data |
 | `"polar"` | Cylindrical grids (jet nozzle coordinates) |
 | `"auto"` | Auto-detect from data/filename |
+
+`"uniform"` currently returns ones (`calculate_uniform_weights`); it does **not**
+apply Δx·Δy cell volumes. Polar weights do use radial spacing. Until cell-volume
+weights exist for Cartesian grids, treat POD/SPOD eigenvalues under uniform W as
+mesh-dependent sums, not resolution-invariant energies.
 
 ---
 
@@ -142,6 +154,14 @@ mpod.run_analysis()
 - Modes live in the same space as POD modes but are scale-separated
 - Reference: Mendez et al. (2019), JFM 870
 
+**Limitation — POD-per-band pool, not Mendez MRA.** Each band is POD'd
+independently; band modes are concatenated and re-sorted by eigenvalue with no
+joint W-orthonormalization. Modes from different bands are not orthonormal
+across bands (`Φᵀ W Φ ≠ I` for the pooled set): cross-band inner products are
+generally nonzero. Within a single band, POD orthonormality still holds. This is
+a simplification relative to the Mendez et al. multiresolution construction; do
+not treat the full mode matrix as a W-orthonormal basis.
+
 ### 3. PSD-POD — Power-Spectral-Density POD
 
 **Implementation:** in `commands.py` (no separate analyzer class)
@@ -175,6 +195,13 @@ spod.run_analysis()
 - Caches FFT blocks in HDF5 for reuse
 - Strouhal normalization via `characteristic_length` and `characteristic_velocity` params
 - Reference: Towne, Schmidt & Colonius (2018), JFM 847
+
+**Limitation — `dst` is a Strouhal step, not a frequency step.** After the
+block FFT, SPOD normalizes by `sqrt(nblocks * dst)` where
+`dst = St[1] - St[0] = df · L / U` (not `df = fs / nfft`). Reported eigenvalues
+therefore **scale with U/L**. With the default L = U = 1 (and with the shipped
+generators), this coincides with a pure frequency-step weight; any other
+characteristic scales silently rescale the energy axis.
 
 ### 5. ST-POD — Delay-Embedded Space-Time POD
 
@@ -249,6 +276,14 @@ bsmd.run_analysis()
 - Uses dominant eigenpair as practical approximation to numerical-radius problem
 - Inspired by [Schmidt's MATLAB BMD](https://github.com/olivertschmidt/bmd)
 - Reference: Schmidt (2020), Nonlinear Dynamics 102
+
+**Limitation — default triad list is `ALL_TRIADS` with |p| ≤ 8.** The shipped
+static triad table only covers frequency-bin indices with absolute value at most
+8. At the default `nfft=128` that is the bottom 12.5% of the rfft spectrum;
+higher-frequency triads are not analysed unless you pass a custom
+`static_triads` list. Triads with any component `|p| > nfft // 2` (outside the
+rfft bin range) raise `ValueError`. Dynamic triad selection
+(`use_static_triads=False`) is not implemented and raises `NotImplementedError`.
 
 ---
 

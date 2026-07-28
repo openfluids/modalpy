@@ -859,7 +859,11 @@ def calculate_polar_weights(x, y, use_parallel=True):
 
 
 def calculate_uniform_weights(x, y, z=None):
-    """Return uniform weights for a Cartesian grid."""
+    """Return uniform weights for a Cartesian grid.
+
+    Returns an all-ones column of length Nx*Ny*Nz. Grid spacing / cell volumes
+    are not applied; callers that need a domain integral must supply their own W.
+    """
     # Support both 1-D and 2-D coordinate arrays
     if x.ndim > 1:
         Nx, Ny = x.shape
@@ -917,7 +921,10 @@ def blocksfft(
     IMPORTANT:
     - This function assumes the FFT backend (numpy, scipy, pyfftw, etc.) does NOT normalize the FFT by default (which is true for standard backends).
     - If you use a backend or option that applies normalization (e.g., norm='ortho'), REMOVE the division by nfft below to avoid double normalization.
-    - For correct SPOD scaling, ensure that dst (frequency resolution) is set as fs / nfft, where fs is the sampling frequency.
+    - SPOD callers pass ``dst`` into ``spod_function`` as a spectral weight. In this
+      codebase ``dst`` is the Strouhal step (``St[1] - St[0] = df * L / U``), not
+      the raw frequency resolution ``df = fs / nfft``. Reported SPOD eigenvalues
+      therefore scale with ``U/L``; with the default L = U = 1 the two coincide.
     ---
     """
     if use_parallel and PARALLEL_AVAILABLE:
@@ -1011,7 +1018,8 @@ def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
     Args:
         qhat (np.ndarray): FFT coefficients for this frequency [space, block].
         nblocks (int): Number of blocks.
-        dst (float): Frequency resolution (delta f).
+        dst (float): Spectral weight used as ``1/sqrt(nblocks * dst)``. Callers in
+            this package pass the Strouhal step (not necessarily ``df = fs/nfft``).
         w (np.ndarray): Spatial integration weights [space, 1].
         return_psi (bool): If True, also return psi (time coefficients).
     Returns:
@@ -1031,6 +1039,7 @@ def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
         )
 
     # Normalize FFT coefficients to get fluctuation matrix X_f for this frequency f.
+    # dst is whatever the caller supplied (Strouhal step in SPODAnalyzer).
     x = qhat / np.sqrt(nblocks * dst)
     w_col = _flatten_weights(w, qhat.shape[0])
     # Compute the weighted cross-spectral density (CSD) matrix M_f.

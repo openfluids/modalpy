@@ -5,7 +5,7 @@ import pytest
 from openmodalpy import BSMDAnalyzer
 
 
-def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4):
+def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4, use_static=True):
     """Helper to build a BSMDAnalyzer with synthetic data."""
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
@@ -26,7 +26,7 @@ def _make_analyzer(tmp_path, triads, nfft=4, Ns=10, Nspace=4):
         figures_dir=tmp_path,
         data_loader=lambda _: data,
         spatial_weight_type='uniform',
-        use_static_triads=True,
+        use_static_triads=use_static,
         static_triads=triads,
     )
     analyzer.load_and_preprocess()
@@ -60,12 +60,48 @@ def test_negative_frequency_conjugate_symmetry(tmp_path):
     assert not np.isnan(analyzer.eigenvalues[0])
 
 
-def test_out_of_range_index_skipped(tmp_path):
-    """Triads referencing bins beyond qhat range produce NaN, not a crash."""
+def test_out_of_range_index_raises(tmp_path):
+    """Triads with |p| > nfft//2 are unanalysable and raise ValueError."""
     analyzer = _make_analyzer(tmp_path, triads=[(99, -99, 0)], nfft=4, Ns=10)
-    # nfft=4 → only 3 frequency bins (0,1,2). Index 99 is out of range.
+    # nfft=4 → rfft bins 0..2; |p| = 99 exceeds nfft//2 = 2.
+    with pytest.raises(ValueError, match=r"p=99"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_nyquist_index_is_accepted(tmp_path):
+    """|p| == nfft//2 is the last real rfft bin and must be analysed, not rejected."""
+    analyzer = _make_analyzer(tmp_path, triads=[(4, -4, 0)], nfft=8, Ns=32)
     analyzer._perform_static_bsmd_core()
-    assert np.isnan(np.abs(analyzer.eigenvalues[0]))
+    assert analyzer.eigenvalues.shape == (1,)
+
+
+def test_one_bin_past_nyquist_raises(tmp_path):
+    """|p| == nfft//2 + 1 is the first unanalysable bin; the bound is exclusive there."""
+    analyzer = _make_analyzer(tmp_path, triads=[(5, -5, 0)], nfft=8, Ns=32)
+    with pytest.raises(ValueError, match=r"p=5"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_dynamic_triad_selection_raises(tmp_path):
+    """Dynamic triad selection is unimplemented and must say so, not return empty arrays."""
+    analyzer = _make_analyzer(tmp_path, triads=[], nfft=8, Ns=32, use_static=False)
+    with pytest.raises(NotImplementedError):
+        analyzer.perform_bsmd()
+
+
+def test_energy_map_keeps_triads_beyond_the_default_range(tmp_path):
+    """A triad inside the rfft range but outside |p| <= 8 must still reach the energy map.
+
+    The map used to be a fixed 17x17 grid centred on |p| = 8, so a valid triad at
+    p = 12 (nfft = 32 gives 16 usable bins) was analysed and then silently dropped.
+    """
+    analyzer = _make_analyzer(tmp_path, triads=[(12, -12, 0)], nfft=32, Ns=96)
+    analyzer._perform_static_bsmd_core()
+    assert analyzer.eigenvalues.shape == (1,)
+    grid = analyzer.energy_map
+    assert grid.shape == (25, 25), f"grid must span |p| = 12, got {grid.shape}"
+    assert np.count_nonzero(np.isfinite(grid)) == 1, "the analysed triad is missing from the map"
+    assert np.isfinite(grid[12 + 12, -12 + 12])
 
 
 def test_triadic_constraint_violation_skipped(tmp_path):

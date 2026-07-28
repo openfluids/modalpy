@@ -92,6 +92,59 @@ def test_mpod_separates_modes_by_frequency_band():
     assert abs(np.dot(_normalized(high_mode), phi_high)) > 0.95
 
 
+def test_mpod_modes_not_orthonormal_across_bands():
+    """Pooled mPOD modes are not jointly W-orthonormal across bands.
+
+    Implementation is POD-per-band then concatenate/re-sort — no joint
+    orthonormalization. Cross-band entries of Φᵀ W Φ must be materially
+    nonzero so a future fix cannot land silently.
+    """
+    dt = 0.05
+    ns = 200
+    t = np.arange(ns) * dt
+    phi_low = _normalized(np.array([1.0, 0.0, 0.0, 1.0]))
+    phi_high = _normalized(np.array([0.0, 1.0, 1.0, 0.0]))
+    # Overlapping spatial support so independent band PODs are not automatically
+    # orthogonal under the uniform metric.
+    phi_mid = _normalized(np.array([1.0, 1.0, 0.0, 0.0]))
+    q = (
+        np.sin(2 * np.pi * 1.0 * t)[:, None] * phi_low[None, :]
+        + 0.9 * np.sin(2 * np.pi * 3.0 * t)[:, None] * phi_mid[None, :]
+        + 0.7 * np.sin(2 * np.pi * 6.0 * t)[:, None] * phi_high[None, :]
+    )
+    data = _make_uniform_data(q, dt=dt)
+
+    analyzer = MPODAnalyzer(
+        file_path="toy_signal",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=6,
+        band_edges=[0.0, 2.0, 4.5, 8.0],
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_mpod()
+
+    bands = analyzer.mode_band_indices
+    assert len(set(bands.tolist())) >= 2, "need modes from at least two bands"
+
+    W = np.asarray(analyzer.W).reshape(-1)
+    phi = analyzer.modes  # (Nspace, n_modes)
+    gram = phi.T @ (W[:, None] * phi)
+
+    # Collect off-diagonal entries between modes from different bands.
+    cross = []
+    for i in range(phi.shape[1]):
+        for j in range(i + 1, phi.shape[1]):
+            if bands[i] != bands[j]:
+                cross.append(abs(gram[i, j]))
+    assert cross, "no cross-band mode pairs to check"
+    max_cross = max(cross)
+    # Materially nonzero: not a floating-point residual of orthonormality.
+    assert max_cross > 1e-2, (
+        f"expected material cross-band W-inner product, got max |ΦᵀWΦ|_cross = {max_cross}"
+    )
+
+
 def test_mpod_save_results_records_band_metadata(tmp_path):
     data = _make_uniform_data(
         np.array(

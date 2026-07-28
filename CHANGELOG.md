@@ -43,6 +43,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- Four simplifications the code made silently are now written down where a user would
+  look for them. `spatial_weight_type="uniform"` returns ones rather than cell volumes,
+  so reported POD/SPOD energy is a sum over mesh points, not a domain integral, and its
+  numerical value changes when the grid is refined. mPOD decomposes each band
+  independently and then concatenates and re-sorts the modes with no joint
+  orthonormalization, so the pooled mode matrix is not a W-orthonormal basis even though
+  each band's modes are; measured on a three-band case, cross-band inner products reach
+  0.5 while within-band ones sit at 1e-16. SPOD's `dst` is a Strouhal step,
+  `St[1] - St[0] = df·L/U`, not the frequency resolution `fs/nfft`, so the characteristic
+  length and velocity rescale the reported eigenvalues; the two coincide only at the
+  default `L = U = 1`, which is why the shipped generators never revealed it. The default
+  BSMD triad table covers frequency-bin indices up to `|p| = 8`, which at the default
+  `nfft=128` is the bottom 12.5% of the spectrum. A docstring in `core/base.py` that
+  claimed the opposite about `dst` has been corrected. None of the underlying arithmetic
+  changed; only what the project says about it.
+- The bispectral energy map no longer silently discards triads. Its grid was a fixed
+  17×17 centred on `|p| = 8`, so a triad outside that window was computed and then
+  dropped from the map without a word — with `nfft=32`, where 16 bins are available, a
+  triad at `p=12` vanished. The half-width is now derived from the triads actually
+  analysed, and the plot extent follows it. The default triad list still produces the
+  same 17×17 grid with the same values.
+- BSMD now rejects input it cannot analyse instead of returning something plausible.
+  A triad component outside the available rfft bins (`|p| > nfft//2`) raises `ValueError`
+  naming the offending index and the bin count, where it previously produced a NaN
+  eigenvalue; the last real bin, `|p| = nfft//2`, is still accepted. Dynamic triad
+  selection (`use_static_triads=False`) raises `NotImplementedError` instead of printing
+  a notice and returning empty arrays. Note the consequence for small transforms: the
+  default triad table reaches `|p| = 8`, so `nfft < 16` combined with the default triads
+  now raises rather than filling the high-index rows with NaN.
 - The validation suite now enforces its claims. `tests/test_all.py` describes itself as
   validating mathematical correctness against known analytical solutions, but every one
   of its 22 checks reported through a helper that printed a tick and appended to a list;
