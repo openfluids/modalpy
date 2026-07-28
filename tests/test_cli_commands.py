@@ -176,8 +176,10 @@ def test_analyze_from_config_forwards_dmd_variant_options(tmp_path: Path, monkey
     assert captured["perform"] == {"method": "tls", "delays": 4}
     assert init_kwargs["file_path"] == "toy_case"
     assert callable(init_kwargs["data_loader"])
-    assert init_kwargs["results_dir"].endswith("custom_results/dmd_cli")
-    assert init_kwargs["figures_dir"].endswith("custom_figures/dmd_cli")
+    # Compare path components, not a substring: on Windows the separator is "\",
+    # so endswith("custom_results/dmd_cli") fails against a perfectly correct path.
+    assert Path(init_kwargs["results_dir"]).parts[-2:] == ("custom_results", "dmd_cli")
+    assert Path(init_kwargs["figures_dir"]).parts[-2:] == ("custom_figures", "dmd_cli")
     assert outcome.method == "dmd"
     assert outcome.executed is True
 
