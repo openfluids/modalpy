@@ -132,6 +132,8 @@ class PODAnalyzer(BaseAnalyzer):
         self.eigenvalues = np.array([])  # Eigenvalues (lambda)
         self.time_coefficients = np.array([])  # Temporal coefficients (Psi)
         self.temporal_mean = np.array([])  # Temporal mean of the data
+        # Truncated energy / pre-truncation total; set in perform_pod.
+        self.energy_captured_fraction = float("nan")
 
         # Update the analysis type for filenames
         self.analysis_type = "pod"
@@ -247,6 +249,10 @@ class PODAnalyzer(BaseAnalyzer):
         self.eigenvalues = np.real(self.eigenvalues)
         self.time_coefficients = np.real(self.time_coefficients)
 
+        # Capture pre-truncation total before slicing eigenvalues (the ratio
+        # cannot be recovered after truncation).
+        total_energy = float(np.sum(self.eigenvalues))
+
         # Truncate to requested number of modes
         n_available_modes = len(self.eigenvalues)
         if self.n_modes_save > n_available_modes:
@@ -263,20 +269,24 @@ class PODAnalyzer(BaseAnalyzer):
         print(f"POD analysis completed in {end_time - start_time:.2f} seconds.")
         print(f"Computed {self.modes.shape[1]} POD modes.")
 
-        # Print energy summary
-        total_energy = np.sum(self.eigenvalues)
+        # Fraction of pre-truncation energy retained by the saved modes.
         if total_energy > 0:
-            energy_pct = 100.0 * np.sum(self.eigenvalues) / np.sum(self.eigenvalues)
-            print(f"Energy captured by {self.n_modes_save} modes: {energy_pct:.2f}%")
+            self.energy_captured_fraction = float(np.sum(self.eigenvalues) / total_energy)
+            print(f"Energy captured by {self.n_modes_save} modes: {100.0 * self.energy_captured_fraction:.2f}%")
+        else:
+            self.energy_captured_fraction = 0.0
 
     def _get_algorithm_metadata(self) -> dict:
         """Describe the current POD contract."""
-        return {
+        meta = {
             "lift_kind": "identity_centered_snapshots",
             "uses_mean_subtraction": True,
             "uses_spatial_metric_in_second_order_operator": True,
             "eigenvalue_normalization": "snapshot_average",
         }
+        if np.isfinite(self.energy_captured_fraction):
+            meta["energy_captured_fraction"] = float(self.energy_captured_fraction)
+        return meta
 
     def load_results(self, filename=None):
         """Load POD modes, eigenvalues, and time coefficients from an HDF5 file."""

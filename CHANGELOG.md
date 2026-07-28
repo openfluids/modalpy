@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- POD energy-captured report no longer always prints 100%: the fraction is
+  truncated eigenvalue sum over the pre-truncation total, stored as
+  `energy_captured_fraction` on the analyzer and in result metadata.
 - ARPACK-path SVD (`compute_reduced_svd` with `min_dim >= 256`) is bit-reproducible
   via a deterministic local start vector. Of the synthetic generators, only the
   cylinder wake accepts a `seed` and records it into result metadata as

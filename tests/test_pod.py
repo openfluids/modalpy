@@ -363,3 +363,38 @@ def test_pod_save_load_roundtrip_arrays(small_pod_field, tmp_path):
     np.testing.assert_array_equal(reloaded.modes, analyzer.modes)
     np.testing.assert_array_equal(reloaded.eigenvalues, analyzer.eigenvalues)
     np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)
+
+
+def test_pod_energy_captured_fraction_two_truncation_levels(small_pod_field, tmp_path):
+    """Truncated energy over pre-truncation total at two ranks (analytic rank-2).
+
+    Expected ratios are derived from the full spectrum of a full-rank run of the
+    same field — never pasted from a prior printout.
+    """
+    full = _make_pod_analyzer(small_pod_field, tmp_path / "full", n_modes_save=10)
+    full.load_and_preprocess()
+    full.perform_pod()
+    full_eigs = full.eigenvalues.copy()
+    total = float(np.sum(full_eigs))
+    assert total > 0.0
+    # Rank-2 field: only two positive eigenvalues.
+    assert np.count_nonzero(full_eigs > 1e-12) == 2
+
+    one = _make_pod_analyzer(small_pod_field, tmp_path / "one", n_modes_save=1)
+    one.load_and_preprocess()
+    one.perform_pod()
+    expected_one = float(full_eigs[0] / total)
+    assert 0.0 < expected_one < 1.0
+    assert abs(one.energy_captured_fraction - expected_one) < 1e-10
+
+    two = _make_pod_analyzer(small_pod_field, tmp_path / "two", n_modes_save=2)
+    two.load_and_preprocess()
+    two.perform_pod()
+    expected_two = float(np.sum(full_eigs[:2]) / total)
+    assert abs(expected_two - 1.0) < 1e-10
+    assert abs(two.energy_captured_fraction - 1.0) < 1e-10
+
+    one.save_results("pod_energy.hdf5")
+    with h5py.File(tmp_path / "one" / "pod_energy.hdf5", "r") as handle:
+        assert "energy_captured_fraction" in handle.attrs
+        assert abs(float(handle.attrs["energy_captured_fraction"]) - expected_one) < 1e-10
