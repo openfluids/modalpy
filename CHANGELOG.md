@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The three built-in synthetic generators are now checked against the closed-form
+  answers they already carry. `example_data.py` has always returned the double gyre's
+  forcing frequency, the Taylor-Green decay eigenvalue and the cylinder wake's Strouhal
+  number alongside the data, but nothing read them, and two of the three generators were
+  not exercised by any test. Each is now run through the analyzer that should recover its
+  quantity, comparing against the value read from the generator's own metadata rather
+  than a constant copied into the test, so the check follows the generator if its physics
+  changes. Tolerances are computed from the discretization: machine precision for
+  Taylor-Green, where the field is rank-1 in space times a pure exponential and DMD
+  recovers the multiplier exactly; a tenth of the Rayleigh frequency for DMD, which is
+  not bin-limited; half an FFT bin for SPOD, which is. A cross-analyzer check pins that
+  DMD and SPOD agree on the shedding frequency without reference to the metadata.
+
 ### Changed
 - The validation suite now enforces its claims. `tests/test_all.py` describes itself as
   validating mathematical correctness against known analytical solutions, but every one
