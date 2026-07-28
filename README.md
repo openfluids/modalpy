@@ -1,4 +1,4 @@
-# OpenModalPy
+![openmodalpy banner](https://raw.githubusercontent.com/openfluids/openmodalpy/main/assets/readme-banner-v1.jpg)
 
 [![CI](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml/badge.svg)](https://github.com/openfluids/openmodalpy/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/openmodalpy.svg)](https://pypi.org/project/openmodalpy/)
