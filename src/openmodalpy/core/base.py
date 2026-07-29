@@ -1145,7 +1145,7 @@ def require_spatial_metric(weights):
     1e-12, while SPOD and BSMD simply let that cell contribute nothing. What is
     rejected: complex entries, non-finite entries, negative entries, and a
     zero total measure. Single definition, used by the decomposition seam,
-    SPOD (via ``_flatten_weights``) and BSMD.
+    SPOD (via ``_coerce_spatial_weights``) and BSMD.
     """
     weights = np.asarray(weights)
     if np.iscomplexobj(weights):
@@ -1204,11 +1204,6 @@ def _coerce_spatial_weights(w, expected_len):
     return np.asarray(weights, dtype=float)
 
 
-def _flatten_weights(w, expected_len):
-    """Return weights as a column vector matching ``expected_len``."""
-    return _coerce_spatial_weights(w, expected_len).reshape(-1, 1)
-
-
 def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
     """
     Compute SPOD modes and eigenvalues for a single frequency.
@@ -1226,10 +1221,11 @@ def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
             psi (np.ndarray, optional): Time coefficients for this frequency [block, mode].
     """
     if use_parallel and PARALLEL_AVAILABLE:
-        w_col = _flatten_weights(w, qhat.shape[0])
+        # Pass w through unchanged — same as the serial branch. The shared body
+        # coerces and validates once; a pre-flatten here was a second check.
         return spod_single_frequency_optimized(
             qhat,
-            w_col,
+            w,
             nblocks,
             dst,
             return_psi=return_psi,

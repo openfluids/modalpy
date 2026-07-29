@@ -293,6 +293,40 @@ def test_bsmd_rejects_invalid_spatial_metric(tmp_path):
         analyzer._perform_static_bsmd_core()
 
 
+def test_bsmd_rejects_nonfinite_spatial_metric(tmp_path):
+    """NaN and inf weights raise before the eigenproblem runs."""
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24, Nspace=4)
+    w = np.asarray(analyzer.W, dtype=float).copy()
+    w.flat[0] = np.nan
+    analyzer.W = w
+    with pytest.raises(ValueError, match="non-finite"):
+        analyzer._perform_static_bsmd_core()
+
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24, Nspace=4)
+    w = np.asarray(analyzer.W, dtype=float).copy()
+    w.flat[0] = np.inf
+    analyzer.W = w
+    with pytest.raises(ValueError, match="non-finite"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_bsmd_accepts_isolated_zero_weight(tmp_path):
+    """An isolated zero among positive weights is still a valid metric for BSMD.
+
+    That cell contributes nothing to the inner product; the total measure stays
+    positive. Pins this so a later over-strict check cannot reject it.
+    """
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24, Nspace=4)
+    w = np.asarray(analyzer.W, dtype=float).copy().reshape(-1)
+    assert w.size >= 2
+    w[0] = 0.0
+    assert np.sum(w) > 0.0
+    analyzer.W = w.reshape(analyzer.W.shape)
+    analyzer._perform_static_bsmd_core()
+    assert analyzer.eigenvalues.shape == (1,)
+    assert np.all(np.isfinite(analyzer.eigenvalues))
+
+
 def test_bsmd_polar_ny1_zero_measure_raises(tmp_path):
     """Polar weights on a single radial station at r=0 have zero total measure."""
     np.random.seed(20)

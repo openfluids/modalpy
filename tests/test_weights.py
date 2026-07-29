@@ -5,7 +5,6 @@ import pytest
 
 from openmodalpy.core.base import (
     _coerce_spatial_weights,
-    _flatten_weights,
     calculate_polar_weights,
     calculate_uniform_weights,
     require_spatial_metric,
@@ -17,7 +16,7 @@ def test_square_weight_matrix_yields_diagonal():
     """A diagonal spatial metric stored as a full matrix keeps its diagonal."""
     diag = np.array([0.5, 1.0, 2.0, 0.25])
     W = np.diag(diag)
-    col = _flatten_weights(W, 4)
+    col = _coerce_spatial_weights(W, 4).reshape(-1, 1)
     vec = _as_weight_vector(W, 4)
     assert col.shape == (4, 1)
     assert vec.shape == (4,)
@@ -30,7 +29,7 @@ def test_complex_weights_are_rejected_not_truncated():
     W = np.array([1.0 + 0j, 2.0 + 1j, 3.0 + 0j])
     for entry in (
         lambda: require_spatial_metric(W),
-        lambda: _flatten_weights(W, 3),
+        lambda: _coerce_spatial_weights(W, 3),
         lambda: _as_weight_vector(W, 3),
         lambda: _as_weight_vector(SpatialMetric(W), 3),
         lambda: SpatialMetric(W),

@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now validates its spatial weights like every other method, so a negative or
   zero-measure weight raises instead of passing through. A complex weight
   array raises on every entry path that builds or flattens a spatial metric
-  (`require_spatial_metric`, `SpatialMetric`, `_flatten_weights`,
+  (`require_spatial_metric`, `SpatialMetric`, `_coerce_spatial_weights`,
   `_as_weight_vector`), rather than being cast to its real part under a
   `ComplexWarning`. Weight vectors of the usual shape — a length-`n_space`
   column of positive reals — are unaffected.
