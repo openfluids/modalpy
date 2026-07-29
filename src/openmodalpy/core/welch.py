@@ -29,10 +29,7 @@ def _validate_welch_blocks(Ns, nfft, nblocks, novlap):
     """
     hop = nfft - novlap
     if hop <= 0:
-        raise ValueError(
-            f"Invalid Welch hop: nfft={nfft}, novlap={novlap} "
-            f"(hop={hop} <= 0); novlap must be < nfft"
-        )
+        raise ValueError(f"Invalid Welch hop: nfft={nfft}, novlap={novlap} (hop={hop} <= 0); novlap must be < nfft")
     if Ns < nfft or nblocks < 1:
         raise ValueError(
             f"Cannot form Welch blocks: Ns={Ns}, nfft={nfft} "

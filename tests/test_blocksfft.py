@@ -6,6 +6,7 @@ from openmodalpy.core.parallel import blocksfft_optimized
 
 WINDOWS = ("hamming", "hann", "blackman", "bartlett", "sine")
 
+
 # Floor partitioning matching scipy.signal.welch / the fixed production formula.
 def _nblocks_floor(Ns, nfft, overlap):
     novlap = int(overlap * nfft)
@@ -393,13 +394,10 @@ def test_white_noise_spod_eigenvalue_matches_analytic():
     w = np.ones((1, 1))
     lams = []
     for ifreq in range(1, qhat.shape[0] - 1):  # skip DC and Nyquist
-        _, lam = spod_function(
-            qhat[ifreq], nblocks=nb, dst=dst, w=w, use_parallel=False
-        )
+        _, lam = spod_function(qhat[ifreq], nblocks=nb, dst=dst, w=w, use_parallel=False)
         lams.append(lam[0])
     mean_lam = float(np.mean(lams))
     tol = 4.0 / np.sqrt(nb)
     assert abs(mean_lam - 1.0) < tol, (
-        f"mean mid-band SPOD λ={mean_lam:.4f} vs analytic 1.0 "
-        f"(tol={tol:.4f} = 4/sqrt(nblocks={nb}))"
+        f"mean mid-band SPOD λ={mean_lam:.4f} vs analytic 1.0 (tol={tol:.4f} = 4/sqrt(nblocks={nb}))"
     )
