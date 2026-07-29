@@ -533,6 +533,65 @@ for i in range(d):
 | `taylor_green` | `generate_taylor_green()` | Nx, Ny, Nt, nu, U0, L | Exact decay: λ = e^{-2νΔt}, rank-1 |
 | `cylinder_wake` | `generate_cylinder_wake()` | Nx, Ny, Nt, Re, D, U_inf, seed | Known St = 0.212(1 - 21.2/Re) |
 
+### Reproducibility
+
+**What an external user can reproduce from the wheel alone.** The four
+example configs that ship in the sdist/wheel are generator-backed and need no
+external data files:
+
+- `double_gyre.jsonc`
+- `taylor_green.jsonc`
+- `cylinder_wake.jsonc`
+- `run_benchmarks.jsonc`
+
+**What is not distributed.** These configs live in the source tree for local
+development but are excluded from the package (`pyproject.toml` sdist/wheel
+exclude list) because they point at benchmark datasets that are not shipped:
+
+- `cavity.jsonc`
+- `cylinder.jsonc`
+- `cylinder_wake_compressible.jsonc`
+- `jet.jsonc`
+- `jet_small.jsonc`
+
+An independent check of the three analytic generators (without plots) is the
+committed JSON under `tests/fixtures/reference/`. Each fixture stores:
+
+- **POD energy fractions** normalised by the **pre-truncation** total energy
+  (recoverable as `sum(kept λ) / energy_captured_fraction`). The fractions
+  therefore sum to `energy_captured_fraction` (the share of total energy held
+  by the retained modes), not to 1. That makes a leak into modes beyond the
+  retained set visible. The full leading-`n_modes` tail is kept even when
+  entries sit at ~1e-16 (honest structure on a rank-1 field).
+- **DMD** `|λ|` and phase after **canonical ordering**: magnitudes descending;
+  eigenvalues whose consecutive `|λ|` agree within the fixture `rtol` form a
+  group sorted by phase ascending. The analyzer still emits conjugate pairs in
+  LAPACK order; the reference layer reorders only for the golden file so the
+  comparison is portable across BLAS/LAPACK emission order.
+- `energy_captured_fraction`, `rtol`, and `atol` on the same small fixed grid
+  stated in the file.
+
+Shared definition (regen and test): `tests/reference_helpers.py`. Regenerate with:
+
+```bash
+uv run python scripts/regen_reference_fixtures.py
+```
+
+The comparison test is `tests/test_reference_fixtures.py`; it reads the
+tolerance from each fixture (never a literal in the test). Taylor–Green's
+recorded `dmd_abs_lambda[0]` is also checked against the generator closed form
+`metadata["dmd_eigenvalue"]` (`exp(-2νΔt)`), so that quantity is not golden-only.
+
+**Tolerance.** On a single-thread BLAS policy (the package default), three
+in-process re-runs of each generator produced a measured relative spread of
+0.0 for POD energy fractions and DMD |λ|, and an absolute phase spread of 0.0.
+The fixtures use `rtol=1e-6` and `atol=1e-12`: a large margin above that
+measured zero, still far below a 1 % change. Note that `pytest` alone checks
+agreement, not sensitivity: confirming the fixtures still *discriminate* means
+perturbing a recorded spectrum (1 % on a magnitude, additively on a phase) and
+watching the suite go red. Bit-identical results across BLAS
+vendors are not promised; see [BLAS thread policy](#blas-thread-policy).
+
 ---
 
 ## Output Format
@@ -609,6 +668,7 @@ Key test categories:
 | `test_provenance.py` | Provenance block on all five analyzers; hash/prov-independence; never-raise; backend; unknown threads=0; legacy empty view |
 | `test_dnami_loader.py` | NPZ loading, schema handling |
 | `test_weights.py` | Polar and uniform weight computation |
+| `test_reference_fixtures.py` | POD/DMD spectra vs committed analytic fixtures |
 
 Run all: `uv run pytest tests/ -q`
 

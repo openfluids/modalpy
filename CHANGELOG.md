@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Analytic reference fixtures under `tests/fixtures/reference/` (POD energy
+  fractions and DMD |λ|/phase for `double_gyre`, `taylor_green`,
+  `cylinder_wake`) plus `scripts/regen_reference_fixtures.py` and
+  `tests/test_reference_fixtures.py` so a clean checkout can recompute and
+  check the spectra.
 - `PSDPODAnalyzer` — library-facing PSD-POD class with the shared analyzer
   lifecycle (`load_and_preprocess` → `compute_fft_blocks` → `perform_psd_pod`
   → `save_results`). The CLI/config path now calls this class; numbers and

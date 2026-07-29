@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Regenerate committed analytic reference fixtures under tests/fixtures/reference/.
+
+No CLI flags (project convention). Writes one JSON file per built-in generator
+with the POD energy-fraction spectrum and DMD |λ|/phase on a small fixed grid.
+Byte-identical on a clean checkout for a fixed environment (single-thread BLAS).
+
+Not shipped in the wheel — developers only:
+    uv run python scripts/regen_reference_fixtures.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+# Shared helpers live next to the comparison test (one definition for both).
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tests.reference_helpers import compute_reference_spectra  # noqa: E402
+
+from openmodalpy.example_data import GENERATORS  # noqa: E402
+
+OUT_DIR = ROOT / "tests" / "fixtures" / "reference"
+
+# Small grids: fast, stable, enough structure for a meaningful spectrum.
+# Seed for cylinder_wake is the generator default (42); fixed here so the
+# fixture records the full generation contract.
+GENERATOR_PARAMS: dict[str, dict[str, Any]] = {
+    "double_gyre": {"Nx": 24, "Ny": 12, "Nt": 40},
+    "taylor_green": {"Nx": 24, "Ny": 24, "Nt": 40},
+    "cylinder_wake": {"Nx": 32, "Ny": 16, "Nt": 80, "seed": 42},
+}
+
+N_MODES = 10
+# Measured in-process run-to-run relative spread on this machine: 0.0 for all
+# three generators (single-thread BLAS default). rtol=1e-6 is a large margin
+# above that and still far below the 1 % gate-step-4 probe.
+RTOL = 1e-6
+ATOL = 1e-12
+
+
+def compute_reference(generator: str, params: dict[str, Any], n_modes: int = N_MODES) -> dict[str, Any]:
+    """Run POD + DMD on a generator payload; return serialisable spectrum arrays."""
+    if generator not in GENERATORS:
+        raise ValueError(f"Unknown generator {generator!r}; available: {sorted(GENERATORS)}")
+
+    spectra = compute_reference_spectra(generator, params, n_modes=n_modes, rtol=RTOL)
+
+    # Key order: spectrum arrays first so an out-of-band probe that walks leaves
+    # hits a spectrum entry (gate step 4 uses named keys; order still kept stable).
+    return {
+        "generator": generator,
+        "pod_energy_fractions": [float(v) for v in spectra["pod_energy_fractions"]],
+        "dmd_abs_lambda": [float(v) for v in spectra["dmd_abs_lambda"]],
+        "dmd_phase": [float(v) for v in spectra["dmd_phase"]],
+        "energy_captured_fraction": float(spectra["energy_captured_fraction"]),
+        "generator_params": dict(params),
+        "n_modes": int(n_modes),
+        "rtol": float(RTOL),
+        "atol": float(ATOL),
+    }
+
+
+def write_fixture(doc: dict[str, Any], path: Path) -> None:
+    """Write JSON with stable formatting (trailing newline, LF, no sort_keys)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(doc, indent=2, ensure_ascii=True) + "\n"
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def main() -> int:
+    if set(GENERATOR_PARAMS) != set(GENERATORS):
+        missing = set(GENERATORS) - set(GENERATOR_PARAMS)
+        extra = set(GENERATOR_PARAMS) - set(GENERATORS)
+        raise SystemExit(f"GENERATOR_PARAMS mismatch: missing={missing}, extra={extra}")
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for name, params in GENERATOR_PARAMS.items():
+        doc = compute_reference(name, params, n_modes=N_MODES)
+        out = OUT_DIR / f"{name}.json"
+        write_fixture(doc, out)
+        print(f"wrote {out.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
