@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from openmodalpy.core.base import blocksfft, spod_function
+from openmodalpy.core.base import PARALLEL_AVAILABLE, blocksfft, spod_function
 from openmodalpy.core.parallel import blocksfft_optimized
 
 WINDOWS = ("hamming", "hann", "blackman", "bartlett", "sine")
@@ -117,6 +117,65 @@ def test_normvar_serial_parallel_agree():
         rtol=0,
         atol=1e-12,
         err_msg=f"serial/parallel disagree with normvar=True: max|diff|={np.max(np.abs(ser - par)):.3e}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Serial/parallel identity across the real parameter surface
+# ---------------------------------------------------------------------------
+# Both paths own separate window_norm / mean / normvar / placement code. The
+# three point tests above pin windows@novlap=0, one normvar case, and boxcar
+# placement; this sweep covers the full cross product, including amplitude
+# normalization (no prior identity coverage).
+
+
+@pytest.mark.parametrize("window_type", ["hamming", "hann"])
+@pytest.mark.parametrize("window_norm", ["power", "amplitude"], ids=["power", "amplitude"])
+@pytest.mark.parametrize("blockwise_mean", [False, True], ids=["bwmean0", "bwmean1"])
+@pytest.mark.parametrize("normvar", [False, True], ids=["nv0", "nv1"])
+@pytest.mark.parametrize(
+    "novlap,nfft,Ns,nblocks",
+    [
+        # hop = nfft; Ns is a whole multiple of hop
+        (0, 16, 64, 3),
+        # hop = 12; Ns=70 is not a multiple of hop (remainder dropped)
+        (4, 16, 70, 5),
+    ],
+    ids=["ovl0", "ovl4-uneven"],
+)
+def test_blocksfft_serial_parallel_param_surface(
+    window_type, window_norm, blockwise_mean, normvar, novlap, nfft, Ns, nblocks
+):
+    """Serial == parallel across window_norm × blockwise_mean × normvar × novlap.
+
+    At least one case uses an uneven record (id token ``uneven``): Ns is not a
+    whole multiple of the block hop, so placement cannot hide behind a tidy
+    partition. The two paths agree to atol=1e-12 with rtol=0; flipping any one
+    of these options moves the output by ~1e-1, so the margin is real.
+    """
+    # Without this, a failed `openmodalpy.core.parallel` import would send both
+    # calls down the serial body (base.py sets PARALLEL_AVAILABLE=False on
+    # ImportError) and every case below would pass while comparing serial to
+    # itself. A broken parallel stack should be loud, not silently vacuous.
+    assert PARALLEL_AVAILABLE, "optimized path unavailable: this test would compare serial to serial"
+    rng = np.random.default_rng(0)
+    q = rng.standard_normal((Ns, 3))
+    kwargs = dict(
+        nfft=nfft,
+        nblocks=nblocks,
+        novlap=novlap,
+        window_type=window_type,
+        window_norm=window_norm,
+        blockwise_mean=blockwise_mean,
+        normvar=normvar,
+    )
+    ser = blocksfft(q, use_parallel=False, **kwargs)
+    par = blocksfft(q, use_parallel=True, **kwargs)
+    max_diff = float(np.max(np.abs(ser - par)))
+    assert np.allclose(ser, par, rtol=0, atol=1e-12), (
+        f"serial/parallel disagree: window={window_type!r} window_norm={window_norm!r} "
+        f"blockwise_mean={blockwise_mean} normvar={normvar} novlap={novlap} Ns={Ns}: "
+        f"max|diff|={max_diff:.3e}"
     )
 
 
