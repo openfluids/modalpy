@@ -27,9 +27,9 @@ class CaseSpec:
     data: DataSourceSpec
     spatial_weight_type: str = "uniform"
     n_modes_save: int = 10
-    # DMD truncation rank: None (deprecated: min(n_modes_save, shape) + rcond),
-    # int, "svht", or "energy". With an explicit rank, n_modes_save only bounds
-    # saved/plotted output.
+    # DMD truncation rank: positive int, "svht", or "energy" (required for DMD;
+    # None reaches DMDAnalyzer and raises). n_modes_save only bounds saved/plotted
+    # output and never sets the operator rank.
     rank: int | str | None = None
     nfft: int = 128
     overlap: float = 0.5

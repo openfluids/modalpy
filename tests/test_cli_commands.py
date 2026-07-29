@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import h5py
+import pytest
 
 from openmodalpy import analyze_from_config
 from openmodalpy.cli import main
@@ -254,12 +255,47 @@ def test_config_rank_reaches_the_dmd_analyzer(tmp_path: Path, monkeypatch) -> No
     assert build("svht", {}) == "svht"
     assert build("energy", {}) == "energy"
     assert build(12, {}) == 12
-    # Absent from the config: the deprecated default.
+    # Absent from the config: carried through as None. The refusal lives in
+    # DMDAnalyzer, so this fake never sees it -- see
+    # test_config_without_rank_refuses_through_the_real_analyzer.
     assert build(None, {}) is None
     # A per-run override must win over the case value.
     assert build("svht", {"rank": 5}) == 5
     # And an override must not wipe a case value it does not mention.
     assert build(7, {"delays": 1}) == 7
+
+
+def test_config_without_rank_refuses_through_the_real_analyzer(tmp_path: Path) -> None:
+    """A config that omits ``rank`` must fail for a user, not just in the constructor.
+
+    The test above uses a fake analyzer that accepts ``rank=None``, so it pins the
+    pass-through and cannot see the refusal. This runs the real DMDAnalyzer through
+    the config path -- the route a user actually takes -- so 'DMD refuses to guess a
+    rank' is verified end to end rather than at the API boundary only.
+    """
+    config_path = tmp_path / "no_rank.jsonc"
+    _write_jsonc(
+        config_path,
+        {
+            "name": "No rank",
+            "description": "DMD case that omits the required rank",
+            "case": {
+                "name": "toy_case",
+                "case_type": "analytical",
+                "data": {
+                    "kind": "generator",
+                    "name": "double_gyre",
+                    "params": {"Nx": 8, "Ny": 4, "Nt": 12},
+                },
+                "spatial_weight_type": "uniform",
+                "results_root": str(tmp_path / "results"),
+                "figures_root": str(tmp_path / "figures"),
+            },
+            "runs": [],
+        },
+    )
+    with pytest.raises(ValueError, match=r"rank is required"):
+        analyze_from_config(config_path, method="dmd", overrides={"generate_plots": False})
 
 
 def test_run_from_config_executes_runs_schema(tmp_path: Path, monkeypatch) -> None:

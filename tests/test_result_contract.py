@@ -8,7 +8,6 @@ openmodalpy-unify-result-contract-vig greps this file for every producer name.
 from __future__ import annotations
 
 import json
-import warnings
 from pathlib import Path
 
 import h5py
@@ -100,11 +99,9 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     assert read_results(mpod_path).eigenvalues is not None
 
     # DMDAnalyzer
-    dmd = DMDAnalyzer(file_path="dmd_contract", n_modes_save=2, **common)
+    dmd = DMDAnalyzer(file_path="dmd_contract", n_modes_save=2, **common, rank=2)
     dmd.load_and_preprocess()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        dmd.perform_dmd()
+    dmd.perform_dmd()
     dmd.save_results("dmd.hdf5")
     dmd_path = tmp_path / "dmd.hdf5"
     _assert_canonical_keys(dmd_path, {"modes", "eigenvalues", "time_coefficients", "amplitudes"})

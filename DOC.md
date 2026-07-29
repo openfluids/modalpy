@@ -248,39 +248,43 @@ dmd.save_results()
 ```
 
 **Rank vs saved modes:**
-- `rank` — SVD truncation of the DMD operator (the reduced system size).
+- `rank` — **required.** SVD truncation of the DMD operator (the reduced system
+  size). Pass a positive `int`, `"svht"`, or `"energy"`. Omitting it raises
+  `ValueError`. There is no default: the previous silent default of
+  `n_modes_save` coupled a plotting parameter to the operator rank, and on the
+  shipped cylinder wake that choice moved the recovered shedding frequency by
+  ~20×.
 - `n_modes_save` — how many modes are kept for save/plot after sorting by `|λ|`.
-  With an **explicit** `rank`, changing `n_modes_save` alone must not change
-  eigenvalues. The default still couples them (deprecated).
+  Changing `n_modes_save` alone must not change eigenvalues.
 
 | `rank` | Criterion |
 |--------|-----------|
-| `None` (default, **deprecated**) | Same as today: `min(n_modes_save, min(X1.shape))`, then the relative floor `s_j > rcond * s[0]` (`rcond = max(shape) * eps`, as in `numpy.linalg.pinv`). Emits a `DeprecationWarning`; pass `rank` explicitly. |
-| `int` | Explicit rank, still floored by `rcond` (never exceeds what the data supports). |
+| `int` | Explicit rank, floored by the relative cut `s_j > rcond * s[0]` (`rcond = max(shape) * eps`, as in `numpy.linalg.pinv`). Never exceeds what the data supports. |
 | `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = λ(β) · median(s)` with `β = min(shape)/max(shape)`. |
 | `"energy"` | Smallest `r` with cumulative `s²` fraction ≥ `energy_fraction` (default `0.999`). |
 
-**Why full numerical rank is not the default:** On the shipped cylinder wake
+**Why there is no default rank:** On the shipped cylinder wake
 (`Nx=40, Ny=24, Nt=400`, so `X1` is 960×399) the singular spectrum decays
 **smoothly** to `σ_min/σ_1 ≈ 4.5×10⁻⁴` and never approaches the machine floor
 (`rcond ≈ 2×10⁻¹³`). Keeping every direction above that floor (rank 399)
 produces **spurious modes with `|λ| > 1`** (growth outside the unit circle)
 that sort *first* by the amplitude ranking — recovered dominant frequency
 **≈ 3.11 Hz** against true shedding **≈ 0.167 Hz**. Truncating at
-`n_modes_save=10`, `"svht"`, or `"energy"` all recover the physical shedding
-mode with `|λ| = 1`. A stability library that manufactures instabilities
-cannot default to untruncated DMD. Full rank remains available only by
-passing an explicit large `int`.
+`rank=10`, `"svht"`, or `"energy"` all recover the physical shedding mode with
+`|λ| = 1`. A stability library that manufactures instabilities cannot guess an
+untruncated rank. Full rank remains available only by passing an explicit large
+`int`.
 
-**Why the default is not SVHT either:** SVHT assumes a low-rank signal plus
-**i.i.d. Gaussian noise of constant variance**, and its median-based noise
-estimate requires the **true rank below n/2** — otherwise the median singular
-value is signal, not noise, and the criterion collapses the rank. Neither
-assumption holds for a typical deterministic fluid simulation with a smoothly
-decaying spectrum. SVHT is also computed from `X1` alone, while the DMD
-operator error depends on content of `X2` outside `range(X1)`. So `"svht"`
-ships selectable and documented, not as the default. No automatic criterion is
-free of trade-offs; report `effective_rank` and the criterion you used.
+**Why the library does not default to SVHT either:** SVHT assumes a low-rank
+signal plus **i.i.d. Gaussian noise of constant variance**, and its
+median-based noise estimate requires the **true rank below n/2** — otherwise
+the median singular value is signal, not noise, and the criterion collapses the
+rank. Neither assumption holds for a typical deterministic fluid simulation with
+a smoothly decaying spectrum. SVHT is also computed from `X1` alone, while the
+DMD operator error depends on content of `X2` outside `range(X1)`. So `"svht"`
+ships selectable and documented, not as a silent default. No automatic criterion
+is free of trade-offs; choose a rank, and report `effective_rank` with the
+criterion you used.
 
 **Key facts:**
 - Eigenvalues encode frequency (angle) and growth/decay (modulus)
@@ -357,7 +361,7 @@ rfft bin range) raise `ValueError`. Dynamic triad selection
     },
     "spatial_weight_type": "uniform",  // "uniform", "polar", or "auto"
     "n_modes_save": 10,
-    "rank": null,                  // DMD only: null (deprecated default) | int | "svht" | "energy"
+    "rank": 10,                    // DMD only (required): positive int | "svht" | "energy"
     "nfft": 128,                   // FFT block size (SPOD/BSMD/PSD-POD)
     "overlap": 0.5,                // block overlap fraction
     "embedding_dim": 10,           // delay depth (ST-POD/HODMD)

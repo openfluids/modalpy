@@ -194,7 +194,11 @@ def _default_figures_root(case_name: str) -> Path:
 
 
 def _coerce_rank(value: Any) -> int | str | None:
-    """Read a DMD truncation rank from config: null, a positive int, or a criterion name."""
+    """Read a DMD truncation rank from config: null, a positive int, or a criterion name.
+
+    null/None is accepted here and passed through; DMDAnalyzer refuses None at
+    construction so an omitted rank fails with one message, not two.
+    """
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, int):

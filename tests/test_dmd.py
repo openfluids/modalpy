@@ -12,16 +12,17 @@ from openmodalpy.dmd import _delay_embed
 def _exact_dmd_eigenvalues(q: np.ndarray, n_modes_save: int, rank=None) -> np.ndarray:
     """Independent exact-DMD reference.
 
-    ``rank`` is the operator truncation. ``None`` matches the library default:
-    ``min(n_modes_save, full thin rank of X1)``. ``n_modes_save`` also bounds
-    how many eigenvalues are returned after sorting.
+    ``rank`` is the operator truncation (defaults to ``n_modes_save`` to match
+    the pre-requirement migration). ``n_modes_save`` also bounds how many
+    eigenvalues are returned after sorting.
     """
     x = q[:-1, :].T
     y = q[1:, :].T
 
     u, s, vh = np.linalg.svd(x, full_matrices=False)
     r_full = len(s)
-    r = min(n_modes_save, r_full) if rank is None else min(int(rank), r_full)
+    r_req = n_modes_save if rank is None else int(rank)
+    r = min(r_req, r_full)
     u_r = u[:, :r]
     s_r = np.diag(s[:r])
     v_r = vh.conj().T[:, :r]
@@ -44,15 +45,11 @@ def test_perform_dmd_simple():
         "Ns": 3,
     }
     analyzer = DMDAnalyzer(
-        file_path="dummy",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=2,
+        file_path="dummy", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=2, rank=2
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
     # Snapshot pairs are rank-1 (col2 = 2 * col1); relative floor keeps one mode.
     assert analyzer.effective_rank == 1
     assert analyzer.modes.shape == (2, 1)
@@ -77,10 +74,10 @@ def test_plot_eigenspectra_stem_compat(monkeypatch, tmp_path):
         figures_dir=tmp_path,
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
+        rank=10,
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd()
+    analyzer.perform_dmd()
 
     calls = []
 
@@ -127,26 +124,18 @@ def test_dmd_uses_raw_shifted_snapshots_without_weighting():
     }
 
     analyzer_a = DMDAnalyzer(
-        file_path="dummy_a",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=2,
+        file_path="dummy_a", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=2, rank=2
     )
     analyzer_a.load_and_preprocess()
     analyzer_a.W = np.array([1.0, 50.0])
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer_a.perform_dmd()
+    analyzer_a.perform_dmd()
 
     analyzer_b = DMDAnalyzer(
-        file_path="dummy_b",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=2,
+        file_path="dummy_b", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=2, rank=2
     )
     analyzer_b.load_and_preprocess()
     analyzer_b.W = np.array([50.0, 1.0])
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer_b.perform_dmd()
+    analyzer_b.perform_dmd()
 
     expected_raw = _exact_dmd_eigenvalues(data["q"], n_modes_save=2)
     expected_centered = _exact_dmd_eigenvalues(
@@ -181,11 +170,11 @@ def test_dmd_save_results_records_current_contract(tmp_path):
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=2,
+        rank=2,
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
     analyzer.save_results("dmd_contract.hdf5")
 
     with h5py.File(tmp_path / "dmd_contract.hdf5", "r") as handle:
@@ -216,6 +205,9 @@ def _make_analyzer(q, n_modes_save=None, rank=None):
     n_spatial = q.shape[1]
     if n_modes_save is None:
         n_modes_save = n_spatial
+    # rank is required on DMDAnalyzer; default matches the pre-migration coupling.
+    if rank is None:
+        rank = n_modes_save
     data = {
         "q": q,
         "x": np.arange(n_spatial, dtype=float),
@@ -288,8 +280,7 @@ def test_omega_returned():
     A = np.array([[0.9, 0.1], [-0.1, 0.8]])
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
     analyzer = _make_analyzer(q)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd()
+    analyzer.perform_dmd()
 
     assert analyzer.omega.size == analyzer.eigenvalues.size
     dt = analyzer.data.get("dt", 1.0)
@@ -314,11 +305,10 @@ def test_default_args_match_original():
         dtype=float,
     )
     # Data is 2-D spatial; full numerical rank equals n_modes_save=2.
-    expected = _exact_dmd_eigenvalues(data_q, n_modes_save=2, rank=None)
+    expected = _exact_dmd_eigenvalues(data_q, n_modes_save=2, rank=2)
 
     analyzer = _make_analyzer(data_q, n_modes_save=2)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd()  # defaults: method="ls", delays=1, rank=None
+    analyzer.perform_dmd()  # defaults: method="ls", delays=1
     np.testing.assert_allclose(analyzer.eigenvalues, expected, rtol=1e-10, atol=1e-10)
 
 
@@ -334,8 +324,7 @@ def test_tls_dmd_clean_data():
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 50)
 
     analyzer = _make_analyzer(q)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd(method="tls")
+    analyzer.perform_dmd(method="tls")
 
     recovered = np.sort(analyzer.eigenvalues)
     np.testing.assert_allclose(recovered, true_eigvals, atol=1e-8)
@@ -353,14 +342,12 @@ def test_tls_noise_robustness():
 
     # LS
     analyzer_ls = _make_analyzer(q_noisy)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer_ls.perform_dmd(method="ls")
+    analyzer_ls.perform_dmd(method="ls")
     err_ls = np.linalg.norm(np.sort(analyzer_ls.eigenvalues) - true_eigvals)
 
     # TLS
     analyzer_tls = _make_analyzer(q_noisy)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer_tls.perform_dmd(method="tls")
+    analyzer_tls.perform_dmd(method="tls")
     err_tls = np.linalg.norm(np.sort(analyzer_tls.eigenvalues) - true_eigvals)
 
     # TLS should not be worse (allow small tolerance for edge cases)
@@ -378,9 +365,8 @@ def test_dmd_with_delays():
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(delays=3)
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(delays=3)
 
     # Order-2 linear system → numerical rank 2 even after delay lift.
     assert analyzer.effective_rank == 2
@@ -423,9 +409,8 @@ def test_metadata_tls_delays(tmp_path):
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(method="tls", delays=3)
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(method="tls", delays=3)
 
     meta = analyzer._get_algorithm_metadata()
     assert meta["dmd_variant"] == "delay_embedded_tls_dmd"
@@ -441,9 +426,8 @@ def test_load_results_restores_variant_metadata(tmp_path):
 
     analyzer = _make_analyzer(q, n_modes_save=4)
     analyzer.results_dir = tmp_path
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(method="tls", delays=3)
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(method="tls", delays=3)
     analyzer.save_results("dmd_variant_roundtrip.hdf5")
 
     reloaded = _make_analyzer(q, n_modes_save=4)
@@ -463,8 +447,7 @@ def test_dmd_save_load_roundtrip_arrays(tmp_path):
 
     analyzer = _make_analyzer(q, n_modes_save=2)
     analyzer.results_dir = tmp_path
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd()
+    analyzer.perform_dmd()
     analyzer.save_results("dmd_array_roundtrip.hdf5")
 
     reloaded = _make_analyzer(q, n_modes_save=2)
@@ -488,9 +471,8 @@ def test_hodmd_named_variant_metadata():
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
 
     assert analyzer._dmd_named_variant == "hodmd"
     meta = analyzer._get_algorithm_metadata()
@@ -507,9 +489,8 @@ def test_tls_hodmd_named_variant_metadata():
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(method="tls", delays=3, named_variant="tls_hodmd")
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(method="tls", delays=3, named_variant="tls_hodmd")
 
     assert analyzer._dmd_named_variant == "tls_hodmd"
     meta = analyzer._get_algorithm_metadata()
@@ -527,9 +508,8 @@ def test_hodmd_save_load_roundtrip(tmp_path):
 
     analyzer = _make_analyzer(q, n_modes_save=4)
     analyzer.results_dir = tmp_path
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
     analyzer.save_results("hodmd_roundtrip.hdf5")
 
     reloaded = _make_analyzer(q, n_modes_save=4)
@@ -566,10 +546,10 @@ def test_hodmd_plot_modes_uses_2d_slice(monkeypatch, tmp_path):
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=2,
+        rank=2,
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd(method="ls", delays=2, named_variant="hodmd")
+    analyzer.perform_dmd(method="ls", delays=2, named_variant="hodmd")
 
     line_calls = {"count": 0}
     orig_plot = matplotlib.axes.Axes.plot
@@ -616,15 +596,11 @@ def test_dmd_rank_deficient_floors_singular_values():
         "Ns": q.shape[0],
     }
     analyzer = DMDAnalyzer(
-        file_path="dummy",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=10,
+        file_path="dummy", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=10, rank=10
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
 
     assert analyzer.effective_rank == 3
     assert analyzer.modes.shape[1] == 3
@@ -649,15 +625,11 @@ def test_dmd_effective_rank_scale_invariant():
             "Ns": q.shape[0],
         }
         analyzer = DMDAnalyzer(
-            file_path="dummy",
-            data_loader=lambda _: data,
-            spatial_weight_type="uniform",
-            n_modes_save=10,
+            file_path="dummy", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=10, rank=10
         )
         analyzer.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            with pytest.warns(RuntimeWarning, match="effective rank"):
-                analyzer.perform_dmd()
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
         ranks.append(analyzer.effective_rank)
         assert float(np.abs(analyzer.eigenvalues).max()) <= 10.0
 
@@ -716,15 +688,11 @@ def test_dmd_degenerate_all_zero_returns_empty_without_raising():
         "Ns": q.shape[0],
     }
     analyzer = DMDAnalyzer(
-        file_path="dummy",
-        data_loader=lambda _: data,
-        spatial_weight_type="uniform",
-        n_modes_save=5,
+        file_path="dummy", data_loader=lambda _: data, spatial_weight_type="uniform", n_modes_save=5, rank=5
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
 
     assert analyzer.effective_rank == 0
     assert analyzer.eigenvalues.size == 0
@@ -783,20 +751,29 @@ def test_rank_parameter_changes_eigenvalues():
     assert not np.array_equal(lo.eigenvalues[:k], hi.eigenvalues[:k])
 
 
-def test_default_rank_uses_n_modes_save_and_warns():
-    """rank=None reproduces min(n_modes_save, shape) and emits DeprecationWarning."""
+def test_rank_required_refuses_none():
+    """Omitting rank raises ValueError naming the allowed alternatives."""
+    data = {
+        "q": np.array([[1.0, 0.0], [0.5, 0.0], [0.25, 0.0]]),
+        "x": np.array([0.0, 1.0]),
+        "y": np.array([0.0]),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 1,
+        "Ns": 3,
+    }
+    with pytest.raises(ValueError, match=r"rank.*(svht|energy)"):
+        DMDAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+            n_modes_save=2,
+        )
+
+    # Explicit rank past n_modes_save is allowed.
     rng = np.random.default_rng(13)
-    # Broadband random data so numerical rank exceeds n_modes_save=10.
     n_space, n_time = 100, 40
     q = rng.standard_normal((n_time, n_space))
-
-    a = _make_analyzer(q, n_modes_save=10)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        a.perform_dmd()
-    assert a.effective_rank == 10
-
-    # Explicit rank past n_modes_save is allowed and silent on DeprecationWarning
-    # (filterwarnings=error would fail this call if one were raised).
     b = _make_analyzer(q, n_modes_save=5, rank=12)
     b.perform_dmd()
     assert b.effective_rank == 12

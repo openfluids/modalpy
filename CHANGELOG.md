@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- DMD `rank` is required (no silent default to `n_modes_save`). See the
+  Changed note below for migration (`rank=n_modes_save` is bit-identical
+  to the previous default).
+
 ### Changed
 - One SPOD single-frequency eigenproblem and one load-latest result search.
   The serial path in `spod_function` and `spod_single_frequency_optimized` both
@@ -139,20 +144,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   order cannot leak unseeded draws.
 
 ### Changed
-- DMD operator rank is now a separate constructor/`CaseSpec` parameter `rank`.
-  With an **explicit** `rank`, `n_modes_save` only bounds how many modes are kept
-  after sorting and no longer moves eigenvalues. The **default is unchanged**:
-  `rank=None` still resolves to `min(n_modes_save, min(X1.shape))` then the
-  relative singular-value floor (`s_j > rcond * s[0]`) — bit-for-bit today's
-  behaviour — and emits a `DeprecationWarning` naming `rank`. Pass `rank`
-  explicitly to silence the warning and pin the numerics. Opt-in criteria:
-  positive `int`, `"svht"` (Gavish–Donoho optimal hard threshold, unknown-noise
-  form), and `"energy"` (cumulative `s²` fraction, default
-  `energy_fraction=0.999`). No published number moves under the default path.
-  Full numerical rank was **rejected** as the new default: on the shipped
-  cylinder wake the singular spectrum decays smoothly and never reaches the
-  machine floor, so untruncated DMD surfaces spurious `|λ| > 1` modes that
-  outrank the physical shedding frequency.
+- **Breaking — DMD `rank` is required.** `DMDAnalyzer` no longer defaults the
+  operator truncation to `n_modes_save` (a plotting parameter). Omitting `rank`
+  raises `ValueError` naming the alternatives: a positive `int`, `"svht"`, or
+  `"energy"`. On the shipped cylinder wake that silent default moved the recovered
+  shedding frequency by ~20×, so a library that picks the rank silently publishes
+  a number the user never chose. There is no principled automatic default either
+  (full numerical rank and SVHT were both rejected for fluid spectra). Migrate
+  by setting `rank` to the value you previously relied on via `n_modes_save`
+  (`rank=n_modes_save` is bit-identical to the old default). `n_modes_save` only
+  bounds how many modes are kept after sorting.
 
 ### Fixed
 - DMD no longer amplifies noise into modes when the snapshot pair is ill-conditioned.

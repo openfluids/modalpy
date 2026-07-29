@@ -158,16 +158,11 @@ def test_dmd(tmp_path):
 
     loader = make_test_loader(q_decay, Nx, Ny, dt)
     analyzer = DMDAnalyzer(
-        "dummy",
-        data_loader=loader,
-        n_modes_save=5,
-        results_dir=tmp_path,
-        figures_dir=tmp_path,
+        "dummy", data_loader=loader, n_modes_save=5, results_dir=tmp_path, figures_dir=tmp_path, rank=5
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
 
     # Dominant eigenvalue should be e^{-α*dt}
     expected_eigval = np.exp(-alpha * dt)
@@ -197,16 +192,11 @@ def test_dmd(tmp_path):
 
     loader = make_test_loader(q_osc, Nx, Ny, dt)
     analyzer = DMDAnalyzer(
-        "dummy",
-        data_loader=loader,
-        n_modes_save=5,
-        results_dir=tmp_path,
-        figures_dir=tmp_path,
+        "dummy", data_loader=loader, n_modes_save=5, results_dir=tmp_path, figures_dir=tmp_path, rank=5
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
 
     # Should have eigenvalue near unit circle
     eigvals = analyzer.eigenvalues
@@ -232,16 +222,11 @@ def test_dmd(tmp_path):
 
     loader = make_test_loader(q_decay_osc, Nx, Ny, dt)
     analyzer = DMDAnalyzer(
-        "dummy",
-        data_loader=loader,
-        n_modes_save=5,
-        results_dir=tmp_path,
-        figures_dir=tmp_path,
+        "dummy", data_loader=loader, n_modes_save=5, results_dir=tmp_path, figures_dir=tmp_path, rank=5
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.warns(RuntimeWarning, match="effective rank"):
-            analyzer.perform_dmd()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
 
     eigvals = analyzer.eigenvalues
     # For decaying oscillation: |λ| = e^{-α*dt} < 1
@@ -273,15 +258,10 @@ def test_dmd(tmp_path):
 
     loader = make_test_loader(trajectory, Nx=2, Ny=1, dt=dt)
     analyzer = DMDAnalyzer(
-        "dummy",
-        data_loader=loader,
-        n_modes_save=2,
-        results_dir=tmp_path,
-        figures_dir=tmp_path,
+        "dummy", data_loader=loader, n_modes_save=2, results_dir=tmp_path, figures_dir=tmp_path, rank=2
     )
     analyzer.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        analyzer.perform_dmd()
+    analyzer.perform_dmd()
 
     dmd_eigvals = analyzer.eigenvalues
 
@@ -620,16 +600,9 @@ def test_heavy(tmp_path):
 
     # DMD test - should find shedding frequency
     loader = make_test_loader(q_wake, Nx, Ny, dt, x=x, y=y)
-    dmd = DMDAnalyzer(
-        "dummy",
-        data_loader=loader,
-        n_modes_save=10,
-        results_dir=tmp_path,
-        figures_dir=tmp_path,
-    )
+    dmd = DMDAnalyzer("dummy", data_loader=loader, n_modes_save=10, results_dir=tmp_path, figures_dir=tmp_path, rank=10)
     dmd.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        dmd.perform_dmd()
+    dmd.perform_dmd()
 
     # Check if DMD finds the shedding frequency
     angles = np.angle(dmd.eigenvalues)

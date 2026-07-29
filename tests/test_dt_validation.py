@@ -155,12 +155,12 @@ def test_dmd_reload_without_dt_raises():
         data_loader=lambda _: data,
         spatial_weight_type="uniform",
         n_modes_save=2,
+        rank=2,
     )
     a.data = dict(data)
     a.W = np.ones(Nx * Ny)
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        with pytest.raises(ValueError, match=r"timestep"):
-            a.perform_dmd()
+    with pytest.raises(ValueError, match=r"timestep"):
+        a.perform_dmd()
 
 
 def test_dmd_omega_scales_inversely_with_dt():
@@ -192,10 +192,10 @@ def test_dmd_omega_scales_inversely_with_dt():
             data_loader=lambda _, dt=dt: make(dt),
             spatial_weight_type="uniform",
             n_modes_save=2,
+            rank=2,
         )
         a.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            a.perform_dmd()
+        a.perform_dmd()
         omegas[dt] = np.asarray(a.omega)
 
     assert np.allclose(omegas[0.25] / omegas[0.5], 2.0)
@@ -284,14 +284,10 @@ def test_dmd_plot_eigenspectra_refuses_missing_dt():
         "Ns": Ns,
     }
     a = DMDAnalyzer(
-        file_path="case.npz",
-        data_loader=lambda _: dict(data),
-        spatial_weight_type="uniform",
-        n_modes_save=2,
+        file_path="case.npz", data_loader=lambda _: dict(data), spatial_weight_type="uniform", n_modes_save=2, rank=2
     )
     a.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        a.perform_dmd()
+    a.perform_dmd()
     del a.data["dt"]
     with pytest.raises(ValueError, match=r"timestep"):
         a.plot_eigenspectra()
@@ -311,14 +307,10 @@ def _dmd_for_mode_freq():
         "Ns": Ns,
     }
     a = DMDAnalyzer(
-        file_path="case.npz",
-        data_loader=lambda _: dict(data),
-        spatial_weight_type="uniform",
-        n_modes_save=2,
+        file_path="case.npz", data_loader=lambda _: dict(data), spatial_weight_type="uniform", n_modes_save=2, rank=2
     )
     a.load_and_preprocess()
-    with pytest.warns(DeprecationWarning, match="n_modes_save"):
-        a.perform_dmd()
+    a.perform_dmd()
     return a
 
 

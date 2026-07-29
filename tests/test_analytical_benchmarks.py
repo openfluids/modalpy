@@ -268,11 +268,11 @@ class TestDMDAnalytical:
             data_loader=lambda _: data,
             spatial_weight_type="uniform",
             n_modes_save=10,
+            rank=10,
         )
         analyzer.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            with pytest.warns(RuntimeWarning, match="effective rank"):
-                analyzer.perform_dmd()
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
         # Extract frequencies from eigenvalues
         # DMD eigenvalue λ relates to frequency via: f = arg(λ) / (2π·dt)
@@ -320,11 +320,11 @@ class TestDMDAnalytical:
             data_loader=lambda _: data,
             spatial_weight_type="uniform",
             n_modes_save=5,
+            rank=5,
         )
         analyzer.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            with pytest.warns(RuntimeWarning, match="effective rank"):
-                analyzer.perform_dmd()
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
         # Extract growth rates: σ = log|λ| / dt
         growth_rates = np.log(np.abs(analyzer.eigenvalues)) / dt
@@ -376,11 +376,11 @@ class TestDMDAnalytical:
             data_loader=lambda _: data,
             spatial_weight_type="uniform",
             n_modes_save=10,
+            rank=10,
         )
         analyzer.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            with pytest.warns(RuntimeWarning, match="effective rank"):
-                analyzer.perform_dmd()
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
 
         # All eigenvalues should have magnitude ≈ 1 for periodic data
         magnitudes = np.abs(analyzer.eigenvalues)
@@ -470,10 +470,10 @@ class TestEdgeCases:
             data_loader=lambda _: data,
             spatial_weight_type="uniform",
             n_modes_save=2,
+            rank=2,
         )
         analyzer.load_and_preprocess()
-        with pytest.warns(DeprecationWarning, match="n_modes_save"):
-            analyzer.perform_dmd()
+        analyzer.perform_dmd()
 
         # Should produce at least 1 mode
         assert analyzer.modes.shape[1] >= 1

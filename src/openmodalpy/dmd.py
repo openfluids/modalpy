@@ -139,7 +139,7 @@ class DMDAnalyzer(BaseAnalyzer):
         data_loader=None,
         spatial_weight_type="auto",
         n_modes_save=10,
-        rank=None,
+        rank=None,  # required: positive int | "svht" | "energy"
         energy_fraction=0.999,
         use_parallel=True,
     ):
@@ -154,6 +154,12 @@ class DMDAnalyzer(BaseAnalyzer):
             use_parallel=use_parallel,
         )
         self.n_modes_save = n_modes_save
+        if rank is None:
+            raise ValueError(
+                "DMD truncation rank is required; pass a positive int, 'svht', or 'energy'. "
+                "There is no default: the previous silent default of n_modes_save coupled a "
+                "plotting parameter to the operator rank."
+            )
         self.rank = rank
         self.energy_fraction = float(energy_fraction)
         self.modes = np.array([])
@@ -175,34 +181,26 @@ class DMDAnalyzer(BaseAnalyzer):
     def _svd_request_rank(self, shape) -> int:
         """How many singular triplets to request from ``compute_reduced_svd``.
 
-        Explicit integer ``rank`` and the deprecated default (``None`` →
-        ``n_modes_save``) can use a truncated path; spectrum-based criteria
-        need the full thin SVD of ``X1``.
+        An explicit integer ``rank`` can use a truncated path; spectrum-based
+        criteria (``"svht"``, ``"energy"``) need the full thin SVD of ``X1``.
         """
         max_r = min(shape)
         rank = self.rank
-        if rank is None:
-            # Deprecated default: same request as pre-decoupling code.
-            return min(int(self.n_modes_save), max_r)
         if isinstance(rank, (int, np.integer)):
             if int(rank) < 1:
                 raise ValueError(f"rank must be >= 1 when given as int, got {rank!r}")
             return min(int(rank), max_r)
         if rank in ("svht", "energy"):
             return max_r
-        raise ValueError(f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'.")
+        raise ValueError(f"Unknown rank {rank!r}; use a positive int, 'svht', or 'energy'.")
 
     def _resolve_rank(self, s, shape, rcond):
         """Map singular values + ``self.rank`` to ``(effective_r, r_requested)``.
 
         Every path floors by the relative threshold ``s_j > rcond * s[0]``.
         ``r_requested`` is the criterion's target before that floor (used for
-        the under-rank warning).
-
-        ``rank=None`` (deprecated) still resolves to
-        ``min(n_modes_save, min(shape))`` then the rcond floor — bit-for-bit the
-        pre-decoupling default. Explicit int / ``"svht"`` / ``"energy"`` never
-        consult ``n_modes_save``.
+        the under-rank warning). ``n_modes_save`` is never consulted here —
+        it only bounds how many modes are kept after sorting.
         """
         max_r = min(shape)
         if s.size == 0 or not np.isfinite(s[0]) or s[0] <= 0.0:
@@ -210,12 +208,6 @@ class DMDAnalyzer(BaseAnalyzer):
 
         r_numeric = int(np.sum(s > (rcond * s[0])))
         rank = self.rank
-
-        if rank is None:
-            # Deprecated default: reproduce today's coupling exactly.
-            r_requested = min(int(self.n_modes_save), max_r)
-            r = min(r_requested, r_numeric)
-            return r, r_requested
 
         if isinstance(rank, (int, np.integer)):
             r_requested = min(int(rank), max_r)
@@ -243,7 +235,7 @@ class DMDAnalyzer(BaseAnalyzer):
             r = min(r_energy, r_numeric)
             return r, r_energy
 
-        raise ValueError(f"Unknown rank {rank!r}; use None, a positive int, 'svht', or 'energy'.")
+        raise ValueError(f"Unknown rank {rank!r}; use a positive int, 'svht', or 'energy'.")
 
     def perform_dmd(self, method="ls", delays=1, named_variant=None):
         """Compute DMD on raw shifted snapshots.
@@ -263,11 +255,9 @@ class DMDAnalyzer(BaseAnalyzer):
         - Does not subtract the temporal mean.
         - Does not use the spatial metric ``self.W`` in the regression.
         - Sorts modes by descending ``|lambda|``.
-        - Truncation rank is controlled by ``self.rank``. Default ``rank=None``
-          still uses ``min(n_modes_save, min(X1.shape))`` then the rcond floor
-          (deprecated; pass an explicit int, ``"svht"``, or ``"energy"``).
-          With an explicit ``rank``, ``n_modes_save`` only bounds how many
-          modes are kept after sorting.
+        - Truncation rank is controlled by ``self.rank`` (required: a positive
+          int, ``"svht"``, or ``"energy"``). ``n_modes_save`` only bounds how
+          many modes are kept after sorting and never sets the operator rank.
         """
         if method not in ("ls", "tls"):
             raise ValueError(f"Unknown method '{method}'; use 'ls' or 'tls'.")
@@ -300,17 +290,6 @@ class DMDAnalyzer(BaseAnalyzer):
         X1 = X[:, :-1]
         X2 = X[:, 1:]
 
-        # Default rank=None still couples to n_modes_save (deprecated). Explicit
-        # int / "svht" / "energy" select the operator without consulting it.
-        if self.rank is None:
-            warnings.warn(
-                "the DMD truncation rank currently defaults to n_modes_save, which "
-                "couples a plotting parameter to the numerics; pass rank explicitly "
-                "(an int, 'svht', or 'energy'). This default will change in a future "
-                "release.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         r_svd = self._svd_request_rank(X1.shape)
         u, s, vh = compute_reduced_svd(X1, r_svd)
         rcond = DMD_PINV_RCOND(X1.shape, s.dtype if s.size else X1.dtype)
@@ -1114,6 +1093,7 @@ if __name__ == "__main__":
                 figures_dir=figures_dir,
                 data_loader=lambda fp: loader.load(fp, field=field),
                 n_modes_save=n_modes_to_save_main,
+                rank=n_modes_to_save_main,
                 spatial_weight_type="uniform",
             )
             analyzer.analysis_type = f"dmd_{field}"
@@ -1152,6 +1132,7 @@ if __name__ == "__main__":
             data_loader=loader,
             spatial_weight_type="uniform",
             n_modes_save=n_modes_to_save_main,
+            rank=n_modes_to_save_main,
         )
         run_all = not (args.prep or args.compute or args.plot)
         if run_all or args.prep:
