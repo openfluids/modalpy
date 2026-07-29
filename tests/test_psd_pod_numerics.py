@@ -95,34 +95,17 @@ def test_psd_pod_isolated_zero_weight_station():
     _assert_matches_reference(ensemble, weights, n_keep=4)
 
 
-def test_psd_pod_negative_weight_station_is_silently_accepted():
-    """A negative weight used to abort the solve; now it is quietly floored.
+def test_psd_pod_negative_weight_station_raises():
+    """A negative weight is not a valid inner-product metric — raise ValueError.
 
-    This pins a known regression rather than endorsing it. A negative entry in
-    the spatial metric is not a small numerical nuisance: it means the inner
-    product is not an inner product, so every "energy" downstream is
-    meaningless. The pre-refactor code let NaN reach the kernel and
-    ``np.linalg.eigh`` raised; flooring sqrt(W) at 1e-12 replaced that loud
-    failure with a plausible-looking answer.
-
-    A separate open issue tracks making a zero-measure or negative metric raise.
-    When that lands, this test should flip to asserting the exception.
+    An isolated zero among positive weights is still allowed (floored at
+    ``1e-12``); a negative entry means the metric is not an inner product, so
+    the solver refuses it before taking ``sqrt(W)``.
     """
     ensemble, weights = _fourier_ensemble()
     weights = weights.copy()
     weights[1] = -0.5
     assert weights[1] < 0.0
 
-    # errstate because sqrt of a negative number is precisely the failure being
-    # pinned, and this suite runs with numpy warnings escalated to errors.
-    with np.errstate(invalid="ignore"), pytest.raises(np.linalg.LinAlgError):
-        reference_psd_pod(ensemble, weights, 4)
-
-    modes, eigs, coeffs = _run_solver(ensemble, weights, n_keep=4)
-    assert np.isfinite(modes).all()
-    assert np.isfinite(eigs).all()
-    assert np.isfinite(coeffs).all()
-    # Finite is not enough on its own — all-zeros would satisfy it too.
-    assert np.linalg.norm(modes) > 0.0
-    assert np.linalg.norm(coeffs) > 0.0
-    assert np.any(np.abs(eigs) > 0.0)
+    with pytest.raises(ValueError, match="negative weight"):
+        _run_solver(ensemble, weights, n_keep=4)

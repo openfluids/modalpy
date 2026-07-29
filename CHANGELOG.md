@@ -13,15 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BandFilteredLift`, `SpatialMetric`, `weighted_second_order`). Results are
   unchanged; each caller keeps its own truncation policy via
   `drop_nonpositive` / `n_keep`.
-- PSD-POD now floors its spatial weights at `1e-12` before taking the square
-  root, matching POD, mPOD and ST-POD. Results are unaffected for strictly
-  positive weights. Known regression at the edges: a zero-weight point
-  previously contributed exactly nothing, and a **negative** weight previously
-  aborted the solve (`LinAlgError` out of `eigh`) — both are now accepted
-  silently. A negative entry in the metric means the inner product is not an
-  inner product, so this should raise; making a zero-measure or negative metric
-  fail loudly is tracked separately and applies to all four analyzers, not only
-  PSD-POD.
+- An invalid spatial metric now raises instead of producing a confident answer.
+  A non-finite weight, a negative weight, or a metric whose total measure is
+  zero raises `ValueError`; an isolated zero among positive weights is still
+  accepted and floored at `1e-12`, as before. Results for strictly positive
+  weights are unchanged.
+
+  This closes a real hole: polar weights on a grid whose radial coordinate is
+  zero give every annulus an area of `pi*r**2 = 0`, and POD would report an
+  energy fraction off that empty metric without complaint. Note the condition
+  is `r > 0`, **not** `Ny > 1` — a single radial station at `r > 0` has
+  positive measure and is fine.
+
+  Scope: the check lives in the shared seam, so it covers POD, mPOD, ST-POD
+  and PSD-POD. **SPOD and BSMD do not route through that seam and are not yet
+  covered** — they still accept a zero-measure metric.
 
 ### Fixed
 - PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
