@@ -202,9 +202,7 @@ def test_triad_beyond_loaded_bins_raises_valueerror(tmp_path):
     Simulates a stale/truncated FFT cache: full rfft would have nfft//2+1 bins,
     but qhat is shortened so early validation must use the real loaded length.
     """
-    analyzer = _make_analyzer(
-        tmp_path, triads=[(20, 30, 50)], nfft=128, Ns=600
-    )
+    analyzer = _make_analyzer(tmp_path, triads=[(20, 30, 50)], nfft=128, Ns=600)
     n_loaded = 10
     analyzer.qhat = analyzer.qhat[:n_loaded]
     assert analyzer._n_freq_bins == n_loaded
@@ -215,9 +213,7 @@ def test_triad_beyond_loaded_bins_raises_valueerror(tmp_path):
 
 def test_compute_single_triad_out_of_range_propagates_indexerror(tmp_path):
     """Out-of-range bin reads must not be laundered into a NaN eigenvalue."""
-    analyzer = _make_analyzer(
-        tmp_path, triads=[(0, 0, 0)], nfft=128, Ns=600
-    )
+    analyzer = _make_analyzer(tmp_path, triads=[(0, 0, 0)], nfft=128, Ns=600)
     analyzer.qhat = analyzer.qhat[:10]
     with pytest.raises(IndexError):
         analyzer._compute_single_triad(20, 30, 50)
