@@ -5,6 +5,12 @@ import numpy as np
 
 from openmodalpy import MPODAnalyzer, PODAnalyzer
 
+# Measured max |oracle − analyzer| on eigenvalues and |modes| was 0.0 for the
+# two-tone multi-band case below (same rfft/irfft + eigh construction). Bound
+# is a few ulps of O(1) so a 5% eigenvalue shift still fails hard.
+_BAND_ORACLE_RTOL = 1e-12
+_BAND_ORACLE_ATOL = 1e-12
+
 
 def _make_uniform_data(q: np.ndarray, dt: float = 1.0) -> dict:
     n_space = q.shape[1]
@@ -21,6 +27,116 @@ def _make_uniform_data(q: np.ndarray, dt: float = 1.0) -> dict:
 
 def _normalized(vec: np.ndarray) -> np.ndarray:
     return vec / np.linalg.norm(vec)
+
+
+def _independent_band_weighted_pod(
+    data_centered: np.ndarray,
+    weight_vector: np.ndarray,
+    n_modes_save: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Weighted snapshot POD with plain numpy (no openmodalpy helpers).
+
+    Stated construction: weight the centered snapshots by sqrt(W), form the
+    Gram matrix / n_snapshots, eigh, drop eigenvalues <= 1e-12, recover spatial
+    modes. Snapshot-space path when n_t < n_x, otherwise spatial-space path.
+    """
+    n_snapshots, n_space = data_centered.shape
+    sqrt_w = np.sqrt(np.maximum(weight_vector, 1e-12))
+    data_w = data_centered * sqrt_w
+
+    if n_snapshots < n_space:
+        kernel = np.dot(data_w, data_w.T) / n_snapshots
+        eigenvalues, temporal = np.linalg.eigh(kernel)
+        order = np.argsort(eigenvalues)[::-1]
+        eigenvalues = np.real(eigenvalues[order])
+        temporal = temporal[:, order]
+        positive = eigenvalues > 1e-12
+        eigenvalues = eigenvalues[positive]
+        temporal = temporal[:, positive]
+        if eigenvalues.size == 0:
+            return np.empty((n_space, 0)), np.empty((0,))
+        keep = min(n_modes_save, eigenvalues.size)
+        eigenvalues = eigenvalues[:keep]
+        temporal = temporal[:, :keep]
+        scale = 1.0 / np.sqrt(np.maximum(eigenvalues * n_snapshots, 1e-12))
+        modes_w = np.dot(data_w.T, temporal) * scale
+        modes = modes_w / sqrt_w[:, np.newaxis]
+    else:
+        kernel = np.dot(data_w.T, data_w) / n_snapshots
+        eigenvalues, modes_w = np.linalg.eigh(kernel)
+        order = np.argsort(eigenvalues)[::-1]
+        eigenvalues = np.real(eigenvalues[order])
+        modes_w = modes_w[:, order]
+        positive = eigenvalues > 1e-12
+        eigenvalues = eigenvalues[positive]
+        modes_w = modes_w[:, positive]
+        if eigenvalues.size == 0:
+            return np.empty((n_space, 0)), np.empty((0,))
+        keep = min(n_modes_save, eigenvalues.size)
+        eigenvalues = eigenvalues[:keep]
+        modes_w = modes_w[:, :keep]
+        modes = modes_w / sqrt_w[:, np.newaxis]
+
+    return np.real(modes), np.real(eigenvalues)
+
+
+def _independent_multiband_mpod(
+    q: np.ndarray,
+    dt: float,
+    band_edges_hz: list[float],
+    n_modes_save: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Independent multi-band mPOD reference: center → rfft → band mask → irfft → POD.
+
+    Bands are half-open on interior edges ([f_low, f_high) for non-last bands;
+    the last band is closed on the right: [f_low, f_high]). Uniform spatial
+    weights. Modes from all bands are concatenated and re-sorted by eigenvalue
+    descending, then truncated to n_modes_save — matching the stated perform_mpod
+    assembly, built here without calling library band/POD helpers.
+    """
+    n_snapshots, n_space = q.shape
+    weight_vector = np.ones(n_space, dtype=float)
+    centered = q - np.mean(q, axis=0, dtype=np.float64)
+    freq = np.fft.rfftfreq(n_snapshots, d=dt)
+    qhat = np.fft.rfft(centered, axis=0)
+
+    band_modes: list[np.ndarray] = []
+    band_eigs: list[np.ndarray] = []
+    band_ids: list[np.ndarray] = []
+    band_mode_counts: list[int] = []
+    n_bands = len(band_edges_hz) - 1
+
+    for band_index in range(n_bands):
+        f_low = band_edges_hz[band_index]
+        f_high = band_edges_hz[band_index + 1]
+        is_last = band_index == n_bands - 1
+        mask = (freq >= f_low) & ((freq <= f_high) if is_last else (freq < f_high))
+        if not np.any(mask):
+            band_mode_counts.append(0)
+            continue
+        qhat_band = np.zeros_like(qhat)
+        qhat_band[mask, :] = qhat[mask, :]
+        data_band = np.real(np.fft.irfft(qhat_band, n=n_snapshots, axis=0))
+        modes, eigenvalues = _independent_band_weighted_pod(data_band, weight_vector, n_modes_save)
+        if eigenvalues.size == 0:
+            band_mode_counts.append(0)
+            continue
+        band_modes.append(modes)
+        band_eigs.append(eigenvalues)
+        band_ids.append(np.full(eigenvalues.size, band_index, dtype=int))
+        band_mode_counts.append(eigenvalues.size)
+
+    eigenvalues = np.concatenate(band_eigs)
+    modes = np.concatenate(band_modes, axis=1)
+    ids = np.concatenate(band_ids)
+    order = np.argsort(eigenvalues)[::-1]
+    keep = min(n_modes_save, eigenvalues.size)
+    return (
+        np.real(eigenvalues[order][:keep]),
+        np.real(modes[:, order][:, :keep]),
+        ids[order][:keep],
+        np.asarray(band_mode_counts, dtype=int),
+    )
 
 
 def test_single_band_mpod_matches_pod():
@@ -231,3 +347,114 @@ def test_mpod_save_load_roundtrip_arrays(tmp_path):
     np.testing.assert_array_equal(reloaded.time_coefficients, analyzer.time_coefficients)
     np.testing.assert_array_equal(reloaded.mode_band_indices, analyzer.mode_band_indices)
     np.testing.assert_array_equal(reloaded.band_mode_counts, analyzer.band_mode_counts)
+
+
+def test_mpod_band_oracle_matches_two_tone():
+    """Multi-band mPOD eigenvalues and |modes| match an independent numpy oracle.
+
+    WHY: the band loop (rfft → rectangular mask → irfft → weighted POD per band,
+    then concatenate and re-sort) is the path a future solver unification will
+    touch. Building that construction here with plain numpy — not the library's
+    band/POD helpers — pins the numbers so a 5% eigenvalue shift fails this test
+    while the shape-correlation check alone would still pass.
+
+    Measured max |oracle − analyzer| on this case: 0.0 (eigs and |modes|).
+    """
+    dt = 0.05
+    ns = 200
+    t = np.arange(ns) * dt
+    phi_low = _normalized(np.array([1.0, 0.0, 0.0, 1.0]))
+    phi_high = _normalized(np.array([0.0, 1.0, 1.0, 0.0]))
+    q = (
+        np.sin(2 * np.pi * 1.0 * t)[:, None] * phi_low[None, :]
+        + 0.7 * np.sin(2 * np.pi * 4.0 * t)[:, None] * phi_high[None, :]
+    )
+    band_edges = [0.0, 2.0, 5.0]
+    n_modes = 2
+    data = _make_uniform_data(q, dt=dt)
+
+    analyzer = MPODAnalyzer(
+        file_path="band_oracle_two_tone",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=n_modes,
+        band_edges=band_edges,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_mpod()
+
+    ref_eigs, ref_modes, ref_bands, ref_counts = _independent_multiband_mpod(q, dt, band_edges, n_modes)
+
+    # Both bands carry energy (1 Hz and 4 Hz tones).
+    assert set(analyzer.mode_band_indices.tolist()) == {0, 1}
+    assert set(ref_bands.tolist()) == {0, 1}
+
+    np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
+    np.testing.assert_allclose(
+        np.abs(analyzer.modes), np.abs(ref_modes), rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL
+    )
+    np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)
+    np.testing.assert_array_equal(analyzer.band_mode_counts, ref_counts)
+
+
+def test_mpod_band_oracle_interior_edge_half_open():
+    """A pure tone exactly on an interior band edge lands in one band only.
+
+    WHY: perform_mpod uses half-open interior intervals — non-last bands take
+    freq < f_high; only the last band is closed on the right (freq <= f_high).
+    A component at the interior edge must not be double-counted or dropped.
+    Here f = 2.0 Hz sits on the shared edge of [0, 2) U [2, 5]; it belongs to
+    band 1 alone. Oracle and analyzer must agree on that assignment.
+
+    Measured max |oracle − analyzer| on this case: 0.0 (eigs and |modes|).
+    """
+    dt = 0.05
+    ns = 200
+    t = np.arange(ns) * dt
+    # df = 1/(ns*dt) = 0.1 Hz so f_edge = 2.0 is an exact rfft bin.
+    f_edge = 2.0
+    band_edges = [0.0, f_edge, 5.0]
+    phi_low = _normalized(np.array([1.0, 0.0, 0.0, 1.0]))
+    phi_edge = _normalized(np.array([0.0, 1.0, 1.0, 0.0]))
+    # 1 Hz lives strictly inside band 0; f_edge sits on the interior boundary.
+    q = (
+        np.sin(2 * np.pi * 1.0 * t)[:, None] * phi_low[None, :]
+        + np.cos(2 * np.pi * f_edge * t)[:, None] * phi_edge[None, :]
+    )
+    n_modes = 4
+    data = _make_uniform_data(q, dt=dt)
+
+    analyzer = MPODAnalyzer(
+        file_path="band_oracle_interior_edge",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=n_modes,
+        band_edges=band_edges,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_mpod()
+
+    ref_eigs, ref_modes, ref_bands, ref_counts = _independent_multiband_mpod(q, dt, band_edges, n_modes)
+
+    # Content in both bands; edge tone must not vanish or double-count.
+    assert set(analyzer.mode_band_indices.tolist()) == {0, 1}
+    assert list(analyzer.band_mode_counts) == list(ref_counts)
+    # Exactly one energetic mode per band for pure sinusoids after centering.
+    assert analyzer.band_mode_counts[0] == 1
+    assert analyzer.band_mode_counts[1] == 1
+
+    # Spatial shapes: low tone → band 0, edge tone → band 1 (not band 0).
+    low_idx = int(np.where(analyzer.mode_band_indices == 0)[0][0])
+    edge_idx = int(np.where(analyzer.mode_band_indices == 1)[0][0])
+    low_mode = _normalized(analyzer.modes[:, low_idx])
+    edge_mode = _normalized(analyzer.modes[:, edge_idx])
+    assert abs(np.dot(low_mode, phi_low)) > 0.95
+    assert abs(np.dot(edge_mode, phi_edge)) > 0.95
+    assert abs(np.dot(low_mode, phi_edge)) < 0.1
+    assert abs(np.dot(edge_mode, phi_low)) < 0.1
+
+    np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
+    np.testing.assert_allclose(
+        np.abs(analyzer.modes), np.abs(ref_modes), rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL
+    )
+    np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)
