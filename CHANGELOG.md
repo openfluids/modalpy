@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `PSDPODAnalyzer` — library-facing PSD-POD class with the shared analyzer
+  lifecycle (`load_and_preprocess` → `compute_fft_blocks` → `perform_psd_pod`
+  → `save_results`). The CLI/config path now calls this class; numbers and
+  result-file layout are unchanged. One behavioural difference: PSD-POD used to
+  run on an `SPODAnalyzer` and so inherited its on-disk FFT-block cache. It now
+  recomputes the blocks and no longer writes a SPOD-named cache file beside its
+  results. Results are identical; a repeated run on the same large record no
+  longer reuses a cached `qhat`.
 - Process-wide BLAS thread policy (`openmodalpy.set_blas_threads` /
   `get_blas_threads` / `blas_threads` context manager; env
   `OPENMODALPY_BLAS_THREADS`). Default is 1 thread so `svd`/`eigh`/`eig`

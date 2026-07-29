@@ -22,13 +22,14 @@ src/openmodalpy/
 │   └── parallel.py      # thread-pool FFT + SPOD acceleration
 ├── pod.py               # PODAnalyzer (variance-optimal, identity lift)
 ├── mpod.py              # MPODAnalyzer (band-filtered POD)
+├── psd_pod.py           # PSDPODAnalyzer (pooled Fourier-ensemble POD)
 ├── spod.py              # SPODAnalyzer (frequency-by-frequency POD)
 ├── dmd.py               # DMDAnalyzer (LS/TLS, delay embedding, HODMD)
 ├── bsmd.py              # BSMDAnalyzer (triadic bispectral decomposition)
 ├── stpod.py             # STPODAnalyzer (delay-embedded POD via Hankel lift)
 ├── commands.py          # dispatch core: analyze_from_spec, _run_pod_like,
 │                        #   _run_dmd, _run_spod, _run_bsmd, _run_psd_pod,
-│                        #   PSD-POD implementation, example discovery
+│                        #   example discovery
 ├── cli.py               # argparse frontend: analyze, run, methods, examples, results
 ├── config_io.py         # load_jsonc, resolve_path, strip_jsonc_comments
 ├── specs.py             # DataSourceSpec, CaseSpec, AnalyzeSpec, RunOutcome, etc.
@@ -205,15 +206,24 @@ not treat the full mode matrix as a W-orthonormal basis.
 
 ### 3. PSD-POD — Power-Spectral-Density POD
 
-**Implementation:** in `commands.py` (no separate analyzer class)
+**Class:** `PSDPODAnalyzer` · **Lift:** pooled blockwise Fourier realizations · **Operator:** single second-order eigenproblem on the flattened Fourier ensemble
 
-**Lift:** pooled blockwise Fourier realizations across all frequencies and blocks
+```python
+from openmodalpy import PSDPODAnalyzer
+
+psd = PSDPODAnalyzer(file_path="data.mat", nfft=256, overlap=0.5, n_modes_save=10)
+psd.run_analysis()
+# psd.eigenvalues        — (n_modes_save,)
+# psd.modes              — (Nspace, n_modes_save)
+# psd.time_coefficients  — (n_fourier_realizations, n_modes_save)
+# psd.freq, psd.St       — frequency and Strouhal axes from the Welch blocks
+```
 
 **Key facts:**
 - Uses same Welch-block preprocessing as SPOD
 - Solves one global eigenproblem instead of per-frequency
 - Captures broadband coherent structures
-- Triggered via `method="psd-pod"` in config
+- Triggered via `method="psd-pod"` in config or by constructing `PSDPODAnalyzer` directly
 
 ### 4. SPOD — Spectral POD
 

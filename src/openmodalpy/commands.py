@@ -14,14 +14,12 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-import openmodalpy.core.decomposition as decomposition
 from openmodalpy.bsmd import BSMDAnalyzer
 from openmodalpy.config_io import load_jsonc, resolve_path
 from openmodalpy.core.base import (
     add_inset_colorbar,
     get_fig_aspect_ratio,
     get_robust_clim,
-    make_result_filename,
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
     reshape_mode_to_volume,
@@ -34,6 +32,7 @@ from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.example_data import generate_example_dataset
 from openmodalpy.mpod import MPODAnalyzer
 from openmodalpy.pod import PODAnalyzer
+from openmodalpy.psd_pod import PSDPODAnalyzer
 from openmodalpy.specs import (
     AnalyzeSpec,
     CaseSpec,
@@ -74,7 +73,6 @@ METHOD_REGISTRY: dict[str, MethodInfo] = {
             "nfft": "FFT block size used to build the Fourier ensemble.",
             "overlap": "Block overlap fraction used in the FFT blocking.",
         },
-        implementation_scope="command_core",
     ),
     "dmd": MethodInfo(
         method_id="dmd",
@@ -620,6 +618,7 @@ def _maybe_plot_volumetric_modes(
 
 
 def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
+    """Thin CLI/API runner: construct PSDPODAnalyzer, run, optionally plot."""
     file_path, data_loader, results_dir, figures_dir = _prepare_common_run(spec, dry_run=dry_run)
     if dry_run:
         return _make_dry_run_outcome(spec, results_dir, figures_dir, results_dir / "dry_run_psd_pod.hdf5")
@@ -627,7 +626,7 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
     # Same flags compute_fft_blocks / blocksfft will use. blocksfft always
     # removes a mean; blockwise_mean only chooses global vs per-block.
     blockwise_mean = bool(spec.params.get("blockwise_mean", False))
-    analyzer = SPODAnalyzer(
+    analyzer = PSDPODAnalyzer(
         file_path=file_path,
         nfft=int(spec.params.get("nfft", spec.case.nfft)),
         overlap=float(spec.params.get("overlap", spec.case.overlap)),
@@ -637,75 +636,23 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         spatial_weight_type=spec.case.spatial_weight_type,
         use_parallel=spec.case.use_parallel,
         blockwise_mean=blockwise_mean,
+        n_modes_save=spec.case.n_modes_save,
     )
     analyzer.load_and_preprocess()
     _apply_snapshot_limit(analyzer, spec)
     analyzer.compute_fft_blocks()
-
-    qhat = analyzer.qhat
-    if qhat.size == 0:
-        raise ValueError("FFT blocks were not computed; PSD-POD cannot proceed.")
-
-    ensemble = np.transpose(qhat, (0, 2, 1)).reshape(-1, qhat.shape[1])
-    n_realizations = ensemble.shape[0]
-    if n_realizations < 2:
-        raise ValueError("PSD-POD needs at least two Fourier realizations.")
-
-    weights = np.asarray(analyzer.W).reshape(-1)
-    if weights.size != ensemble.shape[1]:
-        if analyzer.W.ndim == 2 and analyzer.W.shape[0] == analyzer.W.shape[1]:
-            weights = np.diag(analyzer.W)
-        else:
-            raise ValueError("PSD-POD could not flatten the spatial weights to match the Fourier ensemble.")
-
-    # Flattened block-Fourier realizations through the shared second-order solver.
-    modes, eigenvalues, time_coefficients = decomposition.weighted_second_order(
-        ensemble,
-        decomposition.SpatialMetric(weights),
-        method="eigh",
-        drop_nonpositive=False,
-        n_keep=spec.case.n_modes_save,
-    )
-
-    filename = make_result_filename(
-        Path(file_path).stem,
-        analyzer.nfft,
-        analyzer.overlap,
-        analyzer.data.get("Ns", 0),
-        "psd_pod",
-    )
-    save_path = results_dir / filename
-    # blocksfft removes a mean on every path, so this is unconditionally True.
-    # blockwise_mean chooses which mean (global or per-block), never whether.
-    # It is recorded separately below so the two facts stay distinguishable.
-    from openmodalpy.core.results import write_results
-
-    attrs = analyzer._get_metadata()
-    attrs["analysis_type"] = "psd_pod"
-    attrs["lift_kind"] = "flattened_block_fourier_realizations"
-    attrs["uses_mean_subtraction"] = True
-    attrs["blockwise_mean"] = bool(getattr(analyzer, "blockwise_mean", False))
-    attrs["uses_spatial_metric_in_second_order_operator"] = True
-    attrs["spectral_estimator"] = "welch_block_average"
-    attrs["n_fourier_realizations"] = n_realizations
-    write_results(
-        save_path,
-        {
-            "eigenvalues": np.real(eigenvalues),
-            "modes": modes,
-            "time_coefficients": time_coefficients,
-            "freq": analyzer.freq,
-            "st": analyzer.St,
-        },
-        attrs=attrs,
-    )
+    analyzer.perform_psd_pod()
+    analyzer.save_results()
+    save_path = Path(analyzer.results_path) if analyzer.results_path else _find_latest_result_file(results_dir)
 
     if spec.case.generate_plots:
-        _plot_psd_pod_eigenvalues(np.asarray(eigenvalues), figures_dir, spec.run_id)
+        modes = np.asarray(analyzer.modes)
+        eigenvalues = np.asarray(analyzer.eigenvalues)
+        _plot_psd_pod_eigenvalues(eigenvalues, figures_dir, spec.run_id)
         if resolve_volume_layout(analyzer.data, modes.shape[0]) is not None:
             _plot_psd_pod_modes_3d(
-                modes=np.asarray(modes),
-                eigenvalues=np.asarray(eigenvalues),
+                modes=modes,
+                eigenvalues=eigenvalues,
                 data=analyzer.data,
                 figures_dir=figures_dir,
                 run_id=spec.run_id,
@@ -713,8 +660,8 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
             )
         else:
             _plot_psd_pod_modes(
-                modes=np.asarray(modes),
-                eigenvalues=np.asarray(eigenvalues),
+                modes=modes,
+                eigenvalues=eigenvalues,
                 data=analyzer.data,
                 figures_dir=figures_dir,
                 run_id=spec.run_id,

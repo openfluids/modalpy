@@ -17,6 +17,7 @@ from openmodalpy.core.threads import blas_threads, get_blas_threads, set_blas_th
 from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.mpod import MPODAnalyzer
 from openmodalpy.pod import PODAnalyzer
+from openmodalpy.psd_pod import PSDPODAnalyzer
 from openmodalpy.specs import AnalyzeSpec, CaseSpec, DataSourceSpec, RunOutcome
 from openmodalpy.spod import SPODAnalyzer
 from openmodalpy.stpod import STPODAnalyzer
@@ -29,6 +30,7 @@ __all__ = [
     "SPODAnalyzer",
     "BSMDAnalyzer",
     "STPODAnalyzer",
+    "PSDPODAnalyzer",
     "AnalysisResults",
     "read_results",
     "collect_provenance",
