@@ -15,6 +15,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import openmodalpy.core.decomposition as decomposition
 from openmodalpy.bsmd import BSMDAnalyzer
 from openmodalpy.config_io import load_jsonc, resolve_path
 from openmodalpy.core.base import (
@@ -667,17 +668,14 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         else:
             raise ValueError("PSD-POD could not flatten the spatial weights to match the Fourier ensemble.")
 
-    ensemble_weighted = ensemble * np.sqrt(weights)[np.newaxis, :]
-    kernel = (ensemble_weighted @ ensemble_weighted.conj().T) / n_realizations
-    eigenvalues, eigenvectors = np.linalg.eigh(kernel)
-    order = np.argsort(eigenvalues.real)[::-1]
-    keep = min(spec.case.n_modes_save, len(order))
-    eigenvalues = np.real_if_close(eigenvalues[order][:keep])
-    eigenvectors = eigenvectors[:, order][:, :keep]
-    safe_eigs = np.maximum(np.real(eigenvalues), 1e-16)
-    ensemble_conj = ensemble.conj()
-    modes = (ensemble_conj.T @ eigenvectors) / np.sqrt(safe_eigs * n_realizations)
-    time_coefficients = ensemble_conj @ (weights[:, np.newaxis] * modes)
+    # Flattened block-Fourier realizations through the shared second-order solver.
+    modes, eigenvalues, time_coefficients = decomposition.weighted_second_order(
+        ensemble,
+        decomposition.SpatialMetric(weights),
+        method="eigh",
+        drop_nonpositive=False,
+        n_keep=spec.case.n_modes_save,
+    )
 
     filename = make_result_filename(
         Path(file_path).stem,

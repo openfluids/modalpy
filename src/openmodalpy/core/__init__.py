@@ -14,6 +14,9 @@ from openmodalpy.core.config import (
     RESULTS_DIR_SPOD,
 )
 
+# decomposition is imported as a submodule (openmodalpy.core.decomposition)
+# so analyzers can `from openmodalpy.core import decomposition`.
+
 __all__ = [
     "BaseAnalyzer",
     "FFT_BACKEND",

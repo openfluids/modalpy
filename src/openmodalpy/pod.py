@@ -26,9 +26,9 @@ import matplotlib.pyplot as plt
 
 # Third-party imports
 import numpy as np
-import scipy.linalg  # For eigh
 from fftkit import find_peaks, periodogram_rfft
 
+import openmodalpy.core.decomposition as decomposition
 from openmodalpy.core.base import (
     BaseAnalyzer,
     add_inset_colorbar,
@@ -179,7 +179,7 @@ class PODAnalyzer(BaseAnalyzer):
         self.temporal_mean = np.mean(data_matrix, axis=0, dtype=np.float64)
         data_mean_removed = data_matrix - self.temporal_mean
 
-        # 2. Apply spatial weights with better handling
+        # 2. Spatial metric (inner-product weights)
         if self.spatial_weight_type == "uniform":
             self.W = np.ones(num_space_points, dtype=np.float64)
 
@@ -200,54 +200,24 @@ class PODAnalyzer(BaseAnalyzer):
                 f"Weight vector length {len(weight_vector)} doesn't match spatial points {num_space_points}"
             )
 
-        # Apply weights efficiently using broadcasting
-        sqrt_weights = np.sqrt(np.maximum(weight_vector, 1e-12))  # Avoid sqrt of negative/zero
-        data_weighted = data_mean_removed * sqrt_weights
-
-        # 3. Choose eigenvalue problem based on efficiency
         use_temporal_kernel = num_snapshots < num_space_points
-
         if use_temporal_kernel:
             print(f"Using temporal kernel: {num_snapshots} snapshots < {num_space_points} spatial points")
-            # K = (1/Ns) * X * X^T where X is weighted data
-            K = np.dot(data_weighted, data_weighted.T) / num_snapshots
-            eigenvalues_temp, temporal_coeffs_unscaled = scipy.linalg.eigh(K)
-
-            # Sort in descending order
-            sort_idx = np.argsort(eigenvalues_temp)[::-1]
-            self.eigenvalues = eigenvalues_temp[sort_idx]
-            temporal_coeffs_unscaled = temporal_coeffs_unscaled[:, sort_idx]
-
-            # Compute spatial modes efficiently
-            # Avoid division by very small eigenvalues
-            safe_eigenvals = np.maximum(self.eigenvalues * num_snapshots, 1e-12)
-            normalization = 1.0 / np.sqrt(safe_eigenvals)
-
-            modes_temp = np.dot(data_weighted.T, temporal_coeffs_unscaled)
-            self.modes = (modes_temp * normalization) / sqrt_weights[:, np.newaxis]
-            self.time_coefficients = temporal_coeffs_unscaled * np.sqrt(safe_eigenvals)
-
         else:
             print(f"Using spatial kernel: {num_space_points} spatial points <= {num_snapshots} snapshots")
-            # K = (1/Ns) * X^T * X where X is weighted data
-            K = np.dot(data_weighted.T, data_weighted) / num_snapshots
-            eigenvalues_spatial, spatial_modes_weighted = scipy.linalg.eigh(K)
 
-            # Sort in descending order
-            sort_idx = np.argsort(eigenvalues_spatial)[::-1]
-            self.eigenvalues = eigenvalues_spatial[sort_idx]
-            spatial_modes_weighted = spatial_modes_weighted[:, sort_idx]
-
-            # Get unweighted modes
-            self.modes = spatial_modes_weighted / sqrt_weights[:, np.newaxis]
-            # Project snapshots onto modes with the same weighted inner product
-            # used to define the spatial kernel.
-            self.time_coefficients = np.dot(data_weighted, spatial_modes_weighted)
-
-        # Ensure real values (should be real from eigh on symmetric matrix)
-        self.modes = np.real(self.modes)
-        self.eigenvalues = np.real(self.eigenvalues)
-        self.time_coefficients = np.real(self.time_coefficients)
+        # 3. Identity lift + weighted second-order eigenproblem.
+        # POD keeps all eigenvalues here and truncates after the energy ratio.
+        self._lift = decomposition.IdentityLift()
+        metric = decomposition.SpatialMetric(weight_vector)
+        lifted = self._lift.apply(data_mean_removed)
+        self.modes, self.eigenvalues, self.time_coefficients = decomposition.weighted_second_order(
+            lifted,
+            metric,
+            method="eigh",
+            drop_nonpositive=False,
+            n_keep=None,
+        )
 
         # Capture pre-truncation total before slicing eigenvalues (the ratio
         # cannot be recovered after truncation).
@@ -278,8 +248,9 @@ class PODAnalyzer(BaseAnalyzer):
 
     def _get_algorithm_metadata(self) -> dict:
         """Describe the current POD contract."""
+        lift = getattr(self, "_lift", None) or decomposition.IdentityLift()
         meta = {
-            "lift_kind": "identity_centered_snapshots",
+            "lift_kind": lift.kind,
             "uses_mean_subtraction": True,
             "uses_spatial_metric_in_second_order_operator": True,
             "eigenvalue_normalization": "snapshot_average",

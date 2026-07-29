@@ -35,9 +35,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from fftkit import find_peaks, periodogram_rfft
 
+import openmodalpy.core.decomposition as decomposition
 from openmodalpy.core.base import (
     BaseAnalyzer,
-    compute_reduced_svd,
     get_fig_aspect_ratio,
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
@@ -124,25 +124,13 @@ class STPODAnalyzer(BaseAnalyzer):
     def _build_hankel_matrix(self, data_centered: np.ndarray) -> np.ndarray:
         """Build the block Hankel matrix from centered data.
 
-        Uses vectorized indexing: each column j of H is the stack of rows
-        j, j+1, ..., j+d-1 from data_centered, reshaped into a single vector.
-
-        Args:
-            data_centered: Mean-subtracted data, shape (Ns, Nspace).
-
-        Returns:
-            H: Block Hankel matrix, shape (d * Nspace, m) where m = Ns - d + 1.
+        Returns shape ``(d * Nspace, m)`` with ``m = Ns - d + 1`` — the
+        historical layout used by reconstruction checks. The delay lift
+        itself produces samples × features; this method transposes for the
+        column-oriented Hankel contract.
         """
-        Ns, Nspace = data_centered.shape
-        d = self.embedding_dim
-        m = Ns - d + 1
-
-        # Build index array: col_idx[k, j] = j + k → row of data for block k, column j
-        col_idx = np.arange(m)[np.newaxis, :] + np.arange(d)[:, np.newaxis]  # (d, m)
-        # Gather: (d, m, Nspace) → transpose to (d, Nspace, m) → reshape to (d*Nspace, m)
-        # Transpose is needed so spatial indices stay contiguous within each block.
-        H = data_centered[col_idx].transpose(0, 2, 1).reshape(d * Nspace, m)
-        return np.ascontiguousarray(H)
+        lift = decomposition.DelayEmbeddingLift(self.embedding_dim)
+        return np.ascontiguousarray(lift.apply(data_centered).T)
 
     def _get_weight_vector(self, num_space_points: int) -> np.ndarray:
         """Extract weight vector from self.W, handling various shapes."""
@@ -158,30 +146,20 @@ class STPODAnalyzer(BaseAnalyzer):
                 raise ValueError(f"Unexpected weight shape: {self.W.shape}")
         return self.W
 
-    def _unweight_modes(self, U_weighted: np.ndarray, sqrt_weights_extended: np.ndarray) -> np.ndarray:
-        """Remove weights from modes.
-
-        Args:
-            U_weighted: Weighted modes from SVD.
-            sqrt_weights_extended: Extended sqrt weights used for weighting.
-
-        Returns:
-            Unweighted modes.
-        """
-        return U_weighted / sqrt_weights_extended[:, np.newaxis]
-
     def perform_stpod(self) -> None:
         """Perform ST-POD analysis on the loaded data.
 
         The algorithm:
         1. Validate embedding dimension.
         2. Subtract temporal mean.
-        3. Build block Hankel matrix H: (d*Nspace, m).
-        4. Apply sqrt(W) weights to each d-block.
-        5. Compute SVD: U, sigma, Vt = svd(H_weighted).
-        6. Store eigenvalues = sigma²[:k] / m.
-        7. Unweight modes.
-        8. Store time coefficients from Vt scaled by sigma.
+        3. Apply the delay lift → (m, d*Nspace), m = Ns - d + 1.
+        4. Tile the spatial metric over the d delay blocks (I_d ⊗ W).
+        5. Solve via ``weighted_second_order(..., method="svd")``, which
+           weights, takes the SVD, unweights the modes, and returns
+           eigenvalues = sigma²[:k] / m with coefficients Vt scaled by sigma.
+
+        The SVD route is deliberate: forming the Gram matrix would square the
+        condition number of an already ill-conditioned Hankel matrix.
         """
         if "q" not in self.data:
             raise ValueError("Data not loaded. Call load_and_preprocess() first.")
@@ -206,42 +184,28 @@ class STPODAnalyzer(BaseAnalyzer):
         self.temporal_mean = np.mean(data_matrix, axis=0, dtype=np.float64)
         data_centered = data_matrix - self.temporal_mean
 
-        # 2. Build Hankel matrix
-        H = self._build_hankel_matrix(data_centered)
+        # 2. Delay lift → samples × lifted features (m, d*Nspace)
+        self._lift = decomposition.DelayEmbeddingLift(self.embedding_dim)
+        lifted = self._lift.apply(data_centered)
 
-        # 3. Apply weights in-place
+        # 3. Metric in the lifted space: I_d ⊗ W
         weight_vector = self._get_weight_vector(Nspace)
-        sqrt_weights = np.sqrt(np.maximum(weight_vector, 1e-12))
-        sqrt_weights_extended = np.tile(sqrt_weights, self.embedding_dim)
-        H *= sqrt_weights_extended[:, np.newaxis]  # in-place weighting
+        base_metric = decomposition.SpatialMetric(weight_vector)
+        lifted_metric = decomposition.SpatialMetric(base_metric.tile(self.embedding_dim))
 
-        # 4. SVD — use truncated (ARPACK) for large matrices, full for small ones
-        n_min = min(H.shape)
+        # 4. Weighted SVD in the lifted space (do not square the Hankel matrix)
+        n_min = min(lifted.shape)
         k = min(self.n_modes_save, n_min - 1)
         if k < self.n_modes_save:
             print(f"Warning: Only {k} modes available, requested {self.n_modes_save}")
             self.n_modes_save = k
 
-        U_full, sigma_full, Vt_full = compute_reduced_svd(H, k)
-        sigma = sigma_full[:k]
-        U = U_full[:, :k]
-        Vt = Vt_full[:k, :]
-
-        del H  # free Hankel memory
-
-        # 5. Store results
-        self.eigenvalues = (sigma**2) / m
-
-        # 6. Unweight modes
-        self.modes = self._unweight_modes(U, sqrt_weights_extended)
-
-        # 7. Time coefficients: scale Vt by sigma
-        self.time_coefficients = (Vt * sigma[:, np.newaxis]).T
-
-        # Ensure real values
-        self.modes = np.real(self.modes)
-        self.eigenvalues = np.real(self.eigenvalues)
-        self.time_coefficients = np.real(self.time_coefficients)
+        self.modes, self.eigenvalues, self.time_coefficients = decomposition.weighted_second_order(
+            lifted,
+            lifted_metric,
+            method="svd",
+            n_keep=k,
+        )
 
         end_time = time.time()
         print(f"ST-POD completed in {end_time - start_time:.2f} seconds.")
@@ -249,8 +213,9 @@ class STPODAnalyzer(BaseAnalyzer):
 
     def _get_algorithm_metadata(self) -> dict:
         """Describe the current delay-embedded POD contract."""
+        lift = getattr(self, "_lift", None) or decomposition.DelayEmbeddingLift(max(self.embedding_dim, 2))
         return {
-            "lift_kind": "delay_embedding",
+            "lift_kind": lift.kind,
             "stpod_variant": "delay_embedded_pod",
             "uses_mean_subtraction": True,
             "uses_spatial_metric_in_lifted_space": True,

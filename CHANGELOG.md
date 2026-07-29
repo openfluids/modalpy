@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- POD, mPOD, ST-POD and PSD-POD now share one lift / metric / second-order
+  seam in `core/decomposition.py` (`IdentityLift`, `DelayEmbeddingLift`,
+  `BandFilteredLift`, `SpatialMetric`, `weighted_second_order`). Results are
+  unchanged; each caller keeps its own truncation policy via
+  `drop_nonpositive` / `n_keep`.
+- PSD-POD now floors its spatial weights at `1e-12` before taking the square
+  root, matching POD, mPOD and ST-POD. Previously a zero-weight point
+  contributed exactly nothing and a negative weight produced `NaN` silently.
+  Results are unaffected for strictly positive weights.
+
 ### Fixed
 - PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
   `blocksfft` (which always removes a mean — global by default, per-block when

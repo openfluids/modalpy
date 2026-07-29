@@ -15,6 +15,8 @@ src/openmodalpy/
 ├── core/
 │   ├── base.py          # BaseAnalyzer, compute_reduced_svd, blocksfft,
 │   │                    #   spod_function, weight calculation, plot helpers
+│   ├── decomposition.py # lift / metric / weighted_second_order seam
+│   │                    #   (POD, mPOD, ST-POD, PSD-POD share this)
 │   ├── io.py            # MATDataLoader, DNamiDataLoader, _slice_block_in_time
 │   ├── config.py        # FFT_BACKEND, FIG_DPI, directory defaults
 │   └── parallel.py      # thread-pool FFT + SPOD acceleration
@@ -63,6 +65,12 @@ They differ only in the **operator problem** solved on the lifted data:
 - Variance-optimal (eigendecomposition of weighted covariance/kernel)
 - Evolution-fit (SVD-based regression on paired snapshots)
 - Triadic interaction (cross-bispectral coupling optimization)
+
+The variance-optimal path is a single seam in `core/decomposition.py`:
+named lifts (`IdentityLift`, `DelayEmbeddingLift`, `BandFilteredLift`), a
+`SpatialMetric` (with `.tile(d)` for delay space), and
+`weighted_second_order(..., method="eigh"|"svd")`. POD, mPOD, ST-POD and
+PSD-POD all call that solver; `lift_kind` metadata comes from `lift.kind`.
 
 **Limitation — uniform W is not a domain integral.** With
 `spatial_weight_type="uniform"`, W is the all-ones vector, not cell volumes or
@@ -533,8 +541,9 @@ may optionally use SLEPc (`slepc4py`) for distributed eigensolvers.
 
 To add a new decomposition:
 
-1. **Variance-optimal method** — write a new lift (realization generator), then
-   reuse the existing kernel eigenproblem in `core/base.py`.
+1. **Variance-optimal method** — write a new `Lift` in
+   `core/decomposition.py` (or a thin wrapper), then call
+   `weighted_second_order` with the appropriate metric and method.
 2. **Evolution-fit method** — write a new lift for paired data, then reuse the
    SVD-based regression in `dmd.py`.
 3. **Interaction method** — write a new lift for higher-order objects, then

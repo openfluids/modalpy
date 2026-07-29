@@ -9,6 +9,7 @@ from typing import Iterable
 import h5py
 import numpy as np
 
+import openmodalpy.core.decomposition as decomposition
 from openmodalpy.core.config import FIGURES_DIR_POD, RESULTS_DIR_POD
 from openmodalpy.pod import PODAnalyzer
 
@@ -28,54 +29,6 @@ def _as_weight_vector(W: np.ndarray, n_space: int) -> np.ndarray:
     if weights.size != n_space:
         raise ValueError(f"Weight vector length {weights.size} does not match n_space={n_space}")
     return weights
-
-
-def _compute_weighted_pod(
-    data_centered: np.ndarray,
-    weight_vector: np.ndarray,
-    n_modes_save: int,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute a POD basis from a centered snapshot matrix."""
-    n_snapshots, n_space = data_centered.shape
-    sqrt_weights = np.sqrt(np.maximum(weight_vector, 1e-12))
-    data_weighted = data_centered * sqrt_weights
-
-    if n_snapshots < n_space:
-        kernel = np.dot(data_weighted, data_weighted.T) / n_snapshots
-        eigenvalues, temporal_vecs = np.linalg.eigh(kernel)
-        order = np.argsort(eigenvalues)[::-1]
-        eigenvalues = np.real(eigenvalues[order])
-        temporal_vecs = temporal_vecs[:, order]
-        positive = eigenvalues > 1e-12
-        eigenvalues = eigenvalues[positive]
-        temporal_vecs = temporal_vecs[:, positive]
-        if eigenvalues.size == 0:
-            return np.empty((n_space, 0)), np.empty((0,)), np.empty((n_snapshots, 0))
-        keep = min(n_modes_save, eigenvalues.size)
-        eigenvalues = eigenvalues[:keep]
-        temporal_vecs = temporal_vecs[:, :keep]
-        normalization = 1.0 / np.sqrt(np.maximum(eigenvalues * n_snapshots, 1e-12))
-        weighted_modes = np.dot(data_weighted.T, temporal_vecs) * normalization
-        modes = weighted_modes / sqrt_weights[:, np.newaxis]
-        coeffs = temporal_vecs * np.sqrt(np.maximum(eigenvalues * n_snapshots, 1e-12))
-    else:
-        kernel = np.dot(data_weighted.T, data_weighted) / n_snapshots
-        eigenvalues, weighted_modes = np.linalg.eigh(kernel)
-        order = np.argsort(eigenvalues)[::-1]
-        eigenvalues = np.real(eigenvalues[order])
-        weighted_modes = weighted_modes[:, order]
-        positive = eigenvalues > 1e-12
-        eigenvalues = eigenvalues[positive]
-        weighted_modes = weighted_modes[:, positive]
-        if eigenvalues.size == 0:
-            return np.empty((n_space, 0)), np.empty((0,)), np.empty((n_snapshots, 0))
-        keep = min(n_modes_save, eigenvalues.size)
-        eigenvalues = eigenvalues[:keep]
-        weighted_modes = weighted_modes[:, :keep]
-        modes = weighted_modes / sqrt_weights[:, np.newaxis]
-        coeffs = np.dot(data_weighted, weighted_modes)
-
-    return np.real(modes), np.real(eigenvalues), np.real(coeffs)
 
 
 def _resolve_band_edges(band_edges: Iterable[float] | None, nyquist: float) -> np.ndarray:
@@ -129,8 +82,9 @@ class MPODAnalyzer(PODAnalyzer):
         self._resolved_band_edges_hz = np.array([])
 
     def _get_algorithm_metadata(self) -> dict:
+        lift = getattr(self, "_lift", None) or decomposition.BandFilteredLift()
         return {
-            "lift_kind": "multiscale_filtered_snapshots",
+            "lift_kind": lift.kind,
             "uses_mean_subtraction": True,
             "uses_spatial_metric_in_second_order_operator": True,
             "eigenvalue_normalization": "snapshot_average",
@@ -202,8 +156,9 @@ class MPODAnalyzer(PODAnalyzer):
             self.band_mode_counts = np.array([self.eigenvalues.size], dtype=int)
             return
 
-        freq = np.fft.rfftfreq(n_snapshots, d=dt)
-        qhat = np.fft.rfft(data_centered, axis=0)
+        metric = decomposition.SpatialMetric(weight_vector)
+        # Kind is shared across bands; each band builds its own BandFilteredLift.
+        self._lift = decomposition.BandFilteredLift()
 
         band_modes: list[np.ndarray] = []
         band_eigenvalues: list[np.ndarray] = []
@@ -215,19 +170,25 @@ class MPODAnalyzer(PODAnalyzer):
             zip(self._resolved_band_edges_hz[:-1], self._resolved_band_edges_hz[1:])
         ):
             is_last = band_index == self._resolved_band_edges_hz.size - 2
-            mask = (freq >= f_low) & ((freq <= f_high) if is_last else (freq < f_high))
-            if not np.any(mask):
+            lift = decomposition.BandFilteredLift(
+                f_low=float(f_low),
+                f_high=float(f_high),
+                dt=dt,
+                is_last=is_last,
+            )
+            # Ask the lift for its own mask; the edge convention lives in one place.
+            if not np.any(lift.mask(n_snapshots)):
                 band_mode_counts.append(0)
                 continue
 
-            qhat_band = np.zeros_like(qhat)
-            qhat_band[mask, :] = qhat[mask, :]
-            data_band = np.fft.irfft(qhat_band, n=n_snapshots, axis=0)
-
-            modes, eigenvalues, coeffs = _compute_weighted_pod(
-                data_centered=np.real(data_band),
-                weight_vector=weight_vector,
-                n_modes_save=self.n_modes_save,
+            data_band = lift.apply(data_centered)
+            # mPOD drops non-positive eigenvalues and truncates inside the solver.
+            modes, eigenvalues, coeffs = decomposition.weighted_second_order(
+                data_band,
+                metric,
+                method="eigh",
+                drop_nonpositive=True,
+                n_keep=self.n_modes_save,
             )
             if eigenvalues.size == 0:
                 band_mode_counts.append(0)
