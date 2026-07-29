@@ -25,9 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is `r > 0`, **not** `Ny > 1` — a single radial station at `r > 0` has
   positive measure and is fine.
 
-  Scope: the check lives in the shared seam, so it covers POD, mPOD, ST-POD
-  and PSD-POD. **SPOD and BSMD do not route through that seam and are not yet
-  covered** — they still accept a zero-measure metric.
+  Scope: all five named methods plus BSMD. The rule has a single definition
+  (`core/base.py::require_spatial_metric`); POD, mPOD, ST-POD and PSD-POD reach
+  it through the shared seam, SPOD through `spod_function`, and BSMD checks once
+  per analysis. SPOD and BSMD apply weights directly rather than flooring them,
+  so an isolated zero there means that cell contributes nothing.
 
 ### Fixed
 - PSD-POD result metadata now records `uses_mean_subtraction=True`, matching

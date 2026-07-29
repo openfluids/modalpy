@@ -84,6 +84,50 @@ def test_out_of_range_index_raises(tmp_path):
         analyzer._perform_static_bsmd_core()
 
 
+def test_bsmd_rejects_invalid_spatial_metric(tmp_path):
+    """Negative weights and a zero-measure metric raise ValueError once per analysis."""
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24, Nspace=4)
+    analyzer.W = -np.abs(np.asarray(analyzer.W, dtype=float))
+    with pytest.raises(ValueError, match="negative weight"):
+        analyzer._perform_static_bsmd_core()
+
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24, Nspace=4)
+    analyzer.W = np.zeros_like(np.asarray(analyzer.W, dtype=float))
+    with pytest.raises(ValueError, match="zero total measure"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_bsmd_polar_ny1_zero_measure_raises(tmp_path):
+    """Polar weights on a single radial station at r=0 have zero total measure."""
+    np.random.seed(20)
+    ns, nx, ny = 24, 4, 1
+    data = {
+        "q": np.random.randn(ns, nx * ny),
+        "x": np.linspace(0.0, 1.0, nx),
+        "y": np.array([0.0]),
+        "dt": 1.0,
+        "Nx": nx,
+        "Ny": ny,
+        "Ns": ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="bsmd_polar_ny1",
+        nfft=8,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="polar",
+        use_static_triads=True,
+        static_triads=[(1, 1, 2)],
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    with pytest.raises(ValueError, match="zero total measure"):
+        analyzer._perform_static_bsmd_core()
+
+
 def test_nyquist_index_is_accepted(tmp_path):
     """|p| == nfft//2 is the last real rfft bin and must be analysed, not rejected."""
     analyzer = _make_analyzer(tmp_path, triads=[(4, -4, 0)], nfft=8, Ns=32)

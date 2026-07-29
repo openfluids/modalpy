@@ -53,6 +53,7 @@ from openmodalpy.core.base import (
     plot_isometric_slices_3d,
     plot_orthogonal_slices_3d,
     print_summary,
+    require_spatial_metric,
     reshape_mode_to_volume,
     resolve_volume_layout,
     style_spatial_axes,
@@ -603,6 +604,10 @@ class BSMDAnalyzer(BaseAnalyzer):
             self.eigenvalues = np.array([])
             self.triads = np.array([])
             return
+
+        # Once per analysis (not per triad): refuse a metric that is not an
+        # inner product before any eigenproblem is formed.
+        require_spatial_metric(self.W)
 
         # Reject triads outside the analysable range before any analysis.
         # Bound by both the physical rfft limit (nfft//2) and the bins actually

@@ -1025,6 +1025,40 @@ def auto_detect_weight_type(file_path):
     return di_auto_detect_weight_type(file_path)
 
 
+def require_spatial_metric(weights):
+    """Raise ``ValueError`` if ``weights`` do not define an inner product.
+
+    A metric that is not an inner product must not reach a solver. Isolated
+    zeros among positive weights stay allowed -- the POD seam floors those at
+    1e-12, while SPOD and BSMD simply let that cell contribute nothing. What is
+    rejected: non-finite entries, negative entries, and a zero total measure.
+    Single definition, used by the decomposition seam, SPOD (via
+    ``_flatten_weights``) and BSMD.
+    """
+    weights = np.asarray(weights)
+    if not np.all(np.isfinite(weights)):
+        raise ValueError(
+            f"Spatial metric contains {np.count_nonzero(~np.isfinite(weights))} non-finite "
+            "weight(s) (NaN or inf). This would otherwise surface much later as an "
+            "unhelpful LAPACK error from inside the eigensolver."
+        )
+    if np.any(weights < 0):
+        raise ValueError(
+            f"Spatial metric contains {np.count_nonzero(weights < 0)} negative weight(s) "
+            f"(most negative: {float(np.min(weights)):.6g}). A negative entry means the "
+            "metric is not an inner product, so any energy computed from it is meaningless."
+        )
+    # Reached only when every weight is >= 0, so this means all of them are zero:
+    # the domain has no measure, and the usual cause is worth naming.
+    if np.sum(weights) <= 0:
+        raise ValueError(
+            f"Spatial metric has zero total measure ({weights.size} weights, all zero), so "
+            "it defines no inner product. The usual cause is polar weights on a grid whose "
+            "radial coordinate is 0: every annulus area is pi*r**2 = 0. Note the condition "
+            "is r > 0, not Ny > 1 -- a single radial station at r > 0 is fine."
+        )
+
+
 def _flatten_weights(w, expected_len):
     """Return weights as a column vector matching ``expected_len``."""
     w = np.asarray(w)
@@ -1040,6 +1074,7 @@ def _flatten_weights(w, expected_len):
     w = w.reshape(-1, 1)
     if w.shape[0] != expected_len:
         raise ValueError("Flattened weights length mismatch")
+    require_spatial_metric(w)
     return w
 
 

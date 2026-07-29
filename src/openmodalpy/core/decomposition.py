@@ -21,7 +21,7 @@ from typing import Literal, Protocol, runtime_checkable
 import numpy as np
 import scipy.linalg
 
-from openmodalpy.core.base import compute_reduced_svd
+from openmodalpy.core.base import compute_reduced_svd, require_spatial_metric
 
 
 @runtime_checkable
@@ -141,30 +141,7 @@ def _as_weight_vector(metric: SpatialMetric | np.ndarray, n_space: int) -> np.nd
         weights = np.asarray(metric, dtype=float).reshape(-1)
     if weights.size != n_space:
         raise ValueError(f"Weight vector length {weights.size} does not match n_space={n_space}")
-    # A spatial metric that is not an inner product must not reach the solver.
-    # Isolated zeros among positive weights remain allowed (floored at 1e-12
-    # later); non-finite entries, negative entries and a zero total measure are not.
-    if not np.all(np.isfinite(weights)):
-        raise ValueError(
-            f"Spatial metric contains {np.count_nonzero(~np.isfinite(weights))} non-finite "
-            "weight(s) (NaN or inf). This would otherwise surface much later as an "
-            "unhelpful LAPACK error from inside the eigensolver."
-        )
-    if np.any(weights < 0):
-        raise ValueError(
-            f"Spatial metric contains {np.count_nonzero(weights < 0)} negative weight(s) "
-            f"(most negative: {float(np.min(weights)):.6g}). A negative entry means the "
-            "metric is not an inner product, so any energy computed from it is meaningless."
-        )
-    # Reached only when every weight is >= 0, so this means all of them are zero:
-    # the domain has no measure, and the usual cause is worth naming.
-    if np.sum(weights) <= 0:
-        raise ValueError(
-            f"Spatial metric has zero total measure ({weights.size} weights, all zero), so "
-            "it defines no inner product. The usual cause is polar weights on a grid whose "
-            "radial coordinate is 0: every annulus area is pi*r**2 = 0. Note the condition "
-            "is r > 0, not Ny > 1 -- a single radial station at r > 0 is fine."
-        )
+    require_spatial_metric(weights)
     return weights
 
 
