@@ -166,6 +166,13 @@ print(FFT_BACKEND)   # the backend actually in use
 The legacy `PYMODAL_FFT_BACKEND` variable still works as a fallback, but
 `FFTKIT_BACKEND` is the supported name.
 
+## Contributing
+
+Contributions are welcome, and questions and bug reports count. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for setup and the checks CI runs, and the
+[openfluids Code of Conduct](https://github.com/openfluids/.github/blob/main/CODE_OF_CONDUCT.md)
+for how we work together.
+
 ## License
 
 Apache-2.0. Originally developed by Ricardo A S Frantz — see [LICENSE](LICENSE) and
