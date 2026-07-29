@@ -130,6 +130,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so an isolated zero there means that cell contributes nothing.
 
 ### Fixed
+- A full disk (or other write failure) while BSMD saves or offloads its FFT
+  block cache is no longer reported as a cache-load failure; the write error
+  propagates instead of triggering a recompute that cannot save either. When a
+  cache read genuinely does fail, the message now names the file it could not
+  read.
 - PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
   `blocksfft` (which always removes a mean — global by default, per-block when
   `blockwise_mean` is set). The previous write stored `False`.
