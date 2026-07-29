@@ -599,3 +599,91 @@ def test_load_results_rejects_prefix_unconjugated_file(tmp_path):
     reloaded = _make_analyzer(tmp_path, triads=[(1, -1, 0)], nfft=8, Ns=24)
     with pytest.raises(ValueError, match="sum-frequency term was not conjugated"):
         reloaded.load_results("bsmd_stale.hdf5")
+
+
+def _make_analyzer_without_fft(
+    tmp_path,
+    triads,
+    nfft=8,
+    Ns=32,
+    Nspace=4,
+    use_static=True,
+):
+    """Build a BSMDAnalyzer with weights set but qhat still empty (no FFT blocks)."""
+    np.random.seed(20)
+    Nx = int(np.sqrt(Nspace))
+    Ny = Nspace // Nx
+    data = {
+        "q": np.random.randn(Ns, Nspace),
+        "x": np.linspace(0, 1, Nx),
+        "y": np.linspace(0, 1, Ny),
+        "dt": 1.0,
+        "Nx": Nx,
+        "Ny": Ny,
+        "Ns": Ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="dummy.h5",
+        nfft=nfft,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_static_triads=use_static,
+        static_triads=triads,
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    return analyzer
+
+
+def test_empty_qhat_message_says_no_bins_loaded_user_triads(tmp_path):
+    """User-supplied triads with no FFT blocks: message names empty load, not -1."""
+    analyzer = _make_analyzer_without_fft(tmp_path, triads=[(1, 1, 2)])
+    assert analyzer.qhat.size == 0
+    with pytest.raises(ValueError) as excinfo:
+        analyzer._perform_static_bsmd_core()
+    msg = str(excinfo.value)
+    assert "-1" not in msg
+    assert "no frequency bins" in msg.lower() or "not loaded" in msg.lower()
+
+
+def test_empty_qhat_message_says_no_bins_loaded_default_triads(tmp_path):
+    """Default triad list with no FFT blocks: same honest empty-load message.
+
+    Dropped triad indices can include -1 as a frequency bin; the check is that
+    the bound phrase itself is never ``|p| <= -1``.
+    """
+    analyzer = _make_analyzer_without_fft(tmp_path, triads=None)
+    assert analyzer.qhat.size == 0
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(ValueError) as excinfo:
+            analyzer._perform_static_bsmd_core()
+    msg = str(excinfo.value)
+    assert "<= -1" not in msg
+    assert "no frequency bins" in msg.lower() or "not loaded" in msg.lower()
+    warn_text = " ".join(str(w.message) for w in caught)
+    assert "<= -1" not in warn_text
+    assert "no frequency bins" in warn_text.lower()
+
+
+def test_perform_bsmd_raises_on_empty_qhat(tmp_path, capsys):
+    """perform_bsmd refuses empty qhat before printing Starting BSMD analysis."""
+    analyzer = _make_analyzer_without_fft(tmp_path, triads=[(1, 1, 2)])
+    assert analyzer.qhat.size == 0
+    with pytest.raises(ValueError) as excinfo:
+        analyzer.perform_bsmd()
+    out = capsys.readouterr().out
+    assert "Starting BSMD analysis" not in out
+    assert "load_and_preprocess" in str(excinfo.value) or "qhat" in str(excinfo.value).lower()
+
+
+def test_compute_single_triad_nan_in_qhat_returns_nan(tmp_path):
+    """NaN in a used qhat bin yields (nan, None, None) via the LinAlgError path."""
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 1, 2)], nfft=8, Ns=24)
+    analyzer.qhat[1, 0, 0] = np.nan
+    eig, mode1, mode2 = analyzer._compute_single_triad(1, 1, 2)
+    assert np.isnan(eig)
+    assert mode1 is None and mode2 is None

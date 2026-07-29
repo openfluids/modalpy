@@ -130,6 +130,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so an isolated zero there means that cell contributes nothing.
 
 ### Fixed
+- BSMD with no FFT blocks loaded now says so — "no frequency bins are loaded" —
+  instead of quoting a bound of `|p| <= -1`, and `perform_bsmd` raises
+  `ValueError` on an empty `qhat` rather than printing a note and continuing
+  into the analysis.
 - A full disk (or other write failure) while BSMD saves or offloads its FFT
   block cache is no longer reported as a cache-load failure; the write error
   propagates instead of triggering a recompute that cannot save either. When a

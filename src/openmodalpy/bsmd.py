@@ -499,7 +499,9 @@ class BSMDAnalyzer(BaseAnalyzer):
         Ensures data is loaded and preprocessed (STFT computed) before proceeding.
         """
         if self.qhat.size == 0 and not self._qhat_on_disk:
-            print("STFT data (qhat) not found. Call load_and_preprocess() first.")
+            raise ValueError(
+                "STFT data (qhat) not found. Call load_and_preprocess() first."
+            )
         start_time = time.time()
         print("Starting BSMD analysis...")
 
@@ -568,8 +570,9 @@ class BSMDAnalyzer(BaseAnalyzer):
         Returns:
             (eigenvalue, mode1, mode2) on success, or (np.nan, None, None) on
             failure (constraint violation ``p1+p2 != p3``, empty blocks, or
-            singular/failed eigenproblem). Out-of-range bin indices are not
-            caught here; they propagate from ``_get_qhat_for_index``.
+            NaN/Inf in the assembled matrix that makes ``np.linalg.eig`` raise
+            ``LinAlgError``). Out-of-range bin indices are not caught here;
+            they propagate from ``_get_qhat_for_index``.
         """
         if p1 + p2 != p3:
             return np.nan, None, None
@@ -679,10 +682,13 @@ class BSMDAnalyzer(BaseAnalyzer):
                     kept.append(triad)
             if dropped:
                 # Prefer the tighter bound in the warning so the user sees why.
-                bound_note = (
-                    f"|p| must be <= {max_bin} "
-                    f"(nfft//2 = {nfft_limit}, loaded bins allow |p| <= {loaded_limit})"
-                )
+                if n_loaded == 0:
+                    bound_note = "no frequency bins are loaded"
+                else:
+                    bound_note = (
+                        f"|p| must be <= {max_bin} "
+                        f"(nfft//2 = {nfft_limit}, loaded bins allow |p| <= {loaded_limit})"
+                    )
                 dropped_str = ", ".join(repr(t) for t in dropped)
                 warnings.warn(
                     f"Default static triads filtered for nfft={self.nfft} "
@@ -698,9 +704,13 @@ class BSMDAnalyzer(BaseAnalyzer):
             if not self.static_triads_list:
                 # Filtering emptied the list — refuse before any executor is built.
                 named = ", ".join(repr(t) for t in dropped) if dropped else "(none)"
+                if n_loaded == 0:
+                    bound_phrase = "no frequency bins are loaded"
+                else:
+                    bound_phrase = f"|p| must be <= {max_bin}"
                 raise ValueError(
                     f"No statically defined triads remain after filtering for "
-                    f"nfft={self.nfft} (|p| must be <= {max_bin}): dropped all "
+                    f"nfft={self.nfft} ({bound_phrase}): dropped all "
                     f"triad(s) outside range: {named}. "
                     f"This configuration cannot be analysed."
                 )
@@ -730,11 +740,18 @@ class BSMDAnalyzer(BaseAnalyzer):
                     )
                 if loaded_offenders:
                     named = ", ".join(f"p={p}" for p in loaded_offenders)
-                    parts.append(
-                        f"Triad component(s) {named} outside the loaded frequency range "
-                        f"(only {n_loaded} bins are loaded, so |p| must be <= {loaded_limit}; "
-                        f"rfft would allow up to nfft//2 = {nfft_limit})"
-                    )
+                    if n_loaded == 0:
+                        parts.append(
+                            f"Triad component(s) {named} outside the loaded frequency range "
+                            f"(no frequency bins are loaded; "
+                            f"rfft would allow up to nfft//2 = {nfft_limit})"
+                        )
+                    else:
+                        parts.append(
+                            f"Triad component(s) {named} outside the loaded frequency range "
+                            f"(only {n_loaded} bins are loaded, so |p| must be <= {loaded_limit}; "
+                            f"rfft would allow up to nfft//2 = {nfft_limit})"
+                        )
                 raise ValueError("; ".join(parts))
 
         num_triads = len(self.static_triads_list)

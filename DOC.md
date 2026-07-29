@@ -380,8 +380,9 @@ static triad table only covers frequency-bin indices with absolute value at most
 higher-frequency triads are not analysed unless you pass a custom
 `static_triads` list. Bound: every component must satisfy
 `|p| <= min(nfft // 2, n_loaded - 1)` (rfft Nyquist and the bins actually
-loaded in `qhat`). The default list (`static_triads=None`) is **warned and
-filtered** when any triad falls outside that bound; if filtering leaves none,
+loaded in `qhat`). With no bins loaded, analysis refuses with a message that
+says so rather than quoting a negative bound. The default list
+(`static_triads=None`) is **warned and filtered** when any triad falls outside that bound; if filtering leaves none,
 analysis raises `ValueError`. A user-supplied list raises `ValueError` naming
 every offender. Dynamic triad selection (`use_static_triads=False`) is not
 implemented and raises `NotImplementedError`.
