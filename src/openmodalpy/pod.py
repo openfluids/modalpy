@@ -310,24 +310,17 @@ class PODAnalyzer(BaseAnalyzer):
                 self.data["Nz"] = int(f.attrs["Nz"])
         print("POD results loaded.")
 
-    def save_results(self, filename=None):
+    def save_results(self, filename: str | None = None) -> None:
         """Save POD modes, eigenvalues, and time coefficients to an HDF5 file.
 
         The results are saved in `self.results_dir`. If `filename` is None,
-        it's generated using `make_result_filename` based on the input data file name
-        and the analysis type ('pod').
+        a simplified name is used (POD does not key on nfft/overlap).
 
-        Args:
-            filename (str, optional): Custom filename for the HDF5 output.
-                                      Defaults to None (auto-generated).
-
-        Datasets saved:
-            'Eigenvalues': POD eigenvalues.
-            'Modes': Spatial POD modes.
-            'TimeCoefficients': Temporal POD coefficients.
-            'TemporalMean': The temporal mean snapshot subtracted from the data.
-            'dt': Time step of the original data (if available).
+        Datasets (canonical names): modes, eigenvalues, time_coefficients,
+        coordinates, W, temporal_mean.
         """
+        from openmodalpy.core.results import write_results
+
         if not filename:
             # Use a simplified name for POD as nfft/overlap are not primary params
             filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_{self.analysis_type}.hdf5"
@@ -335,31 +328,27 @@ class PODAnalyzer(BaseAnalyzer):
         save_path = os.path.join(self.results_dir, filename)
         print(f"Saving POD results to {save_path}")
 
-        with h5py.File(save_path, "w") as f:
-            f.attrs.update(self._get_metadata())
-            f.attrs["n_modes_saved"] = self.n_modes_save
-            f.attrs["n_snapshots"] = self.data.get("Ns", 0)
-            f.attrs["Nspace"] = self.modes.shape[0]
+        datasets: dict = {
+            "modes": self.modes,
+            "eigenvalues": self.eigenvalues,
+            "time_coefficients": self.time_coefficients,
+        }
+        if "x" in self.data:
+            datasets["x"] = self.data["x"]
+        if "y" in self.data:
+            datasets["y"] = self.data["y"]
+        if "z" in self.data and self.data["z"] is not None:
+            datasets["z"] = self.data["z"]
+        if self.W.size > 0:
+            datasets["W"] = self.W
+        if self.temporal_mean.size > 0:
+            datasets["temporal_mean"] = self.temporal_mean
 
-            # Save coordinates and weights
-            if "x" in self.data:
-                f.create_dataset("x", data=self.data["x"], compression="gzip")
-            if "y" in self.data:
-                f.create_dataset("y", data=self.data["y"], compression="gzip")
-            if "z" in self.data and self.data["z"] is not None:
-                f.create_dataset("z", data=self.data["z"], compression="gzip")
-            if self.W.size > 0:
-                f.create_dataset("W", data=self.W, compression="gzip")
-            if self.temporal_mean.size > 0:
-                f.create_dataset("temporal_mean", data=self.temporal_mean, compression="gzip")
-
-            # Save POD specific results
-            f.create_dataset("modes", data=self.modes, compression="gzip")  # Phi (spatial modes)
-            f.create_dataset("eigenvalues", data=self.eigenvalues, compression="gzip")  # Lambda
-            f.create_dataset(
-                "time_coefficients", data=self.time_coefficients, compression="gzip"
-            )  # Psi (temporal coefficients)
-
+        attrs = self._get_metadata()
+        attrs["n_modes_saved"] = self.n_modes_save
+        attrs["n_snapshots"] = self.data.get("Ns", 0)
+        attrs["Nspace"] = self.modes.shape[0]
+        write_results(save_path, datasets, attrs=attrs)
         print("POD results saved.")
 
     def plot_eigenvalues(self):

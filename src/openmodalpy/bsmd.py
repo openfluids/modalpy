@@ -721,38 +721,22 @@ class BSMDAnalyzer(BaseAnalyzer):
         return grid
 
     # Save triads, eigenvalues, modes, and weights to HDF5.
-    def save_results(self, fname=None):
+    def save_results(self, filename: str | None = None) -> None:
+        """Save BSMD results (triads, eigenvalues, modes) to an HDF5 file.
+
+        When the destination is the same path as the open FFT cache, the write
+        opens in append mode so ``FFTBlocks`` is preserved. Otherwise it
+        overwrites with mode ``"w"``.
         """
-        Save BSMD results (triads, eigenvalues, modes) to an HDF5 file.
+        from openmodalpy.core.results import write_results
 
-        The results are saved in `self.results_dir`. If `fname` is None,
-        it's generated using `make_result_filename` based on the input data file name,
-        `nfft`, `overlap`, and the analysis type ('bsmd').
-
-        Args:
-            fname (str, optional): Custom filename for the HDF5 output.
-                                   Defaults to None (auto-generated).
-
-        Datasets saved:
-            'Triads': List of analyzed frequency index triads (p1, p2, p3).
-            'Eigenvalues': Complex BSMD eigenvalues for each triad.
-            'Modes1': BSMD spatial modes (interaction product) for each triad.
-            'Modes2': BSMD spatial modes (third frequency) for each triad.
-            'Weights': Spatial weighting matrix (diagonal) used in the analysis.
-            'Frequencies': Frequency vector corresponding to FFT bins.
-            'fs': Sampling frequency.
-            'nfft': FFT length.
-            'overlap': FFT overlap ratio.
-            'data_file_path': Path to the original data file.
-        """
-        if fname is None:
-            # Construct filename based on data and parameters
+        if filename is None:
             results_path = os.path.join(
-                self.results_dir, make_result_filename(self.data_root, self.nfft, self.overlap, self.data["Ns"], "bsmd")
+                self.results_dir,
+                make_result_filename(self.data_root, self.nfft, self.overlap, self.data["Ns"], "bsmd"),
             )
         else:
-            results_path = os.path.join(self.results_dir, fname)
-        # Ensure output directory exists
+            results_path = os.path.join(self.results_dir, filename)
         os.makedirs(self.results_dir, exist_ok=True)
 
         using_cache_file = self._qhat_cache_path is not None and os.path.abspath(results_path) == os.path.abspath(
@@ -766,39 +750,33 @@ class BSMDAnalyzer(BaseAnalyzer):
             self._qhat_dataset = None
 
         file_mode = _hdf5_write_mode(results_path) if using_cache_file else "w"
-        with h5py.File(results_path, file_mode) as f:
-            f.attrs.update(self._get_metadata())
-            for dataset_name, dataset_value in (
-                ("triads", np.array(self.triads)),
-                ("eigenvalues", self.eigenvalues),
-                ("Modes1", self.modes1),
-                ("Modes2", self.modes2),
-                ("x", self.data["x"]),
-                ("y", self.data["y"]),
-                ("W", self.W),
-            ):
-                if dataset_name in f:
-                    del f[dataset_name]
-                f.create_dataset(dataset_name, data=dataset_value)
-            if "z" in self.data and self.data["z"] is not None:
-                if "z" in f:
-                    del f["z"]
-                f.create_dataset("z", data=self.data["z"])
-            if self.energy_map.size:
-                if "energy_map" in f:
-                    del f["energy_map"]
-                f.create_dataset("energy_map", data=self.energy_map)
+        datasets: dict = {
+            "triads": np.array(self.triads),
+            "eigenvalues": self.eigenvalues,
+            "modes1": self.modes1,
+            "modes2": self.modes2,
+            "x": self.data["x"],
+            "y": self.data["y"],
+            "W": self.W,
+        }
+        if "z" in self.data and self.data["z"] is not None:
+            datasets["z"] = self.data["z"]
+        if self.energy_map.size:
+            datasets["energy_map"] = self.energy_map
+        write_results(results_path, datasets, attrs=self._get_metadata(), mode=file_mode, compression=None)
         print(f"Results saved to {results_path}")
 
-    def load_results(self, fname=None):
+    def load_results(self, filename: str | None = None) -> None:
         """Load BSMD results from an HDF5 file."""
-        if fname is None:
+        from openmodalpy.core.results import read_results
+
+        if filename is None:
             load_path = os.path.join(
                 self.results_dir,
                 make_result_filename(self.data_root, self.nfft, self.overlap, self.data.get("Ns", 0), "bsmd"),
             )
         else:
-            load_path = os.path.join(self.results_dir, fname)
+            load_path = os.path.join(self.results_dir, filename)
         print(f"Loading BSMD results from {load_path}")
         if not os.path.isfile(load_path):
             import glob
@@ -811,28 +789,29 @@ class BSMDAnalyzer(BaseAnalyzer):
             else:
                 print(f"[ERROR] No BSMD results file found in {self.results_dir}")
                 return
-        with h5py.File(load_path, "r") as f:
-            stamp = f.attrs.get("bispectrum_conjugation")
-            if stamp != "sum_frequency_conjugated":
-                raise ValueError(
-                    f"{load_path} was written by a pre-fix BSMD build in which the "
-                    "sum-frequency term was not conjugated; its eigenvalues and modes "
-                    "are invalid. Recompute from the raw data."
-                )
-            self.triads = f["triads"][:] if "triads" in f else np.array([])
-            self.eigenvalues = f["eigenvalues"][:] if "eigenvalues" in f else np.array([])
-            self.modes1 = f["Modes1"][:] if "Modes1" in f else np.array([])
-            self.modes2 = f["Modes2"][:] if "Modes2" in f else np.array([])
-            if "energy_map" in f:
-                self.energy_map = f["energy_map"][:]
-            if "W" in f:
-                self.W = f["W"][:]
-            for coord_key in ("x", "y", "z"):
-                if coord_key in f:
-                    self.data[coord_key] = f[coord_key][:]
-            for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
-                if attr_key in f.attrs:
-                    self.data[attr_key] = f.attrs[attr_key]
+        res = read_results(load_path)
+        stamp = res.attrs.get("bispectrum_conjugation")
+        if stamp != "sum_frequency_conjugated":
+            raise ValueError(
+                f"{load_path} was written by a pre-fix BSMD build in which the "
+                "sum-frequency term was not conjugated; its eigenvalues and modes "
+                "are invalid. Recompute from the raw data."
+            )
+        self.triads = res.triads if res.triads is not None else np.array([])
+        self.eigenvalues = res.eigenvalues if res.eigenvalues is not None else np.array([])
+        self.modes1 = res.modes1 if res.modes1 is not None else np.array([])
+        self.modes2 = res.modes2 if res.modes2 is not None else np.array([])
+        if res.energy_map is not None:
+            self.energy_map = res.energy_map
+        if res.W is not None:
+            self.W = res.W
+        for coord_key in ("x", "y", "z"):
+            value = getattr(res, coord_key, None)
+            if value is not None:
+                self.data[coord_key] = value
+        for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
+            if attr_key in res.attrs:
+                self.data[attr_key] = res.attrs[attr_key]
         print("BSMD results loaded.")
 
     def plot_modes(self, triad_indices=None, plot_n_modes: Optional[int] = 10):

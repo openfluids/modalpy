@@ -261,8 +261,10 @@ class STPODAnalyzer(BaseAnalyzer):
             mode_frames[k, :] = self.extract_spatial_mode(mode_idx, k)
         return mode_frames
 
-    def save_results(self, filename: Optional[str] = None) -> None:
+    def save_results(self, filename: str | None = None) -> None:
         """Save ST-POD results to HDF5 file."""
+        from openmodalpy.core.results import write_results
+
         if not filename:
             filename = (
                 f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
@@ -271,28 +273,28 @@ class STPODAnalyzer(BaseAnalyzer):
         save_path = os.path.join(self.results_dir, filename)
         print(f"Saving ST-POD results to {save_path}")
 
-        with h5py.File(save_path, "w") as f:
-            f.attrs.update(self._get_metadata())
-            f.attrs["embedding_dim"] = self.embedding_dim
-            f.attrs["n_modes_saved"] = self.n_modes_save
-            f.attrs["n_snapshots"] = self.data.get("Ns", 0)
-            f.attrs["Nspace"] = self.modes.shape[0] // self.embedding_dim
+        datasets: dict = {
+            "modes": self.modes,
+            "eigenvalues": self.eigenvalues,
+            "time_coefficients": self.time_coefficients,
+        }
+        if "x" in self.data:
+            datasets["x"] = self.data["x"]
+        if "y" in self.data:
+            datasets["y"] = self.data["y"]
+        if "z" in self.data and self.data["z"] is not None:
+            datasets["z"] = self.data["z"]
+        if self.W.size > 0:
+            datasets["W"] = self.W
+        if self.temporal_mean.size > 0:
+            datasets["temporal_mean"] = self.temporal_mean
 
-            if "x" in self.data:
-                f.create_dataset("x", data=self.data["x"], compression="gzip")
-            if "y" in self.data:
-                f.create_dataset("y", data=self.data["y"], compression="gzip")
-            if "z" in self.data and self.data["z"] is not None:
-                f.create_dataset("z", data=self.data["z"], compression="gzip")
-            if self.W.size > 0:
-                f.create_dataset("W", data=self.W, compression="gzip")
-            if self.temporal_mean.size > 0:
-                f.create_dataset("temporal_mean", data=self.temporal_mean, compression="gzip")
-
-            f.create_dataset("modes", data=self.modes, compression="gzip")
-            f.create_dataset("eigenvalues", data=self.eigenvalues, compression="gzip")
-            f.create_dataset("time_coefficients", data=self.time_coefficients, compression="gzip")
-
+        attrs = self._get_metadata()
+        attrs["embedding_dim"] = self.embedding_dim
+        attrs["n_modes_saved"] = self.n_modes_save
+        attrs["n_snapshots"] = self.data.get("Ns", 0)
+        attrs["Nspace"] = self.modes.shape[0] // self.embedding_dim
+        write_results(save_path, datasets, attrs=attrs)
         print("ST-POD results saved.")
 
     def load_results(self, filename: Optional[str] = None) -> None:

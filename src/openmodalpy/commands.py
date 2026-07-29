@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import h5py
 import matplotlib
 import numpy as np
 
@@ -192,19 +191,6 @@ def _default_results_root(case_name: str) -> Path:
 def _default_figures_root(case_name: str) -> Path:
     base = source_checkout_root() or Path.cwd()
     return base / "figures" / case_name
-
-
-def _decode_hdf5_scalar(value: Any) -> Any:
-    """Convert HDF5 attrs/datasets to plain Python scalars where possible."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        if value.ndim == 0:
-            return value.item()
-        return value.tolist()
-    return value
 
 
 def _coerce_rank(value: Any) -> int | str | None:
@@ -688,20 +674,27 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
     # blocksfft removes a mean on every path, so this is unconditionally True.
     # blockwise_mean chooses which mean (global or per-block), never whether.
     # It is recorded separately below so the two facts stay distinguishable.
-    with h5py.File(save_path, "w") as handle:
-        handle.create_dataset("Eigenvalues", data=np.real(eigenvalues), compression="gzip")
-        handle.create_dataset("Modes", data=modes, compression="gzip")
-        handle.create_dataset("TimeCoefficients", data=time_coefficients, compression="gzip")
-        handle.create_dataset("Freq", data=analyzer.freq, compression="gzip")
-        handle.create_dataset("St", data=analyzer.St, compression="gzip")
-        handle.attrs.update(analyzer._get_metadata())
-        handle.attrs["analysis_type"] = "psd_pod"
-        handle.attrs["lift_kind"] = "flattened_block_fourier_realizations"
-        handle.attrs["uses_mean_subtraction"] = True
-        handle.attrs["blockwise_mean"] = bool(getattr(analyzer, "blockwise_mean", False))
-        handle.attrs["uses_spatial_metric_in_second_order_operator"] = True
-        handle.attrs["spectral_estimator"] = "welch_block_average"
-        handle.attrs["n_fourier_realizations"] = n_realizations
+    from openmodalpy.core.results import write_results
+
+    attrs = analyzer._get_metadata()
+    attrs["analysis_type"] = "psd_pod"
+    attrs["lift_kind"] = "flattened_block_fourier_realizations"
+    attrs["uses_mean_subtraction"] = True
+    attrs["blockwise_mean"] = bool(getattr(analyzer, "blockwise_mean", False))
+    attrs["uses_spatial_metric_in_second_order_operator"] = True
+    attrs["spectral_estimator"] = "welch_block_average"
+    attrs["n_fourier_realizations"] = n_realizations
+    write_results(
+        save_path,
+        {
+            "eigenvalues": np.real(eigenvalues),
+            "modes": modes,
+            "time_coefficients": time_coefficients,
+            "freq": analyzer.freq,
+            "st": analyzer.St,
+        },
+        attrs=attrs,
+    )
 
     if spec.case.generate_plots:
         _plot_psd_pod_eigenvalues(np.asarray(eigenvalues), figures_dir, spec.run_id)
@@ -1118,7 +1111,11 @@ def load_example_payload(name: str, root: str | Path | None = None) -> dict[str,
 
 
 def inspect_results(path: str | Path) -> dict[str, Any]:
-    """Inspect one result file or result directory and return a plain summary."""
+    """Inspect one result file or result directory and return a plain summary.
+
+    HDF5 paths go through :func:`openmodalpy.core.results.read_results` so
+    legacy capitalised dataset names appear under their canonical keys.
+    """
     resolved = Path(path).expanduser().resolve()
     if resolved.is_dir():
         files = sorted([candidate for candidate in resolved.iterdir() if candidate.suffix in {".hdf5", ".h5", ".json"}])
@@ -1138,21 +1135,40 @@ def inspect_results(path: str | Path) -> dict[str, Any]:
     if resolved.suffix not in {".hdf5", ".h5"}:
         raise ValueError(f"Unsupported result file type: {resolved}")
 
-    with h5py.File(resolved, "r") as handle:
-        datasets = {
-            name: {
-                "shape": list(dataset.shape),
-                "dtype": str(dataset.dtype),
-            }
-            for name, dataset in handle.items()
-        }
-        attrs = {key: _decode_hdf5_scalar(value) for key, value in handle.attrs.items()}
+    from openmodalpy.core.results import read_results
+
+    res = read_results(resolved)
+    datasets: dict[str, dict[str, Any]] = {}
+    for name in (
+        "modes",
+        "eigenvalues",
+        "time_coefficients",
+        "freq",
+        "st",
+        "modes1",
+        "modes2",
+        "triads",
+        "amplitudes",
+        "omega",
+        "x",
+        "y",
+        "z",
+        "W",
+        "temporal_mean",
+        "energy_map",
+        "FFTBlocks",
+    ):
+        value = getattr(res, name, None)
+        if value is not None:
+            datasets[name] = {"shape": list(value.shape), "dtype": str(value.dtype)}
+    for name, value in res.extra.items():
+        datasets[name] = {"shape": list(value.shape), "dtype": str(value.dtype)}
 
     return {
         "path": str(resolved),
         "type": "hdf5",
         "datasets": datasets,
-        "attrs": attrs,
+        "attrs": res.attrs,
     }
 
 

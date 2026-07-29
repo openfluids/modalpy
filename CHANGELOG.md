@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- One HDF5 result contract for every analyzer. Dataset names are lowercase
+  (`modes`, `eigenvalues`, `time_coefficients`, `freq`, `st`, `modes1`,
+  `modes2`, …); SPOD no longer writes `Weights` (it writes `W` like the
+  others). All `save_results` methods share the signature
+  `save_results(self, filename=None)` — SPOD gains `filename`, and BSMD's
+  `fname` parameter is renamed to `filename` (call sites that passed
+  `fname=` must switch). Writing goes through `openmodalpy.core.results`;
+  `read_results(path)` returns a typed `AnalysisResults` and still accepts
+  the old capitalised layout with a `DeprecationWarning`. `FFTBlocks` keeps
+  its name (FFT cache key, not a downstream result field). SPOD result
+  files are written in mode `"w"`; BSMD still appends when the destination
+  is the open FFT-cache path so that cache is preserved.
+
 - One rule now turns a spatial weight into a vector, instead of three helpers
   that disagreed about which shapes they accepted (`core/base.py`,
   `core/decomposition.py`, `mpod.py`). Two consequences beyond the deduplication.

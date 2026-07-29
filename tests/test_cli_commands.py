@@ -385,14 +385,14 @@ def test_command_core_uses_volumetric_plot_hooks_when_available() -> None:
 def test_inspect_results_reads_hdf5_metadata(tmp_path: Path) -> None:
     result_path = tmp_path / "toy.hdf5"
     with h5py.File(result_path, "w") as handle:
-        handle.create_dataset("Modes", data=[[1.0, 2.0]])
+        handle.create_dataset("modes", data=[[1.0, 2.0]])
         handle.attrs["analysis_type"] = "pod"
         handle.attrs["Ns"] = 5
 
     summary = inspect_results(result_path)
 
     assert summary["type"] == "hdf5"
-    assert summary["datasets"]["Modes"]["shape"] == [1, 2]
+    assert summary["datasets"]["modes"]["shape"] == [1, 2]
     assert summary["attrs"]["analysis_type"] == "pod"
     assert summary["attrs"]["Ns"] == 5
 
@@ -491,9 +491,9 @@ def test_run_from_config_executes_real_psd_pod(tmp_path: Path) -> None:
 
     summary = inspect_results(outcome.results_path)
     assert summary["attrs"]["analysis_type"] == "psd_pod"
-    assert "Eigenvalues" in summary["datasets"]
-    assert "Modes" in summary["datasets"]
-    assert "TimeCoefficients" in summary["datasets"]
+    assert "eigenvalues" in summary["datasets"]
+    assert "modes" in summary["datasets"]
+    assert "time_coefficients" in summary["datasets"]
 
 
 def test_psd_pod_uses_mean_subtraction_matches_blocksfft_modes(tmp_path: Path) -> None:

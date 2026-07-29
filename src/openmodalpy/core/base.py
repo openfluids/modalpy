@@ -1426,33 +1426,40 @@ class BaseAnalyzer:
         )
         print("FFT computation complete.")
 
-    def save_results(self, filename=None, analysis_type="spod"):
+    def save_results(self, filename: str | None = None) -> None:
         """Save results to HDF5 file with harmonized filename and format.
+
         Args:
-            filename (str, optional): Custom filename. If not provided, uses harmonized scheme.
-            analysis_type (str): Analysis type for filename (e.g., 'spod', 'bsmd').
+            filename: Custom filename. If omitted, uses the harmonized scheme
+                with ``self.analysis_type``.
         """
+        from openmodalpy.core.results import write_results
+
         if not filename:
             filename = make_result_filename(
                 self.data_root,
                 self.nfft,
                 self.overlap,
                 self.data.get("Ns", 0),
-                analysis_type,
+                getattr(self, "analysis_type", "spod"),
             )
         save_path = os.path.join(self.results_dir, filename)
         print(f"Saving results to {save_path}")
-        # This is a placeholder - subclasses should implement specific saving logic
-        with h5py.File(save_path, "w") as f:
-            f.attrs["nfft"] = self.nfft
-            f.attrs["overlap"] = self.overlap
-            f.attrs["nblocks"] = self.nblocks
-            f.attrs["fs"] = self.fs
-            # Save coordinates
-            f.create_dataset("x", data=self.data["x"], compression="gzip")
-            f.create_dataset("y", data=self.data["y"], compression="gzip")
-            # Save weights
-            f.create_dataset("W", data=self.W, compression="gzip")
+        # Placeholder — subclasses write their full payload through write_results.
+        write_results(
+            save_path,
+            {
+                "x": self.data["x"],
+                "y": self.data["y"],
+                "W": self.W,
+            },
+            attrs={
+                "nfft": self.nfft,
+                "overlap": self.overlap,
+                "nblocks": self.nblocks,
+                "fs": self.fs,
+            },
+        )
 
     def run(self, compute_fft=True):
         """Run the full analysis pipeline."""

@@ -490,17 +490,39 @@ for i in range(d):
 
 ## Output Format
 
-All analyzers write HDF5 files with:
-- **Datasets:** `eigenvalues`, `modes`, `time_coefficients`, coordinates
-- **Attributes:** `analysis_type`, `nfft`, `overlap`, `dt`, `Ns`, `Nx`, `Ny`,
-  `spatial_weight_type`, method-specific metadata
+Every analyzer writes the same HDF5 dataset names for the same concepts
+(lowercase). The single module `openmodalpy.core.results` owns the name table,
+the writer, and the generic reader:
 
-DMD additionally stores: `amplitudes`, `omega` (continuous-time eigenvalues),
-`dmd_variant`, `dmd_method`, `dmd_delays`, `dmd_named_variant`.
+```python
+from openmodalpy import read_results
 
-SPOD additionally stores: `Eigenvalues`, `Modes`, `Freq`, `St`, `FFTBlocks`.
+res = read_results("path/to/result.hdf5")
+# res.modes, res.eigenvalues, res.time_coefficients, res.freq, res.st, ...
+# res.attrs["analysis_type"]
+```
 
-BSMD additionally stores: `energy_map`, `triads`, `Modes1`, `Modes2`.
+**Canonical datasets** (present when the method produces them):
+
+| Name | Methods |
+|------|---------|
+| `modes`, `eigenvalues`, `time_coefficients` | POD, mPOD, ST-POD, DMD, SPOD, PSD-POD |
+| `freq`, `st` | SPOD, PSD-POD |
+| `amplitudes`, `omega` | DMD |
+| `modes1`, `modes2`, `triads` | BSMD |
+| `x`, `y`, `z`, `W`, `temporal_mean`, `energy_map` | when available (already uniform) |
+| `FFTBlocks` | SPOD/BSMD FFT cache (name unchanged on purpose) |
+
+**Attributes** (unchanged): `analysis_type`, `nfft`, `overlap`, `dt`, `Ns`,
+`Nx`, `Ny`, `spatial_weight_type`, method-specific metadata.
+
+DMD also records `dmd_variant`, `dmd_method`, `dmd_delays`, `dmd_named_variant`.
+
+`save_results(self, filename=None)` is the uniform writer signature on every
+analyzer. Files written with the older capitalised names (`Modes`,
+`Eigenvalues`, `TimeCoefficients`, `Freq`, `St`, `Modes1`, `Modes2`, `Weights`)
+still load through `read_results`, which maps them onto the canonical fields
+and emits a `DeprecationWarning`.
 
 ---
 

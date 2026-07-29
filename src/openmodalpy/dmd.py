@@ -415,8 +415,10 @@ class DMDAnalyzer(BaseAnalyzer):
             "dmd_delays": delays,
         }
 
-    def save_results(self, filename=None):
+    def save_results(self, filename: str | None = None) -> None:
         """Save DMD results to an HDF5 file."""
+        from openmodalpy.core.results import write_results
+
         if not filename:
             filename = make_result_filename(
                 self.data_root,
@@ -426,18 +428,19 @@ class DMDAnalyzer(BaseAnalyzer):
                 self.analysis_type,
             )
         path = os.path.join(self.results_dir, filename)
-        with h5py.File(path, "w") as f:
-            f.attrs.update(self._get_metadata())
-            f.create_dataset("eigenvalues", data=self.eigenvalues, compression="gzip")
-            f.create_dataset("modes", data=self.modes, compression="gzip")
-            f.create_dataset("time_coefficients", data=self.time_coefficients, compression="gzip")
-            f.create_dataset("amplitudes", data=self.amplitudes, compression="gzip")
-            if self.omega.size > 0:
-                f.create_dataset("omega", data=self.omega, compression="gzip")
-            f.create_dataset("x", data=self.data["x"], compression="gzip")
-            f.create_dataset("y", data=self.data["y"], compression="gzip")
-            if "z" in self.data and self.data["z"] is not None:
-                f.create_dataset("z", data=self.data["z"], compression="gzip")
+        datasets: dict = {
+            "eigenvalues": self.eigenvalues,
+            "modes": self.modes,
+            "time_coefficients": self.time_coefficients,
+            "amplitudes": self.amplitudes,
+            "x": self.data["x"],
+            "y": self.data["y"],
+        }
+        if self.omega.size > 0:
+            datasets["omega"] = self.omega
+        if "z" in self.data and self.data["z"] is not None:
+            datasets["z"] = self.data["z"]
+        write_results(path, datasets, attrs=self._get_metadata())
         print(f"DMD results saved to {path}")
 
     def load_results(self, filename=None):

@@ -353,105 +353,68 @@ class SPODAnalyzer(BaseAnalyzer):
     ############################################################
     # Results Handling                                         #
     ############################################################
-    def save_results(self):
-        """
-        Saves SPOD modes, eigenvalues, frequencies, and Strouhal numbers to an HDF5 file.
+    def save_results(self, filename: str | None = None) -> None:
+        """Save SPOD modes, eigenvalues, frequencies, and Strouhal numbers.
 
-        The results are saved in the `self.results_dir` directory. The filename is
-        generated using `make_result_filename` based on the input data file name,
-        `nfft`, `overlap`, and the analysis type ('spod').
-
-        Datasets saved:
-            'Eigenvalues': SPOD eigenvalues.
-            'Modes': SPOD spatial modes.
-            'TimeCoefficients': (Optional) SPOD time coefficients.
-            'Frequencies': Frequency array.
-            'Strouhal': Strouhal number array.
-            'dt': Time step of the original data.
-            'nfft': NFFT used for the analysis.
-            'overlap': Overlap fraction used.
-            'window_type': Window type used for FFT.
+        Uses mode ``"w"`` and rewrites ``FFTBlocks`` from ``self.qhat`` when
+        present. The previous append-with-manual-delete path existed so that a
+        prior FFT cache on the same path would survive; at save time ``qhat`` is
+        already in memory, so a full rewrite is enough and matches the other
+        analyzers.
         """
-        filename = make_result_filename(
-            self.data_root, self.nfft, self.overlap, self.data.get("Ns", 0), self.analysis_type
-        )
+        from openmodalpy.core.results import write_results
+
+        if not filename:
+            filename = make_result_filename(
+                self.data_root, self.nfft, self.overlap, self.data.get("Ns", 0), self.analysis_type
+            )
         save_path = os.path.join(self.results_dir, filename)
         os.makedirs(self.results_dir, exist_ok=True)
 
-        # Append only if save_path is already a readable HDF5 file; otherwise
-        # overwrite (covers missing and corrupt/truncated paths).
-        mode = _hdf5_write_mode(save_path)
+        print(f"Saving SPOD results to {save_path}")
+        datasets: dict = {
+            "eigenvalues": self.eigenvalues,
+            "modes": self.modes,
+            "freq": self.freq,
+            "st": self.St,
+        }
+        if self.time_coefficients is not None and self.time_coefficients.size > 0:
+            datasets["time_coefficients"] = self.time_coefficients
+        if self.qhat is not None and self.qhat.size > 0:
+            datasets["FFTBlocks"] = self.qhat
+        if self.W is not None and getattr(self.W, "size", 0) > 0:
+            datasets["W"] = self.W
+        if "x_coords" in self.data:
+            datasets["x_coords"] = self.data["x_coords"]
+        elif self.data.get("x") is not None:
+            datasets["x_coords"] = self.data["x"]
+        if "y_coords" in self.data:
+            datasets["y_coords"] = self.data["y_coords"]
+        elif self.data.get("y") is not None:
+            datasets["y_coords"] = self.data["y"]
+        if "z_coords" in self.data:
+            datasets["z_coords"] = self.data["z_coords"]
+        elif self.data.get("z") is not None:
+            datasets["z_coords"] = self.data["z"]
+        if self.data.get("x") is not None:
+            datasets["x"] = self.data["x"]
+        if self.data.get("y") is not None:
+            datasets["y"] = self.data["y"]
+        if self.data.get("z") is not None:
+            datasets["z"] = self.data["z"]
 
-        print(f"Saving SPOD-specific results to {save_path} (mode: {mode})")
-        with h5py.File(save_path, mode) as f:
-            if "Eigenvalues" in f:
-                del f["Eigenvalues"]
-            if "Modes" in f:
-                del f["Modes"]
-            if "TimeCoefficients" in f:
-                del f["TimeCoefficients"]
-            if "Freq" in f:
-                del f["Freq"]
-            if "St" in f:
-                del f["St"]
-            if "FFTBlocks" in f:
-                del f["FFTBlocks"]
-
-            f.create_dataset("Eigenvalues", data=self.eigenvalues, compression="gzip")
-            f.create_dataset("Modes", data=self.modes, compression="gzip")
-            if self.time_coefficients is not None and self.time_coefficients.size > 0:
-                f.create_dataset("TimeCoefficients", data=self.time_coefficients, compression="gzip")
-            f.create_dataset("Freq", data=self.freq, compression="gzip")
-            f.create_dataset("St", data=self.St, compression="gzip")
-            if self.qhat is not None and self.qhat.size > 0:
-                f.create_dataset("FFTBlocks", data=self.qhat, compression="gzip")
-
-            # Ensure base attributes are also saved if this is the first save operation (mode 'w')
-            if mode == "w":
-                if "x_coords" in self.data and "x_coords" not in f:
-                    f.create_dataset("x_coords", data=self.data["x_coords"])
-                if "y_coords" in self.data and "y_coords" not in f:
-                    f.create_dataset("y_coords", data=self.data["y_coords"])
-                if "z_coords" in self.data and "z_coords" not in f:
-                    f.create_dataset("z_coords", data=self.data["z_coords"])
-                if "x" in self.data and "x" not in f:
-                    f.create_dataset("x", data=self.data["x"], compression="gzip")
-                if "y" in self.data and "y" not in f:
-                    f.create_dataset("y", data=self.data["y"], compression="gzip")
-                if "z" in self.data and self.data["z"] is not None and "z" not in f:
-                    f.create_dataset("z", data=self.data["z"], compression="gzip")
-                for key, value in self._get_metadata().items():
-                    if key not in f.attrs:
-                        f.attrs[key] = value
-            else:  # Append mode, just update SPOD specific attributes if necessary
-                f.attrs["blockwise_mean"] = self.blockwise_mean
-                f.attrs["normvar"] = self.normvar
-                f.attrs["window_norm"] = self.window_norm
-                f.attrs["window_type"] = self.window_type
-
-                # Coordinates and Weights might have been saved by BaseAnalyzer.save_results if it was called.
-                # Here, we ensure they are present if SPODAnalyzer.save_results is the primary save method.
-                if "x_coords" not in f and self.data.get("x") is not None:
-                    f.create_dataset("x_coords", data=self.data["x"], compression="gzip")
-                if "y_coords" not in f and self.data.get("y") is not None:
-                    f.create_dataset("y_coords", data=self.data["y"], compression="gzip")
-                if "z_coords" not in f and self.data.get("z") is not None:
-                    f.create_dataset("z_coords", data=self.data["z"], compression="gzip")
-                if "x" not in f and self.data.get("x") is not None:
-                    f.create_dataset("x", data=self.data["x"], compression="gzip")
-                if "y" not in f and self.data.get("y") is not None:
-                    f.create_dataset("y", data=self.data["y"], compression="gzip")
-                if "z" not in f and self.data.get("z") is not None:
-                    f.create_dataset("z", data=self.data["z"], compression="gzip")
-
-                # Save weights if not already saved by BaseAnalyzer or this method
-                if self.W is not None and self.W.size > 0 and "Weights" not in f:
-                    f.create_dataset("Weights", data=self.W, compression="gzip")
-
-        print(f"SPOD results saved to {save_path} (HDF5 attributes updated/created)")
+        write_results(save_path, datasets, attrs=self._get_metadata(), mode="w")
+        # Full rewrite clears the FFT-cache stamp; re-apply so a later run can
+        # reuse FFTBlocks without recomputing.
+        if self.qhat is not None and self.qhat.size > 0 and self.data.get("q") is not None:
+            with h5py.File(save_path, "a") as handle:
+                _write_qhat_stamp(handle, self, self.data["q"])
+        print(f"SPOD results saved to {save_path}")
 
     def load_results(self, filename=None):
         """Load SPOD results from an HDF5 file."""
+        from openmodalpy.core.results import read_results
+
         if not filename:
             filename = make_result_filename(
                 self.data_root, self.nfft, self.overlap, self.data.get("Ns", 0), self.analysis_type
@@ -470,29 +433,41 @@ class SPODAnalyzer(BaseAnalyzer):
                 print(f"[ERROR] No SPOD results file found in {self.results_dir}")
                 return
 
-        with h5py.File(load_path, "r") as f:
-            self.eigenvalues = f["Eigenvalues"][:]
-            self.modes = f["Modes"][:]
-            if "TimeCoefficients" in f:
-                self.time_coefficients = f["TimeCoefficients"][:]
-            if "Freq" in f:
-                self.freq = f["Freq"][:]
-            if "St" in f:
-                self.St = f["St"][:]
-            if "FFTBlocks" in f:
-                self.qhat = f["FFTBlocks"][:]
-            if "Weights" in f:
-                self.W = f["Weights"][:]
-            elif "W" in f:
-                self.W = f["W"][:]
-            for coord_key in ("x", "y", "z", "x_coords", "y_coords", "z_coords"):
-                if coord_key in f:
-                    self.data[coord_key.replace("_coords", "")] = f[coord_key][:]
-            for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
-                if attr_key in f.attrs:
-                    self.data[attr_key] = f.attrs[attr_key]
-            if "dt" in self.data:
-                self.fs = 1.0 / self._require_dt()
+        res = read_results(load_path)
+        # Before the unified reader this indexed the eigenvalue dataset directly, so a
+        # file that was not a SPOD result raised. Assigning only when present would turn
+        # that into empty arrays and a "results loaded" print, so keep it loud.
+        if res.modes is None or res.eigenvalues is None:
+            missing = [n for n, v in (("modes", res.modes), ("eigenvalues", res.eigenvalues)) if v is None]
+            raise KeyError(f"{load_path} is not a SPOD result file: missing {', '.join(missing)}")
+        if res.eigenvalues is not None:
+            self.eigenvalues = res.eigenvalues
+        if res.modes is not None:
+            self.modes = res.modes
+        if res.time_coefficients is not None:
+            self.time_coefficients = res.time_coefficients
+        if res.freq is not None:
+            self.freq = res.freq
+        if res.st is not None:
+            self.St = res.st
+        if res.FFTBlocks is not None:
+            self.qhat = res.FFTBlocks
+        if res.W is not None:
+            self.W = res.W
+        for coord_key in ("x", "y", "z"):
+            value = getattr(res, coord_key, None)
+            if value is not None:
+                self.data[coord_key] = value
+            elif coord_key in res.extra:
+                self.data[coord_key] = res.extra[coord_key]
+        for coord_key in ("x_coords", "y_coords", "z_coords"):
+            if coord_key in res.extra:
+                self.data[coord_key.replace("_coords", "")] = res.extra[coord_key]
+        for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
+            if attr_key in res.attrs:
+                self.data[attr_key] = res.attrs[attr_key]
+        if "dt" in self.data:
+            self.fs = 1.0 / self._require_dt()
         print("SPOD results loaded.")
 
     ############################################################

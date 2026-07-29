@@ -128,7 +128,7 @@ def test_save_results_records_spod_contract(tmp_path):
 def test_spod_save_load_roundtrip_arrays(tmp_path):
     """SPOD save_results() → load_results() restores arrays to machine precision.
 
-    Note: save_results takes no filename; load_results uses the same auto-name.
+    Both take an optional filename; when omitted they share the same auto-name.
     """
     rng = np.random.default_rng(11)
     data = {
