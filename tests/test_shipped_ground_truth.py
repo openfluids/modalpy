@@ -37,6 +37,46 @@ def _loader(payload: dict):
     return lambda _path: data
 
 
+def _weighted_centered_trace(q: np.ndarray, weights: np.ndarray) -> float:
+    """Closed-form POD eigenvalue sum under snapshot averaging.
+
+    For mean-centred snapshots ``Q_c`` (time axis first) and diagonal metric
+    ``W``, every POD convention that forms the Gram kernel as
+
+        K = (Q_c √W)(Q_c √W)^T / N   or   (Q_c √W)^T (Q_c √W) / N
+
+    has the same trace identity, independent of the eigensolver:
+
+        sum_i λ_i  ==  (1/N) * sum_n ||q_c[n]||_W^2
+                   ==  (1/N) * sum(Q_c**2 * W)
+
+    Rescaling the kernel by ``N/(N-1)`` (dividing by ``N-1`` instead of ``N``)
+    multiplies every eigenvalue and breaks this equality. Frequency peaks and
+    normalised mode shapes do not see that rescaling.
+    """
+    q = np.asarray(q, dtype=np.float64)
+    w = np.asarray(weights, dtype=np.float64).ravel()
+    q_c = q - np.mean(q, axis=0, dtype=np.float64)
+    return float(np.sum(q_c * q_c * w) / q.shape[0])
+
+
+def _assert_pod_spectrum_matches_trace(analyzer: PODAnalyzer, *, rtol: float = 1e-10) -> None:
+    """Compare retained eigenvalue sum to the closed-form trace (or its retained share)."""
+    expected_total = _weighted_centered_trace(analyzer.data["q"], analyzer.W)
+    retained = float(np.sum(analyzer.eigenvalues))
+    frac = float(analyzer.energy_captured_fraction)
+    # Full spectrum: frac ≈ 1 and retained == expected_total.
+    # Truncated: state the retained share and match retained == frac * total.
+    expected_retained = expected_total * frac
+    rel = abs(retained - expected_retained) / max(abs(expected_total), 1e-30)
+    assert rel <= rtol, (
+        f"POD eigenvalue sum vs weighted centered trace: "
+        f"sum(λ)={retained!r}, expected_retained={expected_retained!r} "
+        f"(trace={expected_total!r} × energy_captured_fraction={frac!r}), "
+        f"rel_err={rel:.3e} (rtol={rtol})"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Taylor-Green → DMD eigenvalue magnitude (exact rank-1 exponential)
 # ---------------------------------------------------------------------------
@@ -74,6 +114,53 @@ def test_taylor_green_dmd_eigenvalue_matches_metadata(tmp_path):
         f"Taylor-Green DMD |λ0|: recovered={recovered!r}, "
         f"metadata dmd_eigenvalue={expected!r}, rel_err={rel_err:.3e} (rtol={rtol})"
     )
+
+
+# ---------------------------------------------------------------------------
+# Taylor-Green → POD leading eigenvalue (rank-1 trace identity)
+# ---------------------------------------------------------------------------
+
+
+def test_taylor_green_pod_leading_eigenvalue_matches_trace(tmp_path):
+    """Taylor–Green is rank-1 after mean removal; λ₀ equals the full POD trace.
+
+    Closed form (snapshot-averaged weighted Gram kernel):
+
+        sum_i λ_i  =  (1/N) * sum(Q_c**2 * W)
+
+    The field is one spatial pattern times a pure exponential, so after temporal
+    mean removal the snapshot matrix is still rank-1: only λ₀ is nonzero and
+    therefore λ₀ alone equals that whole sum. Computed from the loaded field and
+    ``analyzer.W`` — not from the POD eigenvalues themselves — so a kernel
+    rescaled by ``N/(N-1)`` fails here even though mode shapes stay unit-norm.
+    """
+    payload = generate_example_dataset("taylor_green", {"Nx": 24, "Ny": 24, "Nt": 60})
+    analyzer = PODAnalyzer(
+        file_path="shipped_tg_pod",
+        data_loader=_loader(payload),
+        spatial_weight_type="uniform",
+        n_modes_save=5,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+
+    expected_total = _weighted_centered_trace(analyzer.data["q"], analyzer.W)
+    leading = float(analyzer.eigenvalues[0])
+    # Rank-1: leading mode carries the entire trace.
+    rel_lead = abs(leading - expected_total) / max(abs(expected_total), 1e-30)
+    assert rel_lead <= 1e-10, (
+        f"Taylor-Green POD λ0 vs full trace: λ0={leading!r}, "
+        f"trace=(1/N)sum(Q_c²W)={expected_total!r}, rel_err={rel_lead:.3e}"
+    )
+    # Residual modes are numerical noise relative to the leading energy.
+    if analyzer.eigenvalues.size > 1:
+        assert analyzer.eigenvalues[1] / max(leading, 1e-30) < 1e-10, (
+            f"Taylor-Green POD should be rank-1; λ1/λ0="
+            f"{analyzer.eigenvalues[1] / leading:.3e}"
+        )
+    _assert_pod_spectrum_matches_trace(analyzer)
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +273,38 @@ def test_cylinder_wake_spod_peak_matches_metadata(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Cylinder wake → POD eigenvalue sum vs weighted centered trace
+# ---------------------------------------------------------------------------
+
+
+def test_cylinder_wake_pod_spectrum_matches_trace(tmp_path):
+    """POD eigenvalue sum equals (1/N) sum(Q_c² W) for the cylinder wake field.
+
+    Closed form: under the snapshot-averaged weighted Gram kernel,
+
+        sum_i λ_i  =  (1/N) * sum(Q_c**2 * W)
+
+    with Q_c the temporally mean-centred snapshots and W the spatial metric
+    (ones under ``spatial_weight_type="uniform"``). ``n_modes_save`` is set to
+    the full temporal rank so truncation does not eat the tail. Metadata
+    ``f_shed`` pins frequency only — this is the magnitude anchor.
+    """
+    payload = generate_example_dataset("cylinder_wake", {"Nx": 40, "Ny": 24, "Nt": 400})
+    n_full = int(payload["Ns"])  # temporal kernel rank when Ns < Nspace
+    analyzer = PODAnalyzer(
+        file_path="shipped_cw_pod_trace",
+        data_loader=_loader(payload),
+        spatial_weight_type="uniform",
+        n_modes_save=n_full,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+    _assert_pod_spectrum_matches_trace(analyzer)
+
+
+# ---------------------------------------------------------------------------
 # Double gyre → POD a_1 spectrum peak vs metadata expected_freq
 # ---------------------------------------------------------------------------
 
@@ -231,6 +350,32 @@ def test_double_gyre_pod_a1_peak_matches_metadata(tmp_path):
         f"metadata expected_freq={expected:.6g} Hz, err={err:.3e} Hz, "
         f"bound 1/(2*Ns*dt)={half_bin:.6g} Hz"
     )
+
+
+def test_double_gyre_pod_spectrum_matches_trace(tmp_path):
+    """POD eigenvalue sum equals (1/N) sum(Q_c² W) for the double-gyre field.
+
+    Closed form: sum_i λ_i = (1/N) * sum(Q_c**2 * W) for mean-centred snapshots
+    and the analyzer's spatial metric W. Metadata ``expected_freq`` pins the
+    temporal peak only; this pins the absolute spectral scale. Full temporal
+    rank is requested so the retained sum is the whole trace.
+    """
+    payload = generate_example_dataset(
+        "double_gyre",
+        {"Nx": 32, "Ny": 16, "Nt": 400, "t_max": 100.0},
+    )
+    n_full = int(payload["Ns"])
+    analyzer = PODAnalyzer(
+        file_path="shipped_dg_pod_trace",
+        data_loader=_loader(payload),
+        spatial_weight_type="uniform",
+        n_modes_save=n_full,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+    _assert_pod_spectrum_matches_trace(analyzer)
 
 
 # ---------------------------------------------------------------------------

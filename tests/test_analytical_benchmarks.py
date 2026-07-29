@@ -14,6 +14,37 @@ import pytest
 
 from openmodalpy import DMDAnalyzer, PODAnalyzer, STPODAnalyzer
 
+
+def _weighted_centered_trace(q: np.ndarray, weights: np.ndarray) -> float:
+    """Closed-form POD eigenvalue sum under snapshot averaging.
+
+    For mean-centred snapshots ``Q_c`` and diagonal metric ``W``:
+
+        sum_i λ_i  ==  (1/N) * sum(Q_c**2 * W)
+
+    Independent of the eigensolver; a kernel rescaled by ``N/(N-1)`` breaks it.
+    """
+    q = np.asarray(q, dtype=np.float64)
+    w = np.asarray(weights, dtype=np.float64).ravel()
+    q_c = q - np.mean(q, axis=0, dtype=np.float64)
+    return float(np.sum(q_c * q_c * w) / q.shape[0])
+
+
+def _assert_pod_spectrum_matches_trace(analyzer: PODAnalyzer, *, rtol: float = 1e-10) -> None:
+    """Retained sum(λ) must match the closed-form trace times energy_captured_fraction."""
+    expected_total = _weighted_centered_trace(analyzer.data["q"], analyzer.W)
+    retained = float(np.sum(analyzer.eigenvalues))
+    frac = float(analyzer.energy_captured_fraction)
+    expected_retained = expected_total * frac
+    rel = abs(retained - expected_retained) / max(abs(expected_total), 1e-30)
+    assert rel <= rtol, (
+        f"POD eigenvalue sum vs weighted centered trace: "
+        f"sum(λ)={retained!r}, expected_retained={expected_retained!r} "
+        f"(trace={expected_total!r} × energy_captured_fraction={frac!r}), "
+        f"rel_err={rel:.3e} (rtol={rtol})"
+    )
+
+
 # =============================================================================
 # POD Analytical Benchmarks
 # =============================================================================
@@ -29,6 +60,7 @@ class TestPODAnalytical:
         - Data = σ₁(u₁ ⊗ v₁) + σ₂(u₂ ⊗ v₂) has rank 2
         - POD (SVD) should recover exactly 2 nonzero singular values
         - Energy in modes 1-2 should equal total energy
+        - Absolute scale: sum_i λ_i = (1/N) sum(Q_c**2 * W) (snapshot-averaged Gram)
         """
         np.random.seed(42)
         Ns, Nx = 100, 50
@@ -82,12 +114,17 @@ class TestPODAnalytical:
                 "Mode 3 should have negligible energy for rank-2 data"
             )
 
+        # Absolute magnitude (scale-sensitive): full retained spectrum matches the
+        # independent weighted centered trace — not just a relative energy share.
+        _assert_pod_spectrum_matches_trace(analyzer)
+
     def test_pod_reconstruction_error_decreases(self):
         """Reconstruction error must monotonically decrease with more modes.
 
         Mathematical basis:
         - POD provides optimal (in L2 sense) low-rank approximation
         - Adding more modes can only reduce or maintain error, never increase
+        - Absolute scale: retained sum(λ) = energy_captured_fraction × (1/N) sum(Q_c² W)
         """
         np.random.seed(123)
         Ns, Nx = 50, 30
@@ -134,12 +171,15 @@ class TestPODAnalytical:
         for i in range(len(errors) - 1):
             assert errors[i + 1] <= errors[i] + 1e-10, f"Error should decrease: {errors[i]:.6f} -> {errors[i + 1]:.6f}"
 
+        _assert_pod_spectrum_matches_trace(analyzer)
+
     def test_pod_modes_orthonormal(self):
         """POD spatial modes must be orthonormal with respect to weights.
 
         Mathematical basis:
         - POD modes Φ satisfy: Φᵀ W Φ = I (identity matrix)
         - This is a fundamental property of the decomposition
+        - Absolute scale: sum_i λ_i = (1/N) sum(Q_c**2 * W) for the retained share
         """
         np.random.seed(456)
         Ns, Nx = 40, 25
@@ -178,6 +218,8 @@ class TestPODAnalytical:
             f"Modes not orthonormal. Max deviation: {np.max(np.abs(gram_matrix - identity)):.2e}"
         )
 
+        _assert_pod_spectrum_matches_trace(analyzer)
+
     def test_pod_eigenvalues_nonnegative_ordered(self):
         """POD eigenvalues must be non-negative and sorted in descending order.
 
@@ -185,6 +227,7 @@ class TestPODAnalytical:
         - Eigenvalues represent energy (variance) in each mode
         - Energy cannot be negative
         - POD convention: modes ordered by decreasing energy
+        - Absolute scale: sum_i λ_i = energy_captured_fraction × (1/N) sum(Q_c² W)
         """
         np.random.seed(789)
         Ns, Nx = 60, 40
@@ -220,6 +263,45 @@ class TestPODAnalytical:
             assert analyzer.eigenvalues[i] >= analyzer.eigenvalues[i + 1] - 1e-14, (
                 f"Eigenvalues not sorted: λ[{i}]={analyzer.eigenvalues[i]} < λ[{i + 1}]={analyzer.eigenvalues[i + 1]}"
             )
+
+        _assert_pod_spectrum_matches_trace(analyzer)
+
+    def test_pod_eigenvalue_sum_matches_weighted_centered_trace(self):
+        """Full POD spectrum sum equals (1/N) sum(Q_c² W) on random data.
+
+        Closed form for the snapshot-averaged weighted Gram kernel (temporal or
+        spatial path — same trace):
+
+            sum_i λ_i  =  (1/N) * sum_n ||q_c[n]||_W^2
+                       =  (1/N) * sum(Q_c**2 * W)
+
+        with Q_c = Q − mean_t(Q) and W the spatial metric. ``n_modes_save`` is
+        the full spatial rank so the retained sum is the whole trace. Relative
+        energy shares and mode orthonormality are scale-invariant; this pins
+        magnitude.
+        """
+        np.random.seed(101)
+        Ns, Nx = 45, 28
+        data_matrix = np.random.randn(Ns, Nx)
+        data = {
+            "q": data_matrix,
+            "x": np.linspace(0, 1, Nx),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nx,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = PODAnalyzer(
+            file_path="analytical_trace",
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+            n_modes_save=Nx,  # full spatial rank
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_pod()
+        assert analyzer.energy_captured_fraction > 1.0 - 1e-12
+        _assert_pod_spectrum_matches_trace(analyzer)
 
 
 # =============================================================================
