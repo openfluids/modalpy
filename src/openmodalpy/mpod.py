@@ -14,23 +14,6 @@ from openmodalpy.core.config import FIGURES_DIR_POD, RESULTS_DIR_POD
 from openmodalpy.pod import PODAnalyzer
 
 
-def _as_weight_vector(W: np.ndarray, n_space: int) -> np.ndarray:
-    """Return a 1D spatial-weight vector."""
-    if W.ndim == 2:
-        if W.shape[0] == W.shape[1]:
-            weights = np.diag(W)
-        elif W.shape[1] == 1:
-            weights = W.ravel()
-        else:
-            raise ValueError(f"Unexpected shape for spatial weights W: {W.shape}")
-    else:
-        weights = W
-    weights = np.asarray(weights, dtype=float).reshape(-1)
-    if weights.size != n_space:
-        raise ValueError(f"Weight vector length {weights.size} does not match n_space={n_space}")
-    return weights
-
-
 def _resolve_band_edges(band_edges: Iterable[float] | None, nyquist: float) -> np.ndarray:
     """Validate and resolve mPOD band edges in Hz."""
     if band_edges is None:
@@ -135,7 +118,7 @@ class MPODAnalyzer(PODAnalyzer):
         self.temporal_mean = np.mean(data_matrix, axis=0, dtype=np.float64)
         data_centered = data_matrix - self.temporal_mean
 
-        weight_vector = _as_weight_vector(np.asarray(self.W), n_space)
+        weight_vector = decomposition._as_weight_vector(np.asarray(self.W), n_space)
         dt = self._require_dt()
         nyquist = 0.5 / dt
         candidate_edges = self.band_edges

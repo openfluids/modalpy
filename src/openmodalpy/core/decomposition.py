@@ -21,7 +21,11 @@ from typing import Literal, Protocol, runtime_checkable
 import numpy as np
 import scipy.linalg
 
-from openmodalpy.core.base import canonicalize_modes, compute_reduced_svd, require_spatial_metric
+from openmodalpy.core.base import (
+    _coerce_spatial_weights,
+    canonicalize_modes,
+    compute_reduced_svd,
+)
 
 
 @runtime_checkable
@@ -136,13 +140,8 @@ class SpatialMetric:
 
 def _as_weight_vector(metric: SpatialMetric | np.ndarray, n_space: int) -> np.ndarray:
     if isinstance(metric, SpatialMetric):
-        weights = metric.weights
-    else:
-        weights = np.asarray(metric, dtype=float).reshape(-1)
-    if weights.size != n_space:
-        raise ValueError(f"Weight vector length {weights.size} does not match n_space={n_space}")
-    require_spatial_metric(weights)
-    return weights
+        metric = metric.weights
+    return _coerce_spatial_weights(metric, n_space)
 
 
 def weighted_second_order(

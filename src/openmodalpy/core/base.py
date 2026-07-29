@@ -1136,9 +1136,19 @@ def require_spatial_metric(weights):
         )
 
 
-def _flatten_weights(w, expected_len):
-    """Return weights as a column vector matching ``expected_len``."""
+def _coerce_spatial_weights(w, expected_len):
+    """Accepted weight shapes -> 1-D vector of length ``expected_len``.
+
+    Routes: 1-D; ``(n, 1)``; square matrix (its diagonal); non-square
+    ``(n, k)`` row-major flatten; 3-D per-component stacked diagonals.
+    """
     w = np.asarray(w)
+    if np.iscomplexobj(w):
+        raise ValueError(
+            "Spatial metric is complex. Casting it to real would silently discard the "
+            "imaginary part and hand the solver a metric the caller never asked for."
+        )
+    w = w.astype(float, copy=False)
     if w.ndim == 3:
         if w.shape[0] != w.shape[1]:
             raise ValueError("weight array's first two dimensions must be equal")
@@ -1146,13 +1156,20 @@ def _flatten_weights(w, expected_len):
     if w.ndim == 2:
         if w.shape[0] == w.shape[1] and w.shape[1] != 1:
             w = np.diag(w)
-        if w.shape[1] > 1:
-            w = w.reshape(-1, 1)
-    w = w.reshape(-1, 1)
-    if w.shape[0] != expected_len:
-        raise ValueError("Flattened weights length mismatch")
-    require_spatial_metric(w)
-    return w
+        elif w.shape[1] > 1:
+            w = w.reshape(-1)
+        else:
+            w = w.ravel()
+    weights = np.asarray(w, dtype=float).reshape(-1)
+    if weights.size != expected_len:
+        raise ValueError(f"Weight vector length {weights.size} does not match n_space={expected_len}")
+    require_spatial_metric(weights)
+    return weights
+
+
+def _flatten_weights(w, expected_len):
+    """Return weights as a column vector matching ``expected_len``."""
+    return _coerce_spatial_weights(w, expected_len).reshape(-1, 1)
 
 
 def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):

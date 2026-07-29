@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- One rule now turns a spatial weight into a vector, instead of three helpers
+  that disagreed about which shapes they accepted (`core/base.py`,
+  `core/decomposition.py`, `mpod.py`). Two consequences beyond the deduplication.
+  A square weight matrix is read as its diagonal everywhere — the shape the class
+  docstrings have always advertised, and which previously raised
+  `IndexError: tuple index out of range` from inside a private helper. And mPOD
+  now validates its spatial weights like every other method, so a negative or
+  zero-measure weight raises instead of passing through. A complex weight array
+  now raises as well, rather than being cast to its real part under a
+  `ComplexWarning`. Weight vectors of the usual shape — a length-`n_space`
+  column of positive reals — are unaffected.
+
 - Mode sign and phase are now canonical: each mode is scaled so the pivot
   entry — the lowest index whose magnitude sits within a relative band
   (`CANONICAL_TIE_RTOL = 1e-12`) of the column maximum — is real and positive.

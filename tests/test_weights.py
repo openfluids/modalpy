@@ -1,6 +1,32 @@
 import numpy as np
+import pytest
 
-from openmodalpy.core.base import calculate_polar_weights, calculate_uniform_weights
+from openmodalpy.core.base import (
+    _flatten_weights,
+    calculate_polar_weights,
+    calculate_uniform_weights,
+)
+from openmodalpy.core.decomposition import _as_weight_vector
+
+
+def test_square_weight_matrix_yields_diagonal():
+    """A diagonal spatial metric stored as a full matrix keeps its diagonal."""
+    diag = np.array([0.5, 1.0, 2.0, 0.25])
+    W = np.diag(diag)
+    col = _flatten_weights(W, 4)
+    vec = _as_weight_vector(W, 4)
+    assert col.shape == (4, 1)
+    assert vec.shape == (4,)
+    np.testing.assert_allclose(col.ravel(), diag)
+    np.testing.assert_allclose(vec, diag)
+
+
+def test_complex_weights_are_rejected_not_truncated():
+    """A complex metric must fail loudly rather than lose its imaginary part."""
+    W = np.array([1.0 + 0j, 2.0 + 1j, 3.0 + 0j])
+    for entry in (lambda: _flatten_weights(W, 3), lambda: _as_weight_vector(W, 3)):
+        with pytest.raises(ValueError, match="complex"):
+            entry()
 
 
 def test_uniform_weights_1d_vs_2d():
