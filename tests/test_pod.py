@@ -73,6 +73,13 @@ def test_plot_time_coefficients_strouhal(monkeypatch, tmp_path):
 
 
 def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
+    """Time coefficients equal the weighted projection of centered data onto modes.
+
+    NOTE: the expected coefficients are built as (Q_c * W) @ Phi using the
+    analyzer's own modes — the same relation the POD path uses to form
+    time_coefficients. Characterization / refactoring guard for that projection
+    step; not an independent POD correctness oracle.
+    """
     data = {
         "q": np.array(
             [

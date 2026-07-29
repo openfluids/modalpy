@@ -2,8 +2,14 @@
 
 The CLI suite reaches this path but does not assert its arithmetic: dropping the
 metric from the time coefficients, or dropping the ``1/sqrt(lambda*N)`` mode
-normalization, still leaves that suite green. These tests compare against an
-independent oracle transcribed from the pre-refactor formula.
+normalization, still leaves that suite green.
+
+NOTE: ``reference_psd_pod`` is the pre-refactor formula (commands.py at
+3102d9a), kept as a refactoring guard against the shared solver. It mirrors
+``_solve_eigh_complex`` and is a characterization test, NOT an independent
+physics oracle — it only proves the shared path stays consistent with that
+historical expression. Correctness of the PSD-POD construction itself is not
+claimed here.
 """
 
 from __future__ import annotations
@@ -15,7 +21,10 @@ from openmodalpy.core.decomposition import SpatialMetric, weighted_second_order
 
 
 def reference_psd_pod(ensemble: np.ndarray, weights: np.ndarray, n_modes_save: int):
-    """Verbatim pre-refactor formula (commands.py::_run_psd_pod at 3102d9a)."""
+    """Verbatim pre-refactor formula (commands.py::_run_psd_pod at 3102d9a).
+
+    Characterization / refactoring guard only — not an independent oracle.
+    """
     n_realizations = ensemble.shape[0]
     ensemble_weighted = ensemble * np.sqrt(weights)[np.newaxis, :]
     kernel = (ensemble_weighted @ ensemble_weighted.conj().T) / n_realizations

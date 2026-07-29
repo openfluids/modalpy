@@ -138,7 +138,14 @@ class TestSTPODBasic:
         assert movie.shape == (embedding_dim, Nspace)
 
     def test_eigenvalues_match_sigma_squared_over_hankel_columns(self):
-        """ST-POD eigenvalues should use the same per-realization scaling as POD."""
+        """ST-POD eigenvalues should use the same per-realization scaling as POD.
+
+        NOTE: the expected spectrum is sigma^2 / n_cols from an SVD of the
+        Hankel matrix built by analyzer._build_hankel_matrix — the same helper
+        and scaling the implementation uses. Characterization / refactoring
+        guard for the normalization, not an independent ST-POD oracle (see
+        tests/test_metamorphic.py for the independent Hankel construction).
+        """
         np.random.seed(7)
         Ns, Nspace = 12, 3
         embedding_dim = 4
