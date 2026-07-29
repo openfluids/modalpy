@@ -11,6 +11,7 @@ from openmodalpy.commands import (
     load_case_spec,
     run_from_config,
 )
+from openmodalpy.core.provenance import collect_provenance
 from openmodalpy.core.results import AnalysisResults, read_results
 from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.mpod import MPODAnalyzer
@@ -29,6 +30,7 @@ __all__ = [
     "STPODAnalyzer",
     "AnalysisResults",
     "read_results",
+    "collect_provenance",
     "AnalyzeSpec",
     "CaseSpec",
     "DataSourceSpec",

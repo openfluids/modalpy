@@ -522,6 +522,26 @@ res = read_results("path/to/result.hdf5")
 
 DMD also records `dmd_variant`, `dmd_method`, `dmd_delays`, `dmd_named_variant`.
 
+**Provenance** — every file written through `write_results` also carries a
+`prov_*` block describing the software that produced it. Read it as
+`read_results(path).provenance` (prefix stripped). Files written before this
+exist report an empty mapping; missing keys never raise.
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `prov_openmodalpy_version` | str | Running package `__version__` (metadata fallback) |
+| `prov_python_version` | str | Running CPython X.Y.Z |
+| `prov_numpy_version` | str | Installed NumPy version |
+| `prov_scipy_version` | str | Installed SciPy version |
+| `prov_h5py_version` | str | Installed h5py version |
+| `prov_fftkit_version` | str | Installed fftkit version |
+| `prov_fft_backend` | str | `fftkit.DEFAULT_BACKEND` at write time |
+| `prov_blas_threads` | int | Observed BLAS/OpenMP thread count (record only; `0` = could not be determined) |
+| `prov_config_sha256` | str | SHA-256 of analysis attrs (not data); excludes `prov_*` |
+| `prov_created_utc` | str | UTC write timestamp (`YYYY-MM-DDTHH:MM:SSZ`) |
+| `prov_git_sha` | str | openmodalpy package checkout HEAD when available, else `unavailable` |
+| `prov_seed` | str | Analysis seed when present (`data_seed`/`seed`), else `none` |
+
 `save_results(self, filename=None)` is the uniform writer signature on every
 analyzer. Files written with the older capitalised names (`Modes`,
 `Eigenvalues`, `TimeCoefficients`, `Freq`, `St`, `Modes1`, `Modes2`, `Weights`)
@@ -543,6 +563,7 @@ Key test categories:
 | `test_spod_plot.py` | SPOD plotting paths |
 | `test_bsmd_core.py` | BSMD triad detection, energy map |
 | `test_cli_commands.py` | CLI dispatch, config parsing, dry-run, PSD-POD metadata |
+| `test_provenance.py` | Provenance block on all five analyzers; hash/prov-independence; never-raise; backend; unknown threads=0; legacy empty view |
 | `test_dnami_loader.py` | NPZ loading, schema handling |
 | `test_weights.py` | Polar and uniform weight computation |
 

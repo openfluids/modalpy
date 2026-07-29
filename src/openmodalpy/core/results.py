@@ -17,6 +17,8 @@ from typing import Any, Mapping
 import h5py
 import numpy as np
 
+from openmodalpy.core.provenance import collect_provenance, safe_attrs_for_hdf5
+
 # Result concepts written by analyzers (lowercase). FFTBlocks is deliberately
 # outside this table: it is an FFT *cache* key, not a downstream result field.
 CANONICAL_RESULT_KEYS: frozenset[str] = frozenset(
@@ -89,6 +91,19 @@ class AnalysisResults:
     # Datasets that are not part of the named contract (e.g. x_coords).
     extra: dict[str, np.ndarray] = field(default_factory=dict)
 
+    @property
+    def provenance(self) -> dict[str, Any]:
+        """``prov_*`` attributes with the prefix stripped.
+
+        Files written before provenance existed report an empty mapping;
+        missing keys never raise.
+        """
+        out: dict[str, Any] = {}
+        for key, value in self.attrs.items():
+            if isinstance(key, str) and key.startswith("prov_"):
+                out[key[len("prov_") :]] = value
+        return out
+
 
 def _decode_attr(value: Any) -> Any:
     if isinstance(value, bytes):
@@ -124,9 +139,14 @@ def write_results(
         h5py compression filter, or ``None`` to disable.
     """
     path_str = str(path)
+    merged_attrs = dict(attrs or {})
+    # Provenance is attached here only so every write path inherits it.
+    # Caller keys keep their names; prov_* is reserved for this block.
+    merged_attrs.update(collect_provenance(merged_attrs))
+    # Hash used the raw attrs; only the on-disk copy must be h5py-safe.
+    merged_attrs = safe_attrs_for_hdf5(merged_attrs)
     with h5py.File(path_str, mode) as handle:
-        if attrs:
-            handle.attrs.update(dict(attrs))
+        handle.attrs.update(merged_attrs)
         for name, value in datasets.items():
             if value is None:
                 continue

@@ -13,6 +13,7 @@ from openmodalpy.core.config import (
     RESULTS_DIR_POD,
     RESULTS_DIR_SPOD,
 )
+from openmodalpy.core.provenance import collect_provenance
 from openmodalpy.core.results import AnalysisResults, read_results, write_results
 
 # decomposition is imported as a submodule (openmodalpy.core.decomposition)
@@ -23,6 +24,7 @@ __all__ = [
     "AnalysisResults",
     "read_results",
     "write_results",
+    "collect_provenance",
     "FFT_BACKEND",
     "FIG_DPI",
     "RESULTS_DIR_POD",

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Result files record a `prov_*` provenance block (versions, FFT backend, BLAS
+  threads, config hash, seed, git SHA, UTC timestamp) via `write_results`;
+  `AnalysisResults.provenance` exposes it with the prefix stripped.
+
 ### Breaking
 - DMD `rank` is required (no silent default to `n_modes_save`). See the
   Changed note below for migration (`rank=n_modes_save` is bit-identical
