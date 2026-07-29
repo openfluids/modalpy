@@ -538,17 +538,16 @@ class BSMDAnalyzer(BaseAnalyzer):
 
         Returns:
             (eigenvalue, mode1, mode2) on success, or (np.nan, None, None) on
-            failure (constraint violation, out-of-range index, singular matrix).
+            failure (constraint violation ``p1+p2 != p3``, empty blocks, or
+            singular/failed eigenproblem). Out-of-range bin indices are not
+            caught here; they propagate from ``_get_qhat_for_index``.
         """
         if p1 + p2 != p3:
             return np.nan, None, None
 
-        try:
-            Q1 = self._get_qhat_for_index(p1)  # (Nspace, Nblocks)
-            Q2 = self._get_qhat_for_index(p2)
-            Q3 = self._get_qhat_for_index(p3)
-        except IndexError:
-            return np.nan, None, None
+        Q1 = self._get_qhat_for_index(p1)  # (Nspace, Nblocks)
+        Q2 = self._get_qhat_for_index(p2)
+        Q3 = self._get_qhat_for_index(p3)
 
         nblocks = Q1.shape[1]
         if nblocks == 0:
@@ -605,17 +604,27 @@ class BSMDAnalyzer(BaseAnalyzer):
             self.triads = np.array([])
             return
 
-        # Reject triads outside the rfft bin range before any analysis.
-        # rfft stores bins 0..nfft//2 (nfft//2 + 1 bins); |p| > nfft//2 is unanalysable.
-        max_bin = self.nfft // 2
-        n_freq_bins = max_bin + 1
+        # Reject triads outside the analysable range before any analysis.
+        # Bound by both the physical rfft limit (nfft//2) and the bins actually
+        # loaded in qhat (stale/truncated cache can be shorter than rfft).
+        nfft_limit = self.nfft // 2
+        n_loaded = self._n_freq_bins
+        loaded_limit = n_loaded - 1
+        max_bin = min(nfft_limit, loaded_limit)
         for triad in self.static_triads_list:
             for p in triad:
-                if abs(int(p)) > max_bin:
+                p_int = int(p)
+                if abs(p_int) > max_bin:
+                    if abs(p_int) > nfft_limit:
+                        raise ValueError(
+                            f"Triad component p={p_int} is outside the rfft bin range "
+                            f"(|p| must be <= nfft//2 = {nfft_limit}; "
+                            f"{nfft_limit + 1} bins for nfft={self.nfft})"
+                        )
                     raise ValueError(
-                        f"Triad component p={int(p)} is outside the rfft bin range "
-                        f"(|p| must be <= nfft//2 = {max_bin}; "
-                        f"{n_freq_bins} bins for nfft={self.nfft})"
+                        f"Triad component p={p_int} is outside the loaded frequency range "
+                        f"(only {n_loaded} bins are loaded, so |p| must be <= {loaded_limit}; "
+                        f"rfft would allow up to nfft//2 = {nfft_limit})"
                     )
 
         num_triads = len(self.static_triads_list)

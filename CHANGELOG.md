@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (hop ≤ 0) is rejected in both FFT paths instead of repeating block 0.
 
 ### Fixed
+- BSMD static-triad validation bounds by both `nfft//2` and the loaded `qhat`
+  length, and no longer swallows out-of-range bin reads into a silent NaN
+  eigenvalue. The two bounds coincide for a freshly computed transform; when
+  they diverge, the triad is now rejected with a `ValueError` naming the real
+  bound instead of returning `NaN` with no diagnostic.
 - POD energy-captured report no longer always prints 100%: the fraction is
   truncated eigenvalue sum over the pre-truncation total, stored as
   `energy_captured_fraction` on the analyzer and in result metadata.

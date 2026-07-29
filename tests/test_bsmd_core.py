@@ -196,6 +196,33 @@ def test_triadic_constraint_violation_skipped(tmp_path):
     assert np.isnan(np.abs(analyzer.eigenvalues[0]))
 
 
+def test_triad_beyond_loaded_bins_raises_valueerror(tmp_path):
+    """Triad inside nfft//2 but past the loaded qhat bins raises ValueError, not NaN.
+
+    Simulates a stale/truncated FFT cache: full rfft would have nfft//2+1 bins,
+    but qhat is shortened so early validation must use the real loaded length.
+    """
+    analyzer = _make_analyzer(
+        tmp_path, triads=[(20, 30, 50)], nfft=128, Ns=600
+    )
+    n_loaded = 10
+    analyzer.qhat = analyzer.qhat[:n_loaded]
+    assert analyzer._n_freq_bins == n_loaded
+    # nfft//2 = 64 would accept |p|<=64; loaded bins only allow |p|<=9.
+    with pytest.raises(ValueError, match=r"(10|9)"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_compute_single_triad_out_of_range_propagates_indexerror(tmp_path):
+    """Out-of-range bin reads must not be laundered into a NaN eigenvalue."""
+    analyzer = _make_analyzer(
+        tmp_path, triads=[(0, 0, 0)], nfft=128, Ns=600
+    )
+    analyzer.qhat = analyzer.qhat[:10]
+    with pytest.raises(IndexError):
+        analyzer._compute_single_triad(20, 30, 50)
+
+
 def test_multiple_triads_with_negatives(tmp_path):
     """Multiple triads including negative bins all produce finite results."""
     triads = [(1, -1, 0), (2, -2, 0), (1, 1, 2), (0, 0, 0)]
