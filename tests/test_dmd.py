@@ -272,18 +272,16 @@ def test_omega_returned():
     continuous-time eigenvalues are log(eig(A))/dt computed from A itself --
     never from the analyzer's own output. That makes this an independent check
     of both the discrete spectrum and its conversion, not a restatement of the
-    implementation's formula.
-
-    Caveat, stated rather than hidden: the fixture uses dt = 1.0, so this cannot
-    discriminate the dt scaling (log(l)/dt and log(l)*dt agree there).
+    implementation's formula. dt != 1 so the /dt scaling is not a no-op.
     """
     A = np.array([[0.9, 0.1], [-0.1, 0.8]])
     q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
     analyzer = _make_analyzer(q)
+    dt = 0.25
+    analyzer.data["dt"] = dt
     analyzer.perform_dmd()
 
     assert analyzer.omega.size == analyzer.eigenvalues.size
-    dt = analyzer.data.get("dt", 1.0)
     expected_omega = np.sort_complex(np.log(np.linalg.eigvals(A).astype(complex)) / dt)
     np.testing.assert_allclose(
         np.sort_complex(np.asarray(analyzer.omega).astype(complex)),

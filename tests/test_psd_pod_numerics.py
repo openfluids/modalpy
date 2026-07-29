@@ -86,6 +86,42 @@ def _fourier_ensemble(seed: int = 4242) -> tuple[np.ndarray, np.ndarray]:
     return ensemble, weights
 
 
+def test_manufactured_rank_one_ensemble_matches_closed_form():
+    """Rank-1 ensemble a_n * phi has a closed-form leading eigenvalue and mode.
+
+    Build ensemble[n] = a_n * phi for a known W-normalised real phi. Under the
+    weighted temporal-kernel convention the kernel is rank-1 with leading
+    eigenvalue (sum_n |a_n|^2) * ||phi||_W^2 / N; the leading mode recovers
+    phi up to a global phase; residual modes sit at ~0 energy. Independent of
+    the pre-refactor twin — a wrong sqrt(W) seam moves the eigenvalue off the
+    closed form.
+    """
+    rng = np.random.default_rng(11)
+    n_realizations = 8
+    weights = np.array([0.5, 1.0, 2.0, 0.25, 3.0])
+    phi_raw = rng.standard_normal(weights.size)
+    phi_norm = np.sqrt(np.sum(phi_raw**2 * weights))
+    phi = phi_raw / phi_norm
+    # ||phi||_W^2 == 1 by construction
+    assert np.isclose(np.sum(phi**2 * weights), 1.0)
+
+    amplitudes = rng.standard_normal(n_realizations) + 1j * rng.standard_normal(n_realizations)
+    ensemble = amplitudes[:, np.newaxis] * phi[np.newaxis, :]
+
+    modes, eigenvalues, _coeffs = _run_solver(ensemble, weights, n_keep=n_realizations)
+
+    expected_leading = float(np.sum(np.abs(amplitudes) ** 2) * 1.0 / n_realizations)
+    np.testing.assert_allclose(np.real(eigenvalues[0]), expected_leading, rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(np.real(eigenvalues[1:]), 0.0, atol=1e-10)
+
+    # Leading mode recovers phi up to a global phase (real phi → sign only).
+    mode0 = modes[:, 0]
+    overlap = np.abs(np.vdot(mode0 * weights, phi)) / (
+        np.sqrt(np.vdot(mode0 * weights, mode0).real) * np.sqrt(np.sum(phi**2 * weights))
+    )
+    assert float(overlap) >= 1.0 - 1e-8
+
+
 def test_psd_pod_positive_nonuniform_metric():
     ensemble, weights = _fourier_ensemble()
     assert np.all(weights > 0)

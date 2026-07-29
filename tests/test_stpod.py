@@ -138,14 +138,17 @@ class TestSTPODBasic:
         assert movie.shape == (embedding_dim, Nspace)
 
     def test_eigenvalues_match_sigma_squared_over_hankel_columns(self):
-        """ST-POD eigenvalues should use the same per-realization scaling as POD.
+        """ST-POD spectrum equals SVD of an independently built block-Hankel.
 
-        NOTE: the expected spectrum is sigma^2 / n_cols from an SVD of the
-        Hankel matrix built by analyzer._build_hankel_matrix — the same helper
-        and scaling the implementation uses. Characterization / refactoring
-        guard for the normalization, not an independent ST-POD oracle (see
-        tests/test_metamorphic.py for the independent Hankel construction).
+        Centered snapshots are stacked into a Hankel matrix with plain numpy
+        (same construction as tests/test_metamorphic.py::_independent_hankel),
+        not via the analyzer's lift helper. Eigenvalues must be sigma^2 / m
+        with m = number of Hankel columns; modes must match the left singular
+        vectors under the library's sign convention. Agreement pins both the
+        delay embedding and the per-column normalisation.
         """
+        from openmodalpy.core.base import canonicalize_modes
+
         np.random.seed(7)
         Ns, Nspace = 12, 3
         embedding_dim = 4
@@ -171,20 +174,32 @@ class TestSTPODBasic:
         analyzer.load_and_preprocess()
         analyzer.perform_stpod()
 
+        # Independent block-Hankel: column j stacks delays [Q[j], ..., Q[j+d-1]].
+        # Shape (d * Nspace, m); library lift is the transpose layout, same SVD.
         data_centered = data["q"] - np.mean(data["q"], axis=0)
-        hankel = analyzer._build_hankel_matrix(data_centered)
-        sigma = np.linalg.svd(hankel, full_matrices=False, compute_uv=False)[:n_modes]
-        n_hankel_cols = Ns - embedding_dim + 1
+        m_cols = Ns - embedding_dim + 1
+        hankel = np.empty((embedding_dim * Nspace, m_cols), dtype=data_centered.dtype)
+        for lag in range(embedding_dim):
+            hankel[lag * Nspace : (lag + 1) * Nspace, :] = data_centered[lag : lag + m_cols, :].T
+        u, sigma, _vt = np.linalg.svd(hankel, full_matrices=False)
+        ref_eigs = (sigma[:n_modes] ** 2) / m_cols
+        ref_modes, _ = canonicalize_modes(u[:, :n_modes])
 
         np.testing.assert_allclose(
             analyzer.eigenvalues,
-            sigma**2 / n_hankel_cols,
+            ref_eigs,
+            rtol=1e-10,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            analyzer.modes,
+            ref_modes,
             rtol=1e-10,
             atol=1e-10,
         )
         assert not np.allclose(
             analyzer.eigenvalues,
-            sigma**2,
+            sigma[:n_modes] ** 2,
             rtol=1e-10,
             atol=1e-10,
         )

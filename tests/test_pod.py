@@ -73,24 +73,29 @@ def test_plot_time_coefficients_strouhal(monkeypatch, tmp_path):
 
 
 def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
-    """Time coefficients equal the weighted projection of centered data onto modes.
+    """Time coefficients match an independent weighted spatial-kernel solve.
 
-    NOTE: the expected coefficients are built as (Q_c * W) @ Phi using the
-    analyzer's own modes — the same relation the POD path uses to form
-    time_coefficients. Characterization / refactoring guard for that projection
-    step; not an independent POD correctness oracle.
+    Fixture is a 5×2 hand-written array with W = [1, 9]. The reference solves
+    the spatial eigenproblem with plain numpy (eigh on the sqrt(W)-scaled
+    Gram matrix), then recovers modes and coefficients — never from the
+    analyzer's own modes. That pins the weighted seam, not just the final
+    projection formula.
     """
+    from openmodalpy.core.base import canonicalize_modes
+
+    q = np.array(
+        [
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [2.0, 2.0],
+            [3.0, 1.0],
+            [4.0, 3.0],
+        ],
+        dtype=float,
+    )
+    weights = np.array([1.0, 9.0])
     data = {
-        "q": np.array(
-            [
-                [0.0, 1.0],
-                [1.0, 0.0],
-                [2.0, 2.0],
-                [3.0, 1.0],
-                [4.0, 3.0],
-            ],
-            dtype=float,
-        ),
+        "q": q,
         "x": np.array([0.0, 1.0]),
         "y": np.array([0.0]),
         "dt": 1.0,
@@ -105,14 +110,35 @@ def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
         n_modes_save=2,
     )
     analyzer.load_and_preprocess()
-    analyzer.W = np.array([1.0, 9.0])
+    # perform_pod overwrites W with ones when the type is "uniform" (pod.py:182),
+    # which is why the previous version of this test never exercised W = [1, 9] at
+    # all. "prescribed" is not a recognised weight type: base.py only branches on
+    # "auto"/"uniform"/"polar" and silently keeps anything else, so this reads as
+    # "W is already set, leave it alone". If weight types ever get validated this
+    # raises rather than silently reverting to uniform, which is the failure we want.
+    analyzer.spatial_weight_type = "prescribed"
+    analyzer.W = weights
     analyzer.perform_pod()
 
-    data_mean_removed = data["q"] - np.mean(data["q"], axis=0, keepdims=True)
-    expected = (data_mean_removed * analyzer.W) @ analyzer.modes
+    # Independent spatial-kernel POD: K = (Q_c √W)^T (Q_c √W) / N
+    q_centered = q - np.mean(q, axis=0, keepdims=True)
+    n_snapshots = q_centered.shape[0]
+    sqrt_w = np.sqrt(np.maximum(weights, 1e-12))
+    q_weighted = q_centered * sqrt_w
+    kernel = (q_weighted.T @ q_weighted) / n_snapshots
+    evals, weighted_modes = np.linalg.eigh(kernel)
+    order = np.argsort(evals)[::-1]
+    evals = evals[order]
+    weighted_modes = weighted_modes[:, order]
+    ref_modes = weighted_modes / sqrt_w[:, np.newaxis]
+    ref_coeffs = q_weighted @ weighted_modes
+    ref_modes, ref_coeffs = canonicalize_modes(np.real(ref_modes), np.real(ref_coeffs))
+
+    np.testing.assert_allclose(analyzer.eigenvalues, evals, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=1e-10, atol=1e-10)
     np.testing.assert_allclose(
         analyzer.time_coefficients,
-        expected,
+        ref_coeffs,
         rtol=1e-10,
         atol=1e-10,
     )
