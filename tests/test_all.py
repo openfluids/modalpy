@@ -451,30 +451,58 @@ def test_spod(tmp_path):
 
 
 def test_cross_method(tmp_path):
-    """Test consistency between methods."""
+    """POD spatial modes reappear as leading SPOD modes at some frequency.
+
+    WHY: multi-tone data with independent spatial structures is rank-3 in space.
+    POD recovers those structures ordered by energy. SPOD recovers the same
+    structures, but localised to frequency. So each energetic POD mode must
+    match the leading SPOD mode at some frequency bin (absolute inner product
+    near 1). Global energy-concentration equality is not a theorem and fails
+    on non-degenerate data; mode-shape agreement is the invariant that holds.
+
+    Measured min correlation on this fixture: 1.0 (all three POD modes).
+    Threshold 0.95 is below that measurement and fails a concrete perturbation
+    (replace every leading SPOD mode with a random unit vector → min ≈ 0.22).
+    """
     from openmodalpy import PODAnalyzer, SPODAnalyzer
 
-    np.random.seed(42)
     Nx, Ny = 8, 8
-    Ns = 64
+    Ns = 128
     dt = 0.1
+    nfft = 32
+    overlap = 0.5
+    n_structures = 3
+    # Absolute mode correlation threshold from the measurement above.
+    corr_tol = 0.95
 
-    # Create simple test data
     t = np.arange(Ns) * dt
     x = np.linspace(0, 2 * np.pi, Nx)
     y = np.linspace(0, 2 * np.pi, Ny)
     X, Y = np.meshgrid(x, y)
-    spatial = np.sin(X + Y).flatten()
 
-    temporal = np.sin(2 * np.pi * 0.5 * t)
-    q = np.outer(temporal, spatial)
+    def _unit(v: np.ndarray) -> np.ndarray:
+        return v / np.linalg.norm(v)
 
-    # --- Test: SPOD with nfft=Ns should approximate POD ---
-    # When using a single block, SPOD reduces to POD
+    # Three independent spatial structures with distinct temporal tones on the
+    # SPOD frequency grid (df = 1/(nfft*dt) = 0.3125 Hz → 2, 4, 6 × df).
+    spatials = [
+        _unit(np.sin(X).ravel()),
+        _unit(np.cos(Y).ravel()),
+        _unit((np.sin(2.0 * X) * np.cos(Y)).ravel()),
+    ]
+    tone_freqs = [0.625, 1.25, 1.875]
+    amps = [1.0, 0.7, 0.45]
+    q = np.zeros((Ns, Nx * Ny), dtype=float)
+    for amp, freq, spatial in zip(amps, tone_freqs, spatials, strict=True):
+        q += (amp * np.sin(2.0 * np.pi * freq * t))[:, None] * spatial[None, :]
+
+    # Guard: a later edit that collapses the fixture to rank 1 would make the
+    # POD side vacuous again (all energy in mode 1 by construction).
+    assert np.linalg.matrix_rank(q) >= n_structures, (
+        f"fixture must be multi-rank for a real POD check, got rank {np.linalg.matrix_rank(q)}"
+    )
 
     loader = make_test_loader(q, Nx, Ny, dt, x=x, y=y)
-
-    # POD analysis
     pod = PODAnalyzer(
         "dummy",
         data_loader=loader,
@@ -484,14 +512,15 @@ def test_cross_method(tmp_path):
     )
     pod.load_and_preprocess()
     pod.perform_pod()
-    pod_energy = pod.eigenvalues[0] / np.sum(pod.eigenvalues)
 
-    # SPOD with single block (nfft = Ns)
-    loader = make_test_loader(q, Nx, Ny, dt, x=x, y=y)  # Fresh loader
+    # SPOD with enough blocks that eigenvalues[:, 0] is a genuine subset of the
+    # spectrum (nfft=32, overlap=0.5, Ns=128 → 7 blocks). A single block would
+    # make any leading-mode energy ratio a self-ratio.
+    loader = make_test_loader(q, Nx, Ny, dt, x=x, y=y)
     spod = SPODAnalyzer(
         "dummy",
-        nfft=Ns,
-        overlap=0,
+        nfft=nfft,
+        overlap=overlap,
         data_loader=loader,
         results_dir=tmp_path,
         figures_dir=tmp_path,
@@ -500,14 +529,30 @@ def test_cross_method(tmp_path):
     spod.compute_fft_blocks()
     spod.perform_spod()
 
-    # Total SPOD energy in first mode across all frequencies
-    spod_total_first = np.sum(spod.eigenvalues[:, 0])
-    spod_total = np.sum(spod.eigenvalues)
-    spod_energy = spod_total_first / spod_total if spod_total > 0 else 0
+    n_blocks = spod.eigenvalues.shape[1]
+    assert n_blocks >= 4, (
+        f"SPOD must use enough blocks that mode 0 is not the whole spectrum; got eigenvalues.shape[1]={n_blocks}"
+    )
 
-    # Both should show similar energy concentration in first mode
-    energy_diff = abs(pod_energy - spod_energy)
-    assert energy_diff < 0.3, f"POD ≈ SPOD(nfft=Ns) energy: POD={pod_energy:.3f}, SPOD={spod_energy:.3f}"
+    # Each energetic POD mode must appear as some frequency's leading SPOD mode.
+    min_best_corr = 1.0
+    for j in range(n_structures):
+        pod_mode = pod.modes[:, j]
+        pod_mode = pod_mode / np.linalg.norm(pod_mode)
+        best = 0.0
+        for i in range(spod.eigenvalues.shape[0]):
+            spod_mode = spod.modes[i, :, 0]
+            norm = np.linalg.norm(spod_mode)
+            if norm == 0.0:
+                continue
+            spod_mode = spod_mode / norm
+            best = max(best, float(np.abs(np.vdot(spod_mode, pod_mode))))
+        min_best_corr = min(min_best_corr, best)
+
+    assert min_best_corr >= corr_tol, (
+        f"each of the {n_structures} energetic POD modes must match a leading "
+        f"SPOD mode at some frequency: min |corr|={min_best_corr:.4f} < {corr_tol}"
+    )
 
 
 # =============================================================================
