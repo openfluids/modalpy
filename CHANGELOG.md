@@ -14,9 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged; each caller keeps its own truncation policy via
   `drop_nonpositive` / `n_keep`.
 - PSD-POD now floors its spatial weights at `1e-12` before taking the square
-  root, matching POD, mPOD and ST-POD. Previously a zero-weight point
-  contributed exactly nothing and a negative weight produced `NaN` silently.
-  Results are unaffected for strictly positive weights.
+  root, matching POD, mPOD and ST-POD. Results are unaffected for strictly
+  positive weights. Known regression at the edges: a zero-weight point
+  previously contributed exactly nothing, and a **negative** weight previously
+  aborted the solve (`LinAlgError` out of `eigh`) — both are now accepted
+  silently. A negative entry in the metric means the inner product is not an
+  inner product, so this should raise; making a zero-measure or negative metric
+  fail loudly is tracked separately and applies to all four analyzers, not only
+  PSD-POD.
 
 ### Fixed
 - PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
