@@ -34,8 +34,7 @@ from openmodalpy.core.base import (
     add_inset_colorbar,
     format_mode_title,
     get_fig_aspect_ratio,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
+    plot_modes_3d,
     print_summary,
     reshape_mode_to_volume,
     resolve_volume_layout,
@@ -607,45 +606,13 @@ class PODAnalyzer(BaseAnalyzer):
 
     def plot_modes_3d_slices(self, plot_n_modes: Optional[int] = 4) -> None:
         """Plot orthogonal 3D slices for the leading POD modes."""
-        if self.modes.size == 0:
-            print("No modes to plot. Run perform_pod() first.")
-            return
-
-        nx = int(self.data.get("Nx", 1))
-        ny = int(self.data.get("Ny", 1))
-        nz = int(self.data.get("Nz", 1))
-        if nz <= 1 or self.modes.shape[0] != nx * ny * nz:
-            print("plot_modes_3d_slices requires volumetric data.")
-            return
-
-        x_coords = self.data.get("x", np.arange(nx))
-        y_coords = self.data.get("y", np.arange(ny))
-        z_coords = self.data.get("z", np.arange(nz))
-        n_modes = self.modes.shape[1]
-        if plot_n_modes is not None:
-            n_modes = min(plot_n_modes, n_modes, self.n_modes_save)
-
-        total_energy = np.sum(self.eigenvalues) if self.eigenvalues.size else None
-        for mode_idx in range(n_modes):
-            mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx], self.data)
-            if total_energy:
-                energy_pct = 100.0 * self.eigenvalues[mode_idx] / total_energy
-                title = f"POD Mode {mode_idx + 1} | E={energy_pct:.2f}%"
-            else:
-                title = f"POD Mode {mode_idx + 1}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{mode_idx + 1}_slices.png")
-            plot_orthogonal_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-            )
+        self._plot_modes_3d("slices", plot_n_modes=plot_n_modes)
 
     def plot_modes_3d_isometric(self, plot_n_modes: Optional[int] = 4) -> None:
         """Plot isometric 3D views for the leading POD modes."""
+        self._plot_modes_3d("isometric", plot_n_modes=plot_n_modes)
+
+    def _plot_modes_3d(self, kind: str, plot_n_modes: Optional[int] = 4) -> None:
         if self.modes.size == 0:
             print("No modes to plot. Run perform_pod() first.")
             return
@@ -654,7 +621,7 @@ class PODAnalyzer(BaseAnalyzer):
         ny = int(self.data.get("Ny", 1))
         nz = int(self.data.get("Nz", 1))
         if nz <= 1 or self.modes.shape[0] != nx * ny * nz:
-            print("plot_modes_3d_isometric requires volumetric data.")
+            print(f"plot_modes_3d_{kind} requires volumetric data.")
             return
 
         x_coords = self.data.get("x", np.arange(nx))
@@ -665,6 +632,7 @@ class PODAnalyzer(BaseAnalyzer):
             n_modes = min(plot_n_modes, n_modes, self.n_modes_save)
 
         total_energy = np.sum(self.eigenvalues) if self.eigenvalues.size else None
+        items = []
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx], self.data)
             if total_energy:
@@ -672,16 +640,9 @@ class PODAnalyzer(BaseAnalyzer):
                 title = f"POD Mode {mode_idx + 1} | E={energy_pct:.2f}%"
             else:
                 title = f"POD Mode {mode_idx + 1}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{mode_idx + 1}_isometric.png")
-            plot_isometric_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-            )
+            output_path = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{mode_idx + 1}_{kind}.png")
+            items.append({"mode_3d": mode_3d, "output_path": output_path, "title_prefix": title})
+        plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
     def plot_modes_grid(self, energy_threshold: float = 99.5, cmap=CMAP_DIV, show_cylinder: bool = False) -> None:
         """Plot spatial POD modes side-by-side up to a cumulative energy threshold.

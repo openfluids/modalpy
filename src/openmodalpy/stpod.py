@@ -39,8 +39,7 @@ import openmodalpy.core.decomposition as decomposition
 from openmodalpy.core.base import (
     BaseAnalyzer,
     get_fig_aspect_ratio,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
+    plot_modes_3d,
     print_summary,
     reshape_mode_to_volume,
     resolve_volume_layout,
@@ -483,51 +482,20 @@ class STPODAnalyzer(BaseAnalyzer):
 
     def plot_modes_3d_slices(self, plot_n_modes: int = 4, delay_idx: int = 0) -> None:
         """Plot orthogonal 3D slices for ST-POD modes at one delay index."""
-        if self.modes.size == 0:
-            print("No modes to plot. Run perform_stpod() first.")
-            return
-        nspace = self.modes.shape[0] // self.embedding_dim
-        layout = resolve_volume_layout(self.data, nspace)
-        if layout is None:
-            print("plot_modes_3d_slices requires volumetric data.")
-            return
-        if not 0 <= delay_idx < self.embedding_dim:
-            raise ValueError(f"delay_idx={delay_idx} outside [0, {self.embedding_dim - 1}]")
-        x_coords = self.data.get("x")
-        y_coords = self.data.get("y")
-        z_coords = self.data.get("z")
-        n_modes = min(plot_n_modes, self.n_modes_save)
-        total_energy = np.sum(self.eigenvalues) if self.eigenvalues.size else None
-        for mode_idx in range(n_modes):
-            mode_3d = reshape_mode_to_volume(self.extract_spatial_mode(mode_idx, delay_idx), self.data)
-            if total_energy:
-                energy_pct = 100.0 * self.eigenvalues[mode_idx] / total_energy
-                title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx} | E={energy_pct:.2f}%"
-            else:
-                title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx}"
-            output_path = os.path.join(
-                self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_slices.png"
-            )
-            plot_orthogonal_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-                scalar_name="stpod_mode",
-            )
+        self._plot_modes_3d("slices", plot_n_modes=plot_n_modes, delay_idx=delay_idx)
 
     def plot_modes_3d_isometric(self, plot_n_modes: int = 4, delay_idx: int = 0) -> None:
         """Plot 3D isosurfaces for ST-POD modes at one delay index."""
+        self._plot_modes_3d("isometric", plot_n_modes=plot_n_modes, delay_idx=delay_idx)
+
+    def _plot_modes_3d(self, kind: str, plot_n_modes: int = 4, delay_idx: int = 0) -> None:
         if self.modes.size == 0:
             print("No modes to plot. Run perform_stpod() first.")
             return
         nspace = self.modes.shape[0] // self.embedding_dim
         layout = resolve_volume_layout(self.data, nspace)
         if layout is None:
-            print("plot_modes_3d_isometric requires volumetric data.")
+            print(f"plot_modes_3d_{kind} requires volumetric data.")
             return
         if not 0 <= delay_idx < self.embedding_dim:
             raise ValueError(f"delay_idx={delay_idx} outside [0, {self.embedding_dim - 1}]")
@@ -536,6 +504,7 @@ class STPODAnalyzer(BaseAnalyzer):
         z_coords = self.data.get("z")
         n_modes = min(plot_n_modes, self.n_modes_save)
         total_energy = np.sum(self.eigenvalues) if self.eigenvalues.size else None
+        items = []
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.extract_spatial_mode(mode_idx, delay_idx), self.data)
             if total_energy:
@@ -544,18 +513,17 @@ class STPODAnalyzer(BaseAnalyzer):
             else:
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx}"
             output_path = os.path.join(
-                self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_isometric.png"
+                self.figures_dir, f"{self.data_root}_stpod_mode_{mode_idx + 1}_delay{delay_idx}_{kind}.png"
             )
-            plot_isometric_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-                scalar_name="stpod_mode",
+            items.append(
+                {
+                    "mode_3d": mode_3d,
+                    "output_path": output_path,
+                    "title_prefix": title,
+                    "scalar_name": "stpod_mode",
+                }
             )
+        plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
     def plot_spacetime_mode(
         self,

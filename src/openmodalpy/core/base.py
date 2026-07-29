@@ -806,6 +806,39 @@ def plot_isometric_slices_3d(
     print(f"Saving figure {output_path}")
 
 
+def plot_modes_3d(
+    kind: str,
+    work_items,
+    x_coords,
+    y_coords,
+    z_coords,
+    *,
+    data: dict,
+) -> None:
+    """Dispatch a sequence of 3D mode plots to the slices or isometric renderer.
+
+    Each work item is a mapping with required keys ``mode_3d``, ``output_path``,
+    and ``title_prefix``. Optional ``scalar_name`` is forwarded when present so
+    callers that omit it keep the renderer default.
+    """
+    if kind == "slices":
+        plot_fn = plot_orthogonal_slices_3d
+    elif kind == "isometric":
+        plot_fn = plot_isometric_slices_3d
+    else:
+        raise ValueError(f"kind must be 'slices' or 'isometric', got {kind!r}")
+
+    for item in work_items:
+        kwargs = {
+            "output_path": item["output_path"],
+            "title_prefix": item["title_prefix"],
+            "data": data,
+        }
+        if "scalar_name" in item:
+            kwargs["scalar_name"] = item["scalar_name"]
+        plot_fn(item["mode_3d"], x_coords, y_coords, z_coords, **kwargs)
+
+
 # Re-export data loading functions
 load_jetles_data = di_load_jetles_data
 load_mat_data = di_load_mat_data

@@ -32,8 +32,7 @@ from openmodalpy.core.base import (  # noqa: E402
     format_mode_title,
     get_fig_aspect_ratio,
     make_result_filename,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
+    plot_modes_3d,
     print_summary,
     reshape_mode_to_volume,
     resolve_volume_layout,
@@ -899,50 +898,19 @@ class DMDAnalyzer(BaseAnalyzer):
 
     def plot_modes_3d_slices(self, plot_n_modes: Optional[int] = 4, delay_idx: int = 0) -> None:
         """Plot orthogonal 3D slices for leading DMD/HODMD modes."""
-        if self.modes.size == 0:
-            print("No modes to plot. Run perform_dmd() first.")
-            return
-        layout = resolve_volume_layout(self.data, self.modes.shape[0])
-        if layout is None:
-            print("plot_modes_3d_slices requires volumetric data.")
-            return
-        _nx, _ny, _nz, lifted_delays = layout
-        if delay_idx >= lifted_delays:
-            raise ValueError(f"delay_idx={delay_idx} exceeds available lifted delays ({lifted_delays}).")
-        n_modes = min(self.modes.shape[1], self.n_modes_save)
-        if plot_n_modes is not None:
-            n_modes = min(n_modes, plot_n_modes)
-        x_coords = self.data.get("x")
-        y_coords = self.data.get("y")
-        z_coords = self.data.get("z")
-        freq = self._mode_freq(self.eigenvalues[:n_modes])
-        for mode_idx in range(n_modes):
-            mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx].real, self.data, block_index=delay_idx)
-            delay_suffix = f" | delay={delay_idx}" if lifted_delays > 1 else ""
-            if freq is not None:
-                title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
-            else:
-                title = f"DMD Mode {mode_idx + 1}{delay_suffix}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_dmd_mode_{mode_idx + 1}_slices.png")
-            plot_orthogonal_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-                scalar_name="dmd_mode",
-            )
+        self._plot_modes_3d("slices", plot_n_modes=plot_n_modes, delay_idx=delay_idx)
 
     def plot_modes_3d_isometric(self, plot_n_modes: Optional[int] = 4, delay_idx: int = 0) -> None:
         """Plot 3D isosurfaces for leading DMD/HODMD modes."""
+        self._plot_modes_3d("isometric", plot_n_modes=plot_n_modes, delay_idx=delay_idx)
+
+    def _plot_modes_3d(self, kind: str, plot_n_modes: Optional[int] = 4, delay_idx: int = 0) -> None:
         if self.modes.size == 0:
             print("No modes to plot. Run perform_dmd() first.")
             return
         layout = resolve_volume_layout(self.data, self.modes.shape[0])
         if layout is None:
-            print("plot_modes_3d_isometric requires volumetric data.")
+            print(f"plot_modes_3d_{kind} requires volumetric data.")
             return
         _nx, _ny, _nz, lifted_delays = layout
         if delay_idx >= lifted_delays:
@@ -954,6 +922,7 @@ class DMDAnalyzer(BaseAnalyzer):
         y_coords = self.data.get("y")
         z_coords = self.data.get("z")
         freq = self._mode_freq(self.eigenvalues[:n_modes])
+        items = []
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.modes[:, mode_idx].real, self.data, block_index=delay_idx)
             delay_suffix = f" | delay={delay_idx}" if lifted_delays > 1 else ""
@@ -961,17 +930,16 @@ class DMDAnalyzer(BaseAnalyzer):
                 title = f"DMD Mode {mode_idx + 1} | f={freq[mode_idx]:.3g}{delay_suffix}"
             else:
                 title = f"DMD Mode {mode_idx + 1}{delay_suffix}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_dmd_mode_{mode_idx + 1}_isometric.png")
-            plot_isometric_slices_3d(
-                mode_3d,
-                x_coords,
-                y_coords,
-                z_coords,
-                output_path=output_path,
-                title_prefix=title,
-                data=self.data,
-                scalar_name="dmd_mode",
+            output_path = os.path.join(self.figures_dir, f"{self.data_root}_dmd_mode_{mode_idx + 1}_{kind}.png")
+            items.append(
+                {
+                    "mode_3d": mode_3d,
+                    "output_path": output_path,
+                    "title_prefix": title,
+                    "scalar_name": "dmd_mode",
+                }
             )
+        plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
     def plot_time_coefficients(self, n_coeffs_to_plot=2):
         """Plot DMD temporal coefficients."""

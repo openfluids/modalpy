@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the previous default).
 
 ### Changed
+- The ten `plot_modes_3d_{slices,isometric}` methods share one driver in
+  `core/base.py`; each analyzer keeps a private helper for mode selection and
+  titles. No figure output changed.
 - One SPOD single-frequency eigenproblem and one load-latest result search.
   The serial path in `spod_function` and `spod_single_frequency_optimized` both
   call `core/decomposition.py::spod_single_frequency` (union of `num_modes` and

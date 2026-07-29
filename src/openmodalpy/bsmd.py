@@ -50,8 +50,7 @@ from openmodalpy.core.base import (
     load_jetles_data,
     load_mat_data,
     make_result_filename,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
+    plot_modes_3d,
     print_summary,
     require_spatial_metric,
     reshape_mode_to_volume,
@@ -922,46 +921,18 @@ class BSMDAnalyzer(BaseAnalyzer):
 
     def plot_modes_3d_slices(self, triad_indices=None, plot_n_modes: Optional[int] = 10):
         """Plot orthogonal 3D slices for selected BSMD triads."""
-        if self.modes1.size == 0 or self.modes2.size == 0:
-            print("No BSMD modes to plot. Run perform_bsmd() first.")
-            return
-        if resolve_volume_layout(self.data, self.modes1.shape[1]) is None:
-            print("plot_modes_3d_slices requires volumetric data.")
-            return
-        if triad_indices is None:
-            lambdas = np.abs(self.eigenvalues)
-            valid = ~np.isnan(lambdas)
-            triad_indices = list(np.argsort(lambdas[valid])[::-1])
-            valid_idx = np.where(valid)[0]
-            triad_indices = [int(valid_idx[k]) for k in triad_indices]
-        if plot_n_modes is not None:
-            triad_indices = triad_indices[:plot_n_modes]
-        x_coords = self.data.get("x")
-        y_coords = self.data.get("y")
-        z_coords = self.data.get("z")
-        for idx in triad_indices:
-            triad = tuple(int(v) for v in self.triads[idx])
-            for label, mode_arr in (("phi1", self.modes1[idx, :].real), ("phi2", self.modes2[idx, :].real)):
-                mode_3d = reshape_mode_to_volume(mode_arr, self.data)
-                output_path = os.path.join(self.figures_dir, f"{self.data_root}_BSMD_triad{idx}_{label}_slices.png")
-                plot_orthogonal_slices_3d(
-                    mode_3d,
-                    x_coords,
-                    y_coords,
-                    z_coords,
-                    output_path=output_path,
-                    title_prefix=f"BSMD {label} | triad={triad}",
-                    data=self.data,
-                    scalar_name=f"bsmd_{label}",
-                )
+        self._plot_modes_3d("slices", triad_indices=triad_indices, plot_n_modes=plot_n_modes)
 
     def plot_modes_3d_isometric(self, triad_indices=None, plot_n_modes: Optional[int] = 10):
         """Plot 3D isosurfaces for selected BSMD triads."""
+        self._plot_modes_3d("isometric", triad_indices=triad_indices, plot_n_modes=plot_n_modes)
+
+    def _plot_modes_3d(self, kind: str, triad_indices=None, plot_n_modes: Optional[int] = 10):
         if self.modes1.size == 0 or self.modes2.size == 0:
             print("No BSMD modes to plot. Run perform_bsmd() first.")
             return
         if resolve_volume_layout(self.data, self.modes1.shape[1]) is None:
-            print("plot_modes_3d_isometric requires volumetric data.")
+            print(f"plot_modes_3d_{kind} requires volumetric data.")
             return
         if triad_indices is None:
             lambdas = np.abs(self.eigenvalues)
@@ -974,21 +945,21 @@ class BSMDAnalyzer(BaseAnalyzer):
         x_coords = self.data.get("x")
         y_coords = self.data.get("y")
         z_coords = self.data.get("z")
+        items = []
         for idx in triad_indices:
             triad = tuple(int(v) for v in self.triads[idx])
             for label, mode_arr in (("phi1", self.modes1[idx, :].real), ("phi2", self.modes2[idx, :].real)):
                 mode_3d = reshape_mode_to_volume(mode_arr, self.data)
-                output_path = os.path.join(self.figures_dir, f"{self.data_root}_BSMD_triad{idx}_{label}_isometric.png")
-                plot_isometric_slices_3d(
-                    mode_3d,
-                    x_coords,
-                    y_coords,
-                    z_coords,
-                    output_path=output_path,
-                    title_prefix=f"BSMD {label} | triad={triad}",
-                    data=self.data,
-                    scalar_name=f"bsmd_{label}",
+                output_path = os.path.join(self.figures_dir, f"{self.data_root}_BSMD_triad{idx}_{label}_{kind}.png")
+                items.append(
+                    {
+                        "mode_3d": mode_3d,
+                        "output_path": output_path,
+                        "title_prefix": f"BSMD {label} | triad={triad}",
+                        "scalar_name": f"bsmd_{label}",
+                    }
                 )
+        plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
     def plot_energy_map(self):
         """Plot a 2D heatmap of eigenvalue magnitudes indexed by triad frequencies."""

@@ -25,8 +25,7 @@ from openmodalpy.core.base import (
     load_jetles_data,
     load_mat_data,
     make_result_filename,
-    plot_isometric_slices_3d,
-    plot_orthogonal_slices_3d,
+    plot_modes_3d,
     print_summary,
     reshape_mode_to_volume,
     resolve_volume_layout,
@@ -774,51 +773,18 @@ class SPODAnalyzer(BaseAnalyzer):
 
     def plot_modes_3d_slices(self, freqs_to_plot=None, plot_n_modes: Optional[int] = 2) -> None:
         """Plot orthogonal 3D slices for selected SPOD frequencies and modes."""
-        if self.modes.size == 0 or self.St.size == 0:
-            print("No modes to plot. Run perform_spod() first.")
-            return
-        if resolve_volume_layout(self.data, self.modes.shape[1]) is None:
-            print("plot_modes_3d_slices requires volumetric data.")
-            return
-        x_coords = self.data.get("x")
-        y_coords = self.data.get("y")
-        z_coords = self.data.get("z")
-        n_modes = self.modes.shape[2] if plot_n_modes is None else min(plot_n_modes, self.modes.shape[2])
-        if freqs_to_plot is None:
-            dominant_idx = int(np.argmax(self.eigenvalues[:, 0]))
-            freq_indices = [dominant_idx]
-        else:
-            freq_indices = []
-            for f in freqs_to_plot:
-                if isinstance(f, (int, np.integer)) and 0 <= f < len(self.St):
-                    freq_indices.append(int(f))
-                else:
-                    freq_indices.append(int(np.argmin(np.abs(self.St - float(f)))))
-        for f_idx in freq_indices:
-            st_val = self.St[f_idx]
-            for mode_idx in range(n_modes):
-                mode_3d = reshape_mode_to_volume(self.modes[f_idx, :, mode_idx].real, self.data)
-                output_path = os.path.join(
-                    self.figures_dir, f"{self.data_root}_SPOD_mode{mode_idx + 1}_freq{f_idx}_slices.png"
-                )
-                plot_orthogonal_slices_3d(
-                    mode_3d,
-                    x_coords,
-                    y_coords,
-                    z_coords,
-                    output_path=output_path,
-                    title_prefix=f"SPOD Mode {mode_idx + 1} | St={st_val:.4f}",
-                    data=self.data,
-                    scalar_name="spod_mode",
-                )
+        self._plot_modes_3d("slices", freqs_to_plot=freqs_to_plot, plot_n_modes=plot_n_modes)
 
     def plot_modes_3d_isometric(self, freqs_to_plot=None, plot_n_modes: Optional[int] = 2) -> None:
         """Plot 3D isosurfaces for selected SPOD frequencies and modes."""
+        self._plot_modes_3d("isometric", freqs_to_plot=freqs_to_plot, plot_n_modes=plot_n_modes)
+
+    def _plot_modes_3d(self, kind: str, freqs_to_plot=None, plot_n_modes: Optional[int] = 2) -> None:
         if self.modes.size == 0 or self.St.size == 0:
             print("No modes to plot. Run perform_spod() first.")
             return
         if resolve_volume_layout(self.data, self.modes.shape[1]) is None:
-            print("plot_modes_3d_isometric requires volumetric data.")
+            print(f"plot_modes_3d_{kind} requires volumetric data.")
             return
         x_coords = self.data.get("x")
         y_coords = self.data.get("y")
@@ -834,23 +800,23 @@ class SPODAnalyzer(BaseAnalyzer):
                     freq_indices.append(int(f))
                 else:
                     freq_indices.append(int(np.argmin(np.abs(self.St - float(f)))))
+        items = []
         for f_idx in freq_indices:
             st_val = self.St[f_idx]
             for mode_idx in range(n_modes):
                 mode_3d = reshape_mode_to_volume(self.modes[f_idx, :, mode_idx].real, self.data)
                 output_path = os.path.join(
-                    self.figures_dir, f"{self.data_root}_SPOD_mode{mode_idx + 1}_freq{f_idx}_isometric.png"
+                    self.figures_dir, f"{self.data_root}_SPOD_mode{mode_idx + 1}_freq{f_idx}_{kind}.png"
                 )
-                plot_isometric_slices_3d(
-                    mode_3d,
-                    x_coords,
-                    y_coords,
-                    z_coords,
-                    output_path=output_path,
-                    title_prefix=f"SPOD Mode {mode_idx + 1} | St={st_val:.4f}",
-                    data=self.data,
-                    scalar_name="spod_mode",
+                items.append(
+                    {
+                        "mode_3d": mode_3d,
+                        "output_path": output_path,
+                        "title_prefix": f"SPOD Mode {mode_idx + 1} | St={st_val:.4f}",
+                        "scalar_name": "spod_mode",
+                    }
                 )
+        plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
     def plot_cumulative_energy(self, freq_idx=None):
         """Plot cumulative energy captured by modes at a given frequency."""
