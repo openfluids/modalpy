@@ -202,64 +202,22 @@ def blocksfft_optimized(
 
 
 def spod_single_frequency_optimized(qhat, w, nblocks, dst, num_modes=None, return_psi=False):
+    """Single-frequency SPOD via the shared eigenproblem body.
+
+    Thin wrapper around ``decomposition.spod_single_frequency``. Threading /
+    BLAS setup for this path (if any) stays here; the algorithm does not.
     """
-    Optimized single frequency SPOD computation.
+    # Late import avoids a parallel → decomposition → base cycle at module load.
+    from openmodalpy.core.decomposition import spod_single_frequency
 
-    Uses optimized BLAS/LAPACK routines for matrix operations.
-
-    Parameters:
-    -----------
-    qhat : np.ndarray
-        FFT coefficients for this frequency [space, block]
-    w : np.ndarray
-        Spatial integration weights [space, 1]
-    nblocks : int
-        Number of blocks
-    dst : float
-        Frequency resolution (delta f)
-    num_modes : int, optional
-        Number of modes to keep (default: all)
-
-    Returns:
-    --------
-    tuple
-        (phi, lambda_tilde)
-        phi : Spatial SPOD modes [space, mode]
-        lambda_tilde : SPOD eigenvalues [mode]
-    """
-    # Normalize FFT coefficients
-    x = qhat / np.sqrt(nblocks * dst)
-
-    # Compute the weighted cross-spectral density (CSD) matrix M_f
-    # This uses optimized BLAS routines
-    xprime_w = np.conj(x).T * w.T  # X_f^H * W
-    m = xprime_w @ x  # (X_f^H * W) * X_f = M_f
-
-    # Solve eigenvalue problem (uses optimized LAPACK)
-    lambda_tilde, psi = np.linalg.eigh(m)
-
-    # Sort eigenvalues and eigenvectors in descending order
-    idx = lambda_tilde.argsort()[::-1]
-    lambda_tilde = lambda_tilde[idx]
-    psi = psi[:, idx]
-
-    # Limit number of modes if specified
-    if num_modes is not None:
-        num_modes = min(num_modes, len(lambda_tilde))
-        lambda_tilde = lambda_tilde[:num_modes]
-        psi = psi[:, :num_modes]
-
-    # Compute spatial SPOD modes
-    inv_sqrt_lambda = np.zeros_like(lambda_tilde)
-    mask = lambda_tilde > 1e-12
-    inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
-
-    # This uses optimized BLAS matrix multiplication
-    phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
-
-    if return_psi:
-        return phi, np.abs(lambda_tilde), psi
-    return phi, np.abs(lambda_tilde)
+    return spod_single_frequency(
+        qhat,
+        nblocks,
+        dst,
+        w,
+        num_modes=num_modes,
+        return_psi=return_psi,
+    )
 
 
 def pod_computation_optimized(data_matrix, use_method="svd"):

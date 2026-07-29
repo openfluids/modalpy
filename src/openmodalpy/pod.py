@@ -267,12 +267,11 @@ class PODAnalyzer(BaseAnalyzer):
         print(f"Loading POD results from {load_path}")
         if not os.path.isfile(load_path):
             # Try to auto-detect a results file for this variable and analysis type
-            import glob
+            from openmodalpy.core.results import find_latest_result
 
-            pattern = os.path.join(self.results_dir, f"*_{self.analysis_type}.hdf5")
-            matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-            if matches:
-                load_path = matches[0]
+            latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
+            if latest:
+                load_path = latest
                 print(f"[Auto-detect] Using available results file: {load_path}")
             else:
                 print(

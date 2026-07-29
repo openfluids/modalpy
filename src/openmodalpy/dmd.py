@@ -457,12 +457,11 @@ class DMDAnalyzer(BaseAnalyzer):
 
         if not os.path.exists(path):
             # Try to auto-detect a results file for this variable and analysis type
-            import glob
+            from openmodalpy.core.results import find_latest_result
 
-            pattern = os.path.join(self.results_dir, f"*_{self.analysis_type}.hdf5")
-            matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-            if matches:
-                path = matches[0]
+            latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
+            if latest:
+                path = latest
                 print(f"[Auto-detect] Using available results file: {path}")
             else:
                 print(

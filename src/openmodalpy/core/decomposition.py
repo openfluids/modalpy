@@ -8,7 +8,8 @@ to different lifts of the raw snapshot data. This module names those pieces:
 - a **spatial metric** that defines the inner product, with ``.tile(d)`` for
   delay-embedded (lifted) spaces;
 - **``weighted_second_order``**, the single solver both the eigh and SVD
-  operator routes go through.
+  operator routes go through;
+- **``spod_single_frequency``**, the single-frequency SPOD eigenproblem.
 
 The analyzers keep their historical truncation policies via
 ``drop_nonpositive`` and ``n_keep`` rather than silently converging on one.
@@ -358,3 +359,39 @@ def _solve_svd(
     coeffs = (vt * sigma[:, np.newaxis]).T
     modes, coeffs = canonicalize_modes(np.real(modes), np.real(coeffs))
     return modes, np.real(eigenvalues), coeffs
+
+
+def spod_single_frequency(
+    qhat: np.ndarray,
+    nblocks: int,
+    dst: float,
+    w: np.ndarray,
+    *,
+    num_modes: int | None = None,
+    return_psi: bool = False,
+) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """SPOD eigenproblem at one frequency (shared serial / parallel body).
+
+    ``qhat`` is ``(n_space, n_blocks)``; ``dst`` is the spectral weight in
+    ``1/sqrt(nblocks * dst)``. Optional ``num_modes`` truncates after sorting;
+    ``return_psi`` also returns the block-space eigenvectors.
+    """
+    x = qhat / np.sqrt(nblocks * dst)
+    w_col = _coerce_spatial_weights(w, qhat.shape[0]).reshape(-1, 1)
+    xprime_w = np.conj(x).T * w_col.T  # X_f^H * W
+    m = xprime_w @ x
+    lambda_tilde, psi = np.linalg.eigh(m)
+    idx = lambda_tilde.argsort()[::-1]
+    lambda_tilde = lambda_tilde[idx]
+    psi = psi[:, idx]
+    if num_modes is not None:
+        keep = min(int(num_modes), len(lambda_tilde))
+        lambda_tilde = lambda_tilde[:keep]
+        psi = psi[:, :keep]
+    inv_sqrt_lambda = np.zeros_like(lambda_tilde)
+    mask = lambda_tilde > 1e-12
+    inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
+    phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
+    if return_psi:
+        return phi, np.abs(lambda_tilde), psi
+    return phi, np.abs(lambda_tilde)

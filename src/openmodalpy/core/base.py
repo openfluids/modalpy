@@ -1200,28 +1200,10 @@ def spod_function(qhat, nblocks, dst, w, return_psi=False, use_parallel=True):
             return_psi=return_psi,
         )
 
-    # Normalize FFT coefficients to get fluctuation matrix X_f for this frequency f.
-    # dst is whatever the caller supplied (Strouhal step in SPODAnalyzer).
-    x = qhat / np.sqrt(nblocks * dst)
-    w_col = _flatten_weights(w, qhat.shape[0])
-    # Compute the weighted cross-spectral density (CSD) matrix M_f.
-    xprime_w = np.transpose(np.conj(x)) * np.transpose(w_col)  # X_f^H * W
-    m = xprime_w @ x  # (X_f^H * W) * X_f = M_f
-    del xprime_w
-    # Solve the eigenvalue problem: M_f * Psi_f = Psi_f * Lambda_f
-    lambda_tilde, psi = np.linalg.eigh(m)
-    # Sort eigenvalues and eigenvectors in descending order
-    idx = lambda_tilde.argsort()[::-1]
-    lambda_tilde = lambda_tilde[idx]
-    psi = psi[:, idx]
-    # Compute spatial SPOD modes (Phi_f) of the direct problem.
-    inv_sqrt_lambda = np.zeros_like(lambda_tilde)
-    mask = lambda_tilde > 1e-12
-    inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
-    phi = x @ psi @ np.diag(inv_sqrt_lambda)
-    if return_psi:
-        return phi, np.abs(lambda_tilde), psi
-    return phi, np.abs(lambda_tilde)
+    # Same eigenproblem as the parallel entry; body lives in decomposition.py.
+    from openmodalpy.core.decomposition import spod_single_frequency
+
+    return spod_single_frequency(qhat, nblocks, dst, w, return_psi=return_psi)
 
 
 class BaseAnalyzer:

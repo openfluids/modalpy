@@ -84,13 +84,12 @@ class MPODAnalyzer(PODAnalyzer):
             filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_{self.analysis_type}.hdf5"
         load_path = os.path.join(self.results_dir, filename)
         if not os.path.isfile(load_path):
-            import glob
+            from openmodalpy.core.results import find_latest_result
 
-            pattern = os.path.join(self.results_dir, f"*_{self.analysis_type}.hdf5")
-            matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-            if not matches:
+            latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
+            if not latest:
                 return
-            load_path = matches[0]
+            load_path = latest
         with h5py.File(load_path, "r") as handle:  # type: ignore[name-defined]
             if "band_edges_hz" in handle.attrs:
                 self._resolved_band_edges_hz = np.asarray(handle.attrs["band_edges_hz"], dtype=float)

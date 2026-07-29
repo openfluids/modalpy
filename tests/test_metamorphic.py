@@ -222,12 +222,15 @@ def test_stpod_d2_matches_independent_hankel_pod():
 def test_spod_function_serial_parallel(n_space, nblocks, dst):
     """spod_function default and optimized paths must agree.
 
-    WHY: When PARALLEL_AVAILABLE, use_parallel=True routes through
-    spod_single_frequency_optimized (a second independent serial BLAS/eigh
-    implementation of the same eigenproblem); use_parallel=False runs the
-    pure-numpy eigh path. Both solve the weighted CSD (X^H W X) /
-    (nblocks * dst), so eigenvalues and |modes| must match to machine
-    precision — any drift means one path was maintained alone.
+    WHAT THIS CAN AND CANNOT DETECT. It used to compare two independent
+    implementations of the eigenproblem, so drift meant one copy had been
+    maintained alone. Since they were merged into
+    decomposition.spod_single_frequency, both flags reach ONE body and this
+    test checks wiring only: that use_parallel routes to the right entry, that
+    the parallel branch's weight pre-flattening does not change the answer, and
+    that return_psi survives both routes. It can no longer detect a wrong
+    formula — the shared body is pinned instead by the pre-merge baseline in
+    .sc/fab3.spod.baseline.json and by the analytical benchmarks.
     """
     assert PARALLEL_AVAILABLE is True
     rng = np.random.default_rng(10 + nblocks)

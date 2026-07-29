@@ -7,6 +7,8 @@ legacy keys onto the canonical fields and emits a :class:`DeprecationWarning`.
 
 from __future__ import annotations
 
+import glob
+import os
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -173,3 +175,17 @@ def read_results(path: str | Path) -> AnalysisResults:
         else:
             result.extra[key] = value
     return result
+
+
+def find_latest_result(results_dir: str | Path, pattern: str) -> str | None:
+    """Return the newest path under ``results_dir`` matching ``pattern``, or None.
+
+    Deduplicates the *search* only. Each caller keeps its own not-found
+    policy (print-and-return, silent return, …).
+    """
+    matches = sorted(
+        glob.glob(os.path.join(str(results_dir), pattern)),
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    return matches[0] if matches else None

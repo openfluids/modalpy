@@ -779,12 +779,11 @@ class BSMDAnalyzer(BaseAnalyzer):
             load_path = os.path.join(self.results_dir, filename)
         print(f"Loading BSMD results from {load_path}")
         if not os.path.isfile(load_path):
-            import glob
+            from openmodalpy.core.results import find_latest_result
 
-            pattern = os.path.join(self.results_dir, "*_bsmd.hdf5")
-            matches = sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True)
-            if matches:
-                load_path = matches[0]
+            latest = find_latest_result(self.results_dir, "*_bsmd.hdf5")
+            if latest:
+                load_path = latest
                 print(f"[Auto-detect] Using: {load_path}")
             else:
                 print(f"[ERROR] No BSMD results file found in {self.results_dir}")

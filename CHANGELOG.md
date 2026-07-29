@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- One SPOD single-frequency eigenproblem and one load-latest result search.
+  The serial path in `spod_function` and `spod_single_frequency_optimized` both
+  call `core/decomposition.py::spod_single_frequency` (union of `num_modes` and
+  `return_psi`; modes via the broadcast form, not `@ np.diag`). Before the
+  merge the two copies already agreed to machine zero, and eigenvalues are
+  bit-identical after it. The serial path's modes shift by up to 7e-15 in
+  absolute sum, because dropping the diagonal matrix multiply reassociates the
+  same floating-point product; no other quantity changed. The six load-latest
+  auto-detect blocks now call
+  `core/results.py::find_latest_result`; each caller still owns its not-found
+  policy (mpod silent; the others print `[Auto-detect]` / `[ERROR]`). Net
+  `src/` line delta: −13.
+
 - One HDF5 result contract for every analyzer. Dataset names are lowercase
   (`modes`, `eigenvalues`, `time_coefficients`, `freq`, `st`, `modes1`,
   `modes2`, …); SPOD no longer writes `Weights` (it writes `W` like the
