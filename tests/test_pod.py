@@ -349,9 +349,10 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
         atol=1e-10,
         rtol=0.0,
     )
+    # Same data, both kernels, both sign-canonicalized → coeffs match directly.
     np.testing.assert_allclose(
-        np.abs(analyzer_spatial.time_coefficients),
-        np.abs(analyzer_temporal.time_coefficients),
+        analyzer_spatial.time_coefficients,
+        analyzer_temporal.time_coefficients,
         atol=1e-10,
         rtol=0.0,
     )

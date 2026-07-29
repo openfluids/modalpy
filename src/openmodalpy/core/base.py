@@ -66,6 +66,83 @@ def compute_reduced_svd(X: np.ndarray, rank: int, v0_seed: int = 0):
     return np.linalg.svd(X, full_matrices=False)
 
 
+# Relative band around the peak magnitude used when choosing the pivot index for
+# mode sign/phase. Sits above typical cross-build eigenvector noise (~1e-14 to
+# 1e-15 relative) and far below any physically meaningful difference between two
+# peaks. Moves the sign discontinuity out of the last-bit regime; perfect
+# uniqueness for exactly degenerate peaks is impossible (phi and -phi are both
+# valid), so the band relocates the ambiguity rather than removing it.
+CANONICAL_TIE_RTOL = 1e-12
+
+
+def canonical_pivot_index(col) -> int:
+    """Lowest index whose magnitude is within ``CANONICAL_TIE_RTOL`` of max |col|.
+
+    Empty or all-zero columns return 0. Shared by ``canonicalize_modes`` and the
+    tests/probes that check the same invariant.
+    """
+    mag = np.abs(np.asarray(col))
+    if mag.size == 0:
+        return 0
+    m = float(mag.max())
+    if m == 0.0:
+        return 0
+    return int(np.argmax(mag >= (1.0 - CANONICAL_TIE_RTOL) * m))
+
+
+def canonicalize_modes(modes, coeffs=None):
+    """Scale each mode so its band-pivot entry is real and positive.
+
+    LAPACK leaves eigenvector sign (real) and phase (complex) free. For each
+    mode column *k*, take the lowest index whose magnitude sits inside a relative
+    band of the column maximum
+    ``i = argmax(|col| >= (1 - CANONICAL_TIE_RTOL) * max|col|)`` and the entry
+    ``v = modes[i, k]``. If the column is all zeros it is left alone; otherwise
+    scale by ``s = conj(v) / |v|`` so that entry becomes ``|v|``. Coefficients
+    receive the same factor ``s`` so they remain the projection of the data onto
+    the modes. Real inputs give ``s = ±1`` and the same rule covers both cases.
+
+    The band moves the sign-flip discontinuity away from single-ulp noise; it
+    does not remove the ambiguity. For an exactly antisymmetric mode, ``phi``
+    and ``-phi`` are both valid, so any rule must break the tie by some
+    comparison, and every comparison has a discontinuity somewhere.
+    """
+    modes = np.asarray(modes)
+    if coeffs is not None:
+        coeffs = np.asarray(coeffs)
+        n_cols = modes.shape[1] if modes.ndim >= 2 else 0
+        if coeffs.ndim < 2 or coeffs.shape[1] != n_cols:
+            raise ValueError(
+                f"coeffs shape {coeffs.shape} does not match modes shape "
+                f"{modes.shape}: coeffs.shape[1] must equal modes.shape[1]."
+            )
+
+    if modes.size == 0 or modes.ndim < 2 or modes.shape[1] == 0:
+        return modes, coeffs
+
+    modes = modes.copy()
+    if coeffs is not None:
+        coeffs = coeffs.copy()
+
+    for k in range(modes.shape[1]):
+        col = modes[:, k]
+        if not np.all(np.isfinite(col)):
+            raise ValueError(
+                f"Mode column {k} contains non-finite entries (NaN or inf); "
+                "refusing to choose a pivot that would poison the column."
+            )
+        if float(np.abs(col).max()) == 0:
+            continue
+        i = canonical_pivot_index(col)
+        v = col[i]
+        s = np.conj(v) / np.abs(v)
+        modes[:, k] *= s
+        if coeffs is not None:
+            coeffs[:, k] *= s
+
+    return modes, coeffs
+
+
 def get_num_threads():
     """Return thread count from ``OMP_NUM_THREADS`` or ``os.cpu_count()``."""
     env = os.environ.get("OMP_NUM_THREADS")

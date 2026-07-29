@@ -4,6 +4,7 @@ import h5py
 import numpy as np
 
 from openmodalpy import MPODAnalyzer, PODAnalyzer
+from openmodalpy.core.base import canonicalize_modes
 
 # Measured max |oracle − analyzer| on eigenvalues and |modes| was 0.0 for the
 # two-tone multi-band case below (same rfft/irfft + eigh construction). Bound
@@ -173,8 +174,9 @@ def test_single_band_mpod_matches_pod():
     mpod.perform_mpod()
 
     np.testing.assert_allclose(mpod.eigenvalues, pod.eigenvalues, rtol=1e-10, atol=1e-10)
-    np.testing.assert_allclose(np.abs(mpod.modes), np.abs(pod.modes), rtol=1e-10, atol=1e-10)
-    np.testing.assert_allclose(np.abs(mpod.time_coefficients), np.abs(pod.time_coefficients), rtol=1e-10, atol=1e-10)
+    # Both routes go through the same seam, so signs match without |.|.
+    np.testing.assert_allclose(mpod.modes, pod.modes, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(mpod.time_coefficients, pod.time_coefficients, rtol=1e-10, atol=1e-10)
     np.testing.assert_array_equal(mpod.mode_band_indices, np.zeros(2, dtype=int))
 
 
@@ -390,9 +392,9 @@ def test_mpod_band_oracle_matches_two_tone():
     assert set(ref_bands.tolist()) == {0, 1}
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
-    np.testing.assert_allclose(
-        np.abs(analyzer.modes), np.abs(ref_modes), rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL
-    )
+    # Independent oracle uses plain eigh; apply the same sign rule as the seam.
+    ref_modes, _ = canonicalize_modes(ref_modes)
+    np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)
     np.testing.assert_array_equal(analyzer.band_mode_counts, ref_counts)
 
@@ -454,7 +456,6 @@ def test_mpod_band_oracle_interior_edge_half_open():
     assert abs(np.dot(edge_mode, phi_low)) < 0.1
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
-    np.testing.assert_allclose(
-        np.abs(analyzer.modes), np.abs(ref_modes), rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL
-    )
+    ref_modes, _ = canonicalize_modes(ref_modes)
+    np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)

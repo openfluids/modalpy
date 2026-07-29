@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Mode sign and phase are now canonical: each mode is scaled so the pivot
+  entry — the lowest index whose magnitude sits within a relative band
+  (`CANONICAL_TIE_RTOL = 1e-12`) of the column maximum — is real and positive.
+  Near-equal opposite peaks no longer flip under single-ulp noise between builds.
+  Previously LAPACK's arbitrary sign (real) or phase (complex) passed straight
+  through, and a different LAPACK build or thread count could flip a published
+  mode shape while every test still passed.
+
+  The band moves the ambiguity threshold; it does not remove it. Peaks that
+  differ by more than the band still decide the sign, and exactly antisymmetric
+  modes (`phi` vs `-phi`) remain a genuine tie that any comparison must break
+  somewhere. Where eigenvalues are repeated, any orthonormal basis of that
+  subspace is a valid answer; fixing each mode's phase cannot make the basis
+  itself unique. Non-finite mode entries, and a `coeffs` column count that does
+  not match `modes`, raise `ValueError`.
+
+  Time coefficients receive the same factor as the modes, so coefficients stay
+  the projection of the data onto the modes and reconstruction is unchanged on
+  every route (real: `coeffs @ modes.T`; complex: `coeffs @ modes.conj().T`).
+  Eigenvalues and mode subspaces are identical to before. Only the sign
+  convention is new.
+
+  Covers POD (both kernel branches), mPOD, ST-POD and the complex PSD-POD
+  route. SPOD and BSMD do not share that seam and are not yet canonical.
 - POD, mPOD, ST-POD and PSD-POD now share one lift / metric / second-order
   seam in `core/decomposition.py` (`IdentityLift`, `DelayEmbeddingLift`,
   `BandFilteredLift`, `SpatialMetric`, `weighted_second_order`). Results are

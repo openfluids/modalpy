@@ -173,8 +173,11 @@ def test_stpod_d2_matches_independent_hankel_pod():
     Hankel in the test with plain numpy (not the library's embed helpers)
     is an independent oracle: agreement proves the analyzer implements the
     stated construction, not that two aliases of the same helper match.
-    Phase not canonicalized — compare |modes|.
+    Modes are sign-canonicalized at the seam; the independent SVD is brought
+    to the same convention before comparison.
     """
+    from openmodalpy.core.base import canonicalize_modes
+
     rng = np.random.default_rng(2)
     q = rng.standard_normal((24, 5))
     embedding_dim = 2
@@ -197,10 +200,10 @@ def test_stpod_d2_matches_independent_hankel_pod():
     m_cols = hankel.shape[1]
     u, sigma, _vt = np.linalg.svd(hankel, full_matrices=False)
     ref_eigs = (sigma[:n_modes] ** 2) / m_cols
-    ref_modes = u[:, :n_modes]
+    ref_modes, _ = canonicalize_modes(u[:, :n_modes])
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
-    np.testing.assert_allclose(np.abs(analyzer.modes), np.abs(ref_modes), rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
+    np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
 
 
 # ---------------------------------------------------------------------------

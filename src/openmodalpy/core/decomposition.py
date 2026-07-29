@@ -21,7 +21,7 @@ from typing import Literal, Protocol, runtime_checkable
 import numpy as np
 import scipy.linalg
 
-from openmodalpy.core.base import compute_reduced_svd, require_spatial_metric
+from openmodalpy.core.base import canonicalize_modes, compute_reduced_svd, require_spatial_metric
 
 
 @runtime_checkable
@@ -274,7 +274,8 @@ def _solve_eigh(
         modes = weighted_modes / sqrt_weights[:, np.newaxis]
         coeffs = np.dot(data_weighted, weighted_modes)
 
-    return np.real(modes), np.real(eigenvalues), np.real(coeffs)
+    modes, coeffs = canonicalize_modes(np.real(modes), np.real(coeffs))
+    return modes, np.real(eigenvalues), coeffs
 
 
 def _solve_eigh_complex(
@@ -315,6 +316,7 @@ def _solve_eigh_complex(
     safe_eigs = np.maximum(np.real(eigenvalues), 1e-16)
     modes = (data.conj().T @ eigenvectors) / np.sqrt(safe_eigs * n_samples)
     coeffs = data.conj() @ (weights[:, np.newaxis] * modes)
+    modes, coeffs = canonicalize_modes(modes, coeffs)
     return modes, np.asarray(eigenvalues), coeffs
 
 
@@ -351,4 +353,5 @@ def _solve_svd(
     eigenvalues = (sigma**2) / n_samples
     modes = u / sqrt_weights[:, np.newaxis]
     coeffs = (vt * sigma[:, np.newaxis]).T
-    return np.real(modes), np.real(eigenvalues), np.real(coeffs)
+    modes, coeffs = canonicalize_modes(np.real(modes), np.real(coeffs))
+    return modes, np.real(eigenvalues), coeffs
