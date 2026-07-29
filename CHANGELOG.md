@@ -156,6 +156,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (hop ≤ 0) is rejected in both FFT paths instead of repeating block 0.
 
 ### Fixed
+- BSMD default static triads no longer fail a small-`nfft` configuration.
+  `static_triads` defaults to `None` and resolves to a private copy of
+  `ALL_TRIADS`; when that default list is used, triads outside `|p| <= nfft//2`
+  (and the loaded-bin bound) are dropped with a warning that names them. A
+  user-supplied list still raises `ValueError`, and every out-of-range
+  component is named in one message.
 - BSMD static-triad validation bounds by both `nfft//2` and the loaded `qhat`
   length, and no longer swallows out-of-range bin reads into a silent NaN
   eigenvalue. The two bounds coincide for a freshly computed transform; when

@@ -30,6 +30,7 @@ import argparse
 import os
 import re
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
@@ -195,7 +196,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         data_loader=None,
         spatial_weight_type="auto",
         use_static_triads=True,
-        static_triads=ALL_TRIADS,
+        static_triads=None,
         use_parallel=True,
         max_qhat_gb=4.0,
     ):
@@ -221,8 +222,12 @@ class BSMDAnalyzer(BaseAnalyzer):
             use_static_triads (bool, optional): If True, use the `static_triads` list.
                                                 If False, dynamic triad selection (not yet fully implemented)
                                                 would be attempted. Defaults to True.
-            static_triads (list of tuples, optional): List of predefined frequency index triads (p_k, p_l, p_k+p_l)
-                                                     to analyze. Defaults to `ALL_TRIADS` from this module.
+            static_triads (list of tuples, optional): List of predefined frequency index triads
+                                                     (p_k, p_l, p_k+p_l) to analyze. ``None``
+                                                     (the default) resolves to a private copy of
+                                                     ``ALL_TRIADS``. Provenance is recorded so a
+                                                     small ``nfft`` filters the default list with a
+                                                     warning, while a user-supplied list still raises.
             max_qhat_gb (float, optional): Maximum qhat size (GB) to keep in RAM.
                                            Larger arrays are offloaded to HDF5 and served
                                            slice-by-slice during BSMD.  Defaults to 4.0.
@@ -238,7 +243,20 @@ class BSMDAnalyzer(BaseAnalyzer):
             use_parallel=use_parallel,
         )
         self.use_static_triads = use_static_triads
-        self.static_triads_list = static_triads if use_static_triads else []
+        # Provenance is fixed at construction: comparing the list to ALL_TRIADS
+        # later would misclassify a user who legitimately passes that same list.
+        # Keep the resolved default object so a post-construction replacement of
+        # static_triads_list is detected as user-supplied (identity check).
+        self._static_triads_from_default = use_static_triads and static_triads is None
+        if not use_static_triads:
+            self.static_triads_list = []
+            self._resolved_default_triads = None
+        elif static_triads is None:
+            self.static_triads_list = list(ALL_TRIADS)
+            self._resolved_default_triads = self.static_triads_list
+        else:
+            self.static_triads_list = list(static_triads)
+            self._resolved_default_triads = None
         self.analysis_type = "bsmd"
 
         # Ensure output directories exist
@@ -615,25 +633,99 @@ class BSMDAnalyzer(BaseAnalyzer):
         # Reject triads outside the analysable range before any analysis.
         # Bound by both the physical rfft limit (nfft//2) and the bins actually
         # loaded in qhat (stale/truncated cache can be shorter than rfft).
+        # Default list: warn and drop out-of-range triads (a default must not fail
+        # a default configuration). User-supplied list: collect every offender
+        # and raise once naming them all.
         nfft_limit = self.nfft // 2
         n_loaded = self._n_freq_bins
         loaded_limit = n_loaded - 1
         max_bin = min(nfft_limit, loaded_limit)
-        for triad in self.static_triads_list:
-            for p in triad:
-                p_int = int(p)
-                if abs(p_int) > max_bin:
-                    if abs(p_int) > nfft_limit:
-                        raise ValueError(
-                            f"Triad component p={p_int} is outside the rfft bin range "
-                            f"(|p| must be <= nfft//2 = {nfft_limit}; "
-                            f"{nfft_limit + 1} bins for nfft={self.nfft})"
-                        )
-                    raise ValueError(
-                        f"Triad component p={p_int} is outside the loaded frequency range "
+
+        def _out_of_range_kind(p_int):
+            if abs(p_int) <= max_bin:
+                return None
+            if abs(p_int) > nfft_limit:
+                return "rfft"
+            return "loaded"
+
+        # Still the default only while the list object is the one construction
+        # (or a prior filter step) resolved. A post-construction assignment is
+        # a new object and is treated as user-supplied — even if its values
+        # happen to equal a subset of ALL_TRIADS.
+        from_default = (
+            self._static_triads_from_default
+            and self._resolved_default_triads is not None
+            and self.static_triads_list is self._resolved_default_triads
+        )
+
+        if from_default:
+            kept = []
+            dropped = []
+            for triad in self.static_triads_list:
+                bad = [int(p) for p in triad if _out_of_range_kind(int(p)) is not None]
+                if bad:
+                    dropped.append(tuple(int(p) for p in triad))
+                else:
+                    kept.append(triad)
+            if dropped:
+                # Prefer the tighter bound in the warning so the user sees why.
+                bound_note = (
+                    f"|p| must be <= {max_bin} "
+                    f"(nfft//2 = {nfft_limit}, loaded bins allow |p| <= {loaded_limit})"
+                )
+                dropped_str = ", ".join(repr(t) for t in dropped)
+                warnings.warn(
+                    f"Default static triads filtered for nfft={self.nfft} "
+                    f"({bound_note}): dropped {len(dropped)} triad(s) "
+                    f"outside range: {dropped_str}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                # Post-filter list is still the default's: update the resolved
+                # object so a later re-run does not treat `kept` as user input.
+                self.static_triads_list = kept
+                self._resolved_default_triads = kept
+            if not self.static_triads_list:
+                # Filtering emptied the list — refuse before any executor is built.
+                named = ", ".join(repr(t) for t in dropped) if dropped else "(none)"
+                raise ValueError(
+                    f"No statically defined triads remain after filtering for "
+                    f"nfft={self.nfft} (|p| must be <= {max_bin}): dropped all "
+                    f"triad(s) outside range: {named}. "
+                    f"This configuration cannot be analysed."
+                )
+        else:
+            rfft_offenders = []
+            loaded_offenders = []
+            seen_rfft = set()
+            seen_loaded = set()
+            for triad in self.static_triads_list:
+                for p in triad:
+                    p_int = int(p)
+                    kind = _out_of_range_kind(p_int)
+                    if kind == "rfft" and p_int not in seen_rfft:
+                        seen_rfft.add(p_int)
+                        rfft_offenders.append(p_int)
+                    elif kind == "loaded" and p_int not in seen_loaded:
+                        seen_loaded.add(p_int)
+                        loaded_offenders.append(p_int)
+            if rfft_offenders or loaded_offenders:
+                parts = []
+                if rfft_offenders:
+                    named = ", ".join(f"p={p}" for p in rfft_offenders)
+                    parts.append(
+                        f"Triad component(s) {named} outside the rfft bin range "
+                        f"(|p| must be <= nfft//2 = {nfft_limit}; "
+                        f"{nfft_limit + 1} bins for nfft={self.nfft})"
+                    )
+                if loaded_offenders:
+                    named = ", ".join(f"p={p}" for p in loaded_offenders)
+                    parts.append(
+                        f"Triad component(s) {named} outside the loaded frequency range "
                         f"(only {n_loaded} bins are loaded, so |p| must be <= {loaded_limit}; "
                         f"rfft would allow up to nfft//2 = {nfft_limit})"
                     )
+                raise ValueError("; ".join(parts))
 
         num_triads = len(self.static_triads_list)
         Nspace = self._n_spatial
@@ -1058,7 +1150,6 @@ if __name__ == "__main__":
                 data_loader=lambda fp, _f=field: loader.load(fp, field=_f),
                 spatial_weight_type="uniform",
                 use_static_triads=True,
-                static_triads=ALL_TRIADS,
             )
             analyzer.analysis_type = f"bsmd_{field}"
 
@@ -1123,7 +1214,6 @@ if __name__ == "__main__":
             data_loader=loader,
             spatial_weight_type=spatial_weight,
             use_static_triads=True,
-            static_triads=ALL_TRIADS,
         )
 
         run_all = not (args.prep or args.compute or args.plot)

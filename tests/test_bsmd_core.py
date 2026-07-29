@@ -1,8 +1,10 @@
 import h5py
 import numpy as np
 import pytest
+import warnings
 
 from openmodalpy import BSMDAnalyzer
+from openmodalpy.bsmd import ALL_TRIADS
 
 
 def _make_analyzer(
@@ -81,6 +83,200 @@ def test_out_of_range_index_raises(tmp_path):
     analyzer = _make_analyzer(tmp_path, triads=[(99, -99, 0)], nfft=4, Ns=10)
     # nfft=4 → rfft bins 0..2; |p| = 99 exceeds nfft//2 = 2.
     with pytest.raises(ValueError, match=r"p=99"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_static_triads_default_is_none_and_resolves_to_copy(tmp_path):
+    """static_triads=None resolves to a private copy of ALL_TRIADS."""
+    analyzer = BSMDAnalyzer(
+        file_path="default_triads",
+        nfft=128,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: None,
+    )
+    assert list(analyzer.static_triads_list) == list(ALL_TRIADS)
+    assert analyzer.static_triads_list is not ALL_TRIADS
+    assert analyzer._static_triads_from_default is True
+
+
+def test_default_triads_at_small_nfft_warn_and_filter(tmp_path):
+    """Default ALL_TRIADS at nfft=8 keeps only in-range triads and warns."""
+    np.random.seed(20)
+    ns, nspace = 64, 4
+    data = {
+        "q": np.random.randn(ns, nspace),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 0.1,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="default_nfft8",
+        nfft=8,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        analyzer._perform_static_bsmd_core()
+    msgs = [str(w.message) for w in caught]
+    assert any("triad" in m.lower() for m in msgs), msgs
+    limit = 8 // 2
+    kept = list(analyzer.static_triads_list)
+    assert kept, "default filter must keep at least one triad"
+    assert all(all(abs(int(p)) <= limit for p in t) for t in kept)
+    assert analyzer.eigenvalues.shape == (len(kept),)
+
+
+def test_user_out_of_range_triad_still_raises(tmp_path):
+    """A user-supplied out-of-range triad remains a ValueError, not a filter."""
+    analyzer = _make_analyzer(tmp_path, triads=[(8, -8, 0)], nfft=8, Ns=32)
+    with pytest.raises(ValueError, match=r"p=8"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_user_mixed_list_names_every_offender(tmp_path):
+    """A mixed valid/invalid user list names every out-of-range component once."""
+    # nfft=8 → |p| <= 4; offenders in this list are 8, -8, 7, -5.
+    triads = [(2, -2, 0), (8, -8, 0), (7, -5, 2)]
+    analyzer = _make_analyzer(tmp_path, triads=triads, nfft=8, Ns=32)
+    with pytest.raises(ValueError) as excinfo:
+        analyzer._perform_static_bsmd_core()
+    msg = str(excinfo.value)
+    for p in (8, -8, 7, -5):
+        assert f"p={p}" in msg, f"expected p={p} in: {msg}"
+
+
+def test_default_filter_to_empty_raises(tmp_path, monkeypatch):
+    """Filtering the default list to nothing raises before any thread pool.
+
+    use_parallel=True on purpose: an empty list also reaches
+    ThreadPoolExecutor(max_workers=0). The message must name triads so that
+    incidental executor error cannot stand in for this guard.
+    """
+    import openmodalpy.bsmd as bsmd
+
+    monkeypatch.setattr(bsmd, "ALL_TRIADS", [(8, -8, 0), (7, -7, 0), (8, -7, 1)])
+    np.random.seed(20)
+    ns, nspace = 64, 4
+    data = {
+        "q": np.random.randn(ns, nspace),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 0.1,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="empty_after_filter",
+        nfft=8,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=True,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with pytest.raises(ValueError, match=r"(?i)triad") as excinfo:
+            analyzer._perform_static_bsmd_core()
+    msg = str(excinfo.value).lower()
+    assert "cannot be analysed" in msg or "cannot be analyzed" in msg or "remain" in msg
+
+
+def test_replaced_static_triads_list_treated_as_user(tmp_path):
+    """A static_triads_list assigned after construction is user-supplied and raises."""
+    np.random.seed(20)
+    ns, nspace = 64, 4
+    data = {
+        "q": np.random.randn(ns, nspace),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 0.1,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="replaced_list",
+        nfft=8,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    # Values that also appear in ALL_TRIADS — origin, not value, decides the path.
+    analyzer.static_triads_list = [(8, -8, 0)]
+    with pytest.raises(ValueError, match=r"p=8"):
+        analyzer._perform_static_bsmd_core()
+
+
+def test_default_triads_truncated_loaded_bins_warn_and_filter(tmp_path):
+    """Default list against a truncated loaded-bin count warns and filters, not raises."""
+    np.random.seed(20)
+    ns, nspace = 600, 4
+    data = {
+        "q": np.random.randn(ns, nspace),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 0.1,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": ns,
+    }
+    analyzer = BSMDAnalyzer(
+        file_path="default_truncated",
+        nfft=128,
+        overlap=0.0,
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    # Full rfft has 65 bins; shorten so |p| <= 4 (5 loaded bins).
+    n_loaded = 5
+    analyzer.qhat = analyzer.qhat[:n_loaded]
+    assert analyzer._n_freq_bins == n_loaded
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        analyzer._perform_static_bsmd_core()
+    msgs = [str(w.message) for w in caught]
+    assert any("triad" in m.lower() for m in msgs), msgs
+    limit = n_loaded - 1
+    kept = list(analyzer.static_triads_list)
+    assert kept, "default filter must keep at least one triad"
+    assert all(all(abs(int(p)) <= limit for p in t) for t in kept)
+    assert analyzer.eigenvalues.shape == (len(kept),)
+
+
+def test_user_loaded_range_offender_raises(tmp_path):
+    """A user-supplied list with a loaded-range (not rfft) offender raises ValueError."""
+    analyzer = _make_analyzer(tmp_path, triads=[(20, 30, 50)], nfft=128, Ns=600)
+    n_loaded = 10
+    analyzer.qhat = analyzer.qhat[:n_loaded]
+    assert analyzer._n_freq_bins == n_loaded
+    # Inside nfft//2=64, outside loaded |p|<=9.
+    with pytest.raises(ValueError, match=r"(loaded|p=20|p=30|p=50)"):
         analyzer._perform_static_bsmd_core()
 
 

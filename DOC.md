@@ -378,9 +378,13 @@ bsmd.run_analysis()
 static triad table only covers frequency-bin indices with absolute value at most
 8. At the default `nfft=128` that is the bottom 12.5% of the rfft spectrum;
 higher-frequency triads are not analysed unless you pass a custom
-`static_triads` list. Triads with any component `|p| > nfft // 2` (outside the
-rfft bin range) raise `ValueError`. Dynamic triad selection
-(`use_static_triads=False`) is not implemented and raises `NotImplementedError`.
+`static_triads` list. Bound: every component must satisfy
+`|p| <= min(nfft // 2, n_loaded - 1)` (rfft Nyquist and the bins actually
+loaded in `qhat`). The default list (`static_triads=None`) is **warned and
+filtered** when any triad falls outside that bound; if filtering leaves none,
+analysis raises `ValueError`. A user-supplied list raises `ValueError` naming
+every offender. Dynamic triad selection (`use_static_triads=False`) is not
+implemented and raises `NotImplementedError`.
 
 ---
 
