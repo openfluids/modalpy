@@ -27,6 +27,10 @@ from openmodalpy.core.io import load_data as di_load_data
 from openmodalpy.core.io import load_jetles_data as di_load_jetles_data
 from openmodalpy.core.io import load_mat_data as di_load_mat_data
 
+# Welch helpers live in welch.py (single definition; no heavy deps) so base
+# remains importable when the parallel stack fails to load.
+from openmodalpy.core.welch import _validate_welch_blocks, welch_nblocks
+
 try:
     from openmodalpy.core.parallel import (
         PARALLEL_AVAILABLE,
@@ -946,8 +950,13 @@ def blocksfft(
       codebase ``dst`` is the Strouhal step (``St[1] - St[0] = df * L / U``), not
       the raw frequency resolution ``df = fs / nfft``. Reported SPOD eigenvalues
       therefore scale with ``U/L``; with the default L = U = 1 the two coincide.
+    - Block starts are ``iblk * (nfft - novlap)`` with no end-of-record clamp.
+      Callers must pass an ``nblocks`` that fits; oversize requests raise
+      ``ValueError`` rather than re-using trailing samples.
     ---
     """
+    _validate_welch_blocks(q.shape[0], nfft, nblocks, novlap)
+
     if use_parallel and PARALLEL_AVAILABLE:
         return blocksfft_optimized(
             q,
@@ -981,8 +990,9 @@ def blocksfft(
     # ``n_threads`` is accepted for backward compatibility but FFT blocks are
     # processed sequentially to avoid oversubscribing underlying math libraries.
     fft_func = get_fft_func()
+    hop = nfft - novlap
     for iblk in range(nblocks):
-        ts = min(iblk * (nfft - novlap), q.shape[0] - nfft)
+        ts = iblk * hop
         tf = np.arange(ts, ts + nfft)
         block = q[tf, :]
 
@@ -1165,8 +1175,18 @@ class BaseAnalyzer:
             self.W = calculate_uniform_weights(self.data["x"], self.data["y"], self.data.get("z"))
             print("Using uniform spatial weights (rectangular grid).")
 
-        # Calculate derived parameters
-        self.nblocks = int(np.ceil((self.data["Ns"] - self.novlap) / (self.nfft - self.novlap)))
+        # Welch floor partitioning (scipy.signal.welch): drop the remainder so
+        # every block is an independent ensemble member. Ceil + end-clamp re-uses
+        # samples in the last block and biases SPOD/BSMD eigenvalues.
+        # Shared helper with commands._apply_snapshot_limit (welch_nblocks).
+        Ns = int(self.data["Ns"])
+        self.nblocks = welch_nblocks(Ns, self.nfft, self.novlap)
+        if Ns < self.nfft or self.nblocks < 1:
+            raise ValueError(
+                f"Cannot form Welch blocks: Ns={Ns}, nfft={self.nfft} "
+                f"(overlap={self.overlap}, novlap={self.novlap}) yield "
+                f"nblocks={self.nblocks}"
+            )
         # Divide by the validated local, not the dict entry: a float32 or 0-d
         # array dt would otherwise give a slightly different fs than the value
         # just checked. self.data["dt"] is deliberately left as the loader set it.

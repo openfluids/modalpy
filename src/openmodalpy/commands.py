@@ -29,6 +29,7 @@ from openmodalpy.core.base import (
     style_spatial_axes,
 )
 from openmodalpy.core.io import load_data
+from openmodalpy.core.welch import welch_nblocks
 from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.example_data import generate_example_dataset
 from openmodalpy.mpod import MPODAnalyzer
@@ -432,7 +433,17 @@ def _apply_snapshot_limit(analyzer: Any, spec: AnalyzeSpec) -> None:
     analyzer.data["q"] = q[:limit, :]
     analyzer.data["Ns"] = limit
     if hasattr(analyzer, "novlap") and hasattr(analyzer, "nfft") and analyzer.nfft > 1:
-        analyzer.nblocks = int(np.ceil((analyzer.data["Ns"] - analyzer.novlap) / (analyzer.nfft - analyzer.novlap)))
+        # Same floor formula as BaseAnalyzer.load_and_preprocess (welch_nblocks).
+        # The old ceil here overwrote a correct floor value and requested more
+        # blocks than fit after truncation (e.g. Ns=400, nfft=128, ovl=0.5).
+        Ns = int(analyzer.data["Ns"])
+        nblocks = welch_nblocks(Ns, analyzer.nfft, analyzer.novlap)
+        if nblocks < 1:
+            raise ValueError(
+                f"Cannot form Welch blocks: Ns={Ns}, nfft={analyzer.nfft} "
+                f"(novlap={analyzer.novlap}) yield nblocks={nblocks}"
+            )
+        analyzer.nblocks = nblocks
 
 
 def _make_dry_run_outcome(

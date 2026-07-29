@@ -15,6 +15,8 @@ import numpy as np
 from scipy.signal import get_window
 from threadpoolctl import threadpool_info
 
+from openmodalpy.core.welch import _validate_welch_blocks
+
 # OpenMP support was removed. All routines rely on NumPy vectorization and the
 # underlying BLAS implementation.
 OPENMP_AVAILABLE = False
@@ -134,7 +136,15 @@ def blocksfft_optimized(
     --------
     np.ndarray
         FFT coefficients [freq, space, block]
+
+    Notes
+    -----
+    Block starts are ``iblk * (nfft - novlap)`` with no end-of-record clamp.
+    Callers must pass an ``nblocks`` that fits; oversize requests raise
+    ``ValueError`` rather than re-using trailing samples.
     """
+    _validate_welch_blocks(q.shape[0], nfft, nblocks, novlap)
+
     # Import FFT backend
     from fftkit import get_fft_func
 
@@ -159,9 +169,10 @@ def blocksfft_optimized(
 
     # Process each block with optimized memory access
     fft_func = get_fft_func()
+    hop = nfft - novlap
 
     for iblk in range(nblocks):
-        ts = min(iblk * (nfft - novlap), q.shape[0] - nfft)  # Start index
+        ts = iblk * hop  # no end-clamp: validated above that every block fits
         tf = np.arange(ts, ts + nfft)  # Time indices for the block
         block = q[tf, :]
 

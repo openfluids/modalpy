@@ -84,7 +84,7 @@ def test_different_q_arrays_do_not_share_cache(tmp_path):
 
     # Freshly computed reference for q2, independent of any cache.
     novlap = int(0.0 * 8)
-    nblocks = int(np.ceil((q2.shape[0] - novlap) / (8 - novlap)))
+    nblocks = (q2.shape[0] - novlap) // (8 - novlap)  # floor, matches welch_nblocks
     reference = blocksfft(
         q2,
         8,
@@ -129,7 +129,7 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, capsys):
 
     # The recomputed result must be correct (hamming), not the corrupted stamp's hann.
     novlap = 0
-    nblocks = int(np.ceil((q.shape[0] - novlap) / (8 - novlap)))
+    nblocks = (q.shape[0] - novlap) // (8 - novlap)  # floor, matches welch_nblocks
     reference = blocksfft(
         q,
         8,

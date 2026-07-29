@@ -1,9 +1,20 @@
 import numpy as np
 import pytest
 
-from openmodalpy.core.base import blocksfft
+from openmodalpy.core.base import blocksfft, spod_function
+from openmodalpy.core.parallel import blocksfft_optimized
 
 WINDOWS = ("hamming", "hann", "blackman", "bartlett", "sine")
+
+# Floor partitioning matching scipy.signal.welch / the fixed production formula.
+def _nblocks_floor(Ns, nfft, overlap):
+    novlap = int(overlap * nfft)
+    return (Ns - novlap) // (nfft - novlap), novlap
+
+
+def _block_starts(nblocks, nfft, novlap):
+    hop = nfft - novlap
+    return [iblk * hop for iblk in range(nblocks)]
 
 
 def test_blocksfft_constant_signal():
@@ -128,3 +139,267 @@ def test_normvar_zero_variance_channel_isfinite():
     np.testing.assert_allclose(with_nv[:, 1, :], without[:, 1, :], rtol=0, atol=1e-12)
     # Varying channel must actually change under normvar (else the flag is a no-op).
     assert not np.allclose(with_nv[:, 0, :], without[:, 0, :])
+
+
+# ---------------------------------------------------------------------------
+# Welch block partitioning (floor, drop remainder — no end-clamp)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "Ns,nfft,overlap,label",
+    [
+        (100, 128, 0.5, "Ns < nfft"),
+        (64, 128, 0.5, "Ns <= novlap"),
+    ],
+)
+@pytest.mark.parametrize(
+    "fn",
+    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    ids=["serial", "parallel"],
+)
+def test_short_record_raises_naming_Ns_and_nfft(Ns, nfft, overlap, label, fn):
+    """Short records must raise ValueError naming both Ns and nfft.
+
+    Pre-fix: ceil/floor of a short record could yield nblocks=0 (silent empty)
+    or a negative start (numpy wrap → garbage). Assert on the exception message,
+    not on an output shape.
+    """
+    nb, novlap = _nblocks_floor(Ns, nfft, overlap)
+    q = np.zeros((Ns, 4))
+    with pytest.raises(ValueError) as ei:
+        fn(q, nfft, max(nb, 1), novlap)
+    msg = str(ei.value)
+    assert str(Ns) in msg and str(nfft) in msg, f"{label}: message {msg!r} must name Ns and nfft"
+
+
+@pytest.mark.parametrize("Ns,nfft,overlap", [(500, 128, 0.5), (300, 128, 0.5)])
+@pytest.mark.parametrize(
+    "fn",
+    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    ids=["serial", "parallel"],
+)
+def test_oversize_nblocks_raises_not_clamp(Ns, nfft, overlap, fn):
+    """Old ceil nblocks that no longer fit must raise, not silently clamp."""
+    nb_floor, novlap = _nblocks_floor(Ns, nfft, overlap)
+    nb_ceil = int(np.ceil((Ns - novlap) / (nfft - novlap)))
+    if nb_ceil == nb_floor:
+        pytest.skip("ceil and floor agree; clamp path not exercised")
+    q = np.zeros((Ns, 4))
+    with pytest.raises(ValueError) as ei:
+        fn(q, nfft, nb_ceil, novlap)
+    msg = str(ei.value)
+    assert str(Ns) in msg or str(nb_ceil) in msg, msg
+
+
+@pytest.mark.parametrize(
+    "Ns,nfft,overlap",
+    [
+        (500, 128, 0.5),  # shipped cylinder_wake shape: 6 blocks, remainder dropped
+        (300, 128, 0.5),  # does not divide evenly
+        (500, 100, 0.5),
+        (256, 64, 0.25),
+    ],
+)
+def test_block_starts_strict_hop_and_fit(Ns, nfft, overlap):
+    """Block starts must be strictly increasing with constant hop, last fits.
+
+    Asserted on the indices themselves (not merely on nblocks), via an impulse
+    basis: column j is an impulse at time j; energy in block k recovers coverage.
+    boxcar is required so edge impulses are not window-attenuated below threshold.
+    """
+    nb, novlap = _nblocks_floor(Ns, nfft, overlap)
+    hop = nfft - novlap
+    expected_starts = _block_starts(nb, nfft, novlap)
+    assert expected_starts[-1] + nfft <= Ns
+
+    def recovered_starts(fn):
+        qhat = fn(np.eye(Ns), nfft, nb, novlap, window_type="boxcar")
+        energy = np.sum(np.abs(qhat) ** 2, axis=0)  # [time, block]
+        starts = []
+        for k in range(nb):
+            idx = np.flatnonzero(energy[:, k] > 0.5 * energy[:, k].max())
+            assert idx.size > 0
+            starts.append(int(idx[0]))
+        return starts
+
+    for fn, name in (
+        (lambda *a, **k: blocksfft(*a, use_parallel=False, **k), "serial"),
+        (blocksfft_optimized, "parallel"),
+    ):
+        starts = recovered_starts(fn)
+        assert starts == expected_starts, f"{name}: starts {starts} != {expected_starts}"
+        assert all(s2 - s1 == hop for s1, s2 in zip(starts, starts[1:])), f"{name}: non-constant hop"
+        assert starts[-1] + nfft <= Ns
+
+
+def test_serial_parallel_identical_placement_uneven_records():
+    """Serial and parallel paths place blocks identically, including uneven Ns."""
+    for Ns, nfft, overlap in ((500, 128, 0.5), (300, 128, 0.5), (256, 64, 0.25)):
+        nb, novlap = _nblocks_floor(Ns, nfft, overlap)
+        rng = np.random.default_rng(Ns)
+        q = rng.standard_normal((Ns, 3))
+        ser = blocksfft(q, nfft, nb, novlap, use_parallel=False, window_type="boxcar")
+        par = blocksfft_optimized(q, nfft, nb, novlap, window_type="boxcar")
+        np.testing.assert_allclose(ser, par, rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "fn",
+    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    ids=["serial", "parallel"],
+)
+@pytest.mark.parametrize(
+    "novlap",
+    [64, 65],  # == nfft and > nfft; both yield hop <= 0
+    ids=["novlap_eq_nfft", "novlap_gt_nfft"],
+)
+def test_novlap_ge_nfft_raises_not_repeat_block0(fn, novlap):
+    """hop <= 0 must raise: otherwise every block starts at 0 (identical members)."""
+    q = np.zeros((300, 4))
+    with pytest.raises(ValueError, match=r"hop|novlap|nfft"):
+        fn(q, 64, 3, novlap)
+
+
+def test_apply_snapshot_limit_uses_floor_nblocks():
+    """commands._apply_snapshot_limit must set floor nblocks and stay runnable.
+
+    Slice-2 regression: ceil after max_snapshots truncation requested more
+    blocks than fit (Ns=400, nfft=128, overlap=0.5 → floor 5, ceil 6 needs 448).
+    Pinning nblocks alone is not enough — blocksfft must accept the result.
+    """
+    import types
+
+    from openmodalpy.commands import _apply_snapshot_limit
+
+    nfft, novlap, limit = 128, 64, 400
+    expect = (limit - novlap) // (nfft - novlap)
+    assert expect == 5
+    # Old ceil would have been 6 and needed (6-1)*64+128 = 448 > 400.
+    assert int(np.ceil((limit - novlap) / (nfft - novlap))) == 6
+
+    an = types.SimpleNamespace(
+        data={"q": np.zeros((500, 4)), "Ns": 500},
+        novlap=novlap,
+        nfft=nfft,
+        nblocks=6,
+    )
+    spec = types.SimpleNamespace(params={"max_snapshots": limit})
+    _apply_snapshot_limit(an, spec)
+
+    assert an.data["Ns"] == limit
+    assert an.data["q"].shape[0] == limit
+    assert an.nblocks == expect
+
+    # Must actually be usable: the original break was a ValueError here.
+    out = blocksfft(an.data["q"], nfft, an.nblocks, novlap, use_parallel=False)
+    assert out.shape[2] == expect
+
+
+def test_load_and_preprocess_nblocks_uses_floor(tmp_path):
+    """BaseAnalyzer.load_and_preprocess must use floor nblocks, not ceil.
+
+    Slice-1 tests call blocksfft with a precomputed nblocks, so the analyzer's
+    own formula was untested. Ns=400, nfft=128, overlap=0.5 → floor 5, ceil 6.
+    """
+    from openmodalpy import SPODAnalyzer
+
+    Ns, nfft, overlap = 400, 128, 0.5
+    novlap = int(overlap * nfft)
+    expect_floor = (Ns - novlap) // (nfft - novlap)
+    expect_ceil = int(np.ceil((Ns - novlap) / (nfft - novlap)))
+    assert expect_floor == 5 and expect_ceil == 6
+
+    q = np.zeros((Ns, 4))
+    data = {
+        "q": q,
+        "x": np.linspace(0, 1, 4),
+        "y": np.linspace(0, 1, 1),
+        "dt": 1.0,
+        "Nx": 4,
+        "Ny": 1,
+        "Ns": Ns,
+    }
+    analyzer = SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=nfft,
+        overlap=overlap,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    analyzer.load_and_preprocess()
+    assert analyzer.nblocks == expect_floor
+
+
+def test_load_and_preprocess_short_record_raises(tmp_path):
+    """Truncated-to-shorter-than-nfft record must raise a clear ValueError."""
+    from openmodalpy import SPODAnalyzer
+
+    Ns, nfft, overlap = 100, 128, 0.5
+    q = np.zeros((Ns, 4))
+    data = {
+        "q": q,
+        "x": np.linspace(0, 1, 4),
+        "y": np.linspace(0, 1, 1),
+        "dt": 1.0,
+        "Nx": 4,
+        "Ny": 1,
+        "Ns": Ns,
+    }
+    analyzer = SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=nfft,
+        overlap=overlap,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    with pytest.raises(ValueError) as ei:
+        analyzer.load_and_preprocess()
+    msg = str(ei.value)
+    assert str(Ns) in msg and str(nfft) in msg
+
+
+def test_white_noise_spod_eigenvalue_matches_analytic():
+    """Unit-variance white noise: mean mid-band SPOD eigenvalue ≈ 1.
+
+    Derivation (single spatial point, W=1, boxcar, dt=1 so fs=1, dst=df=1/nfft):
+    blocksfft stores q_hat = FFT(x)/nfft. For unit-variance white noise,
+    E[|X[k]/nfft|^2] = 1/nfft at each one-sided bin (numpy unnormalized FFT).
+    spod_function forms λ = mean_b |q_hat_b|^2 / dst = mean |q_hat|^2 * nfft,
+    so E[λ(f)] = 1 at every interior frequency.
+
+    This pins the FFT → SPOD normalization chain (window, 1/nfft, dst), not
+    block placement. On white noise a clamped/reused block does not bias
+    E[λ]; it only changes the variance of the mean. Partitioning is covered
+    by the impulse-probe and oversize-nblocks tests above.
+
+    Tolerance: an ensemble of nblocks approximately independent periodogram
+    members has relative standard error ~ 1/sqrt(nblocks) for the mean over
+    frequencies of comparable width. We average over ~nfft/2 mid-band bins and
+    require |mean(λ) - 1| < 4/sqrt(nblocks). Tighter than ~1/sqrt(nblocks) is
+    flaky under finite-sample noise.
+    """
+    rng = np.random.default_rng(0)
+    Ns, nfft, overlap = 4096, 128, 0.5
+    nb, novlap = _nblocks_floor(Ns, nfft, overlap)
+    assert nb >= 16
+    q = rng.standard_normal((Ns, 1))
+    qhat = blocksfft(q, nfft, nb, novlap, window_type="boxcar", use_parallel=False)
+    dst = 1.0 / nfft
+    w = np.ones((1, 1))
+    lams = []
+    for ifreq in range(1, qhat.shape[0] - 1):  # skip DC and Nyquist
+        _, lam = spod_function(
+            qhat[ifreq], nblocks=nb, dst=dst, w=w, use_parallel=False
+        )
+        lams.append(lam[0])
+    mean_lam = float(np.mean(lams))
+    tol = 4.0 / np.sqrt(nb)
+    assert abs(mean_lam - 1.0) < tol, (
+        f"mean mid-band SPOD λ={mean_lam:.4f} vs analytic 1.0 "
+        f"(tol={tol:.4f} = 4/sqrt(nblocks={nb}))"
+    )

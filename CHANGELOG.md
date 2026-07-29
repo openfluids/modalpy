@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Welch block partitioning now matches `scipy.signal.welch`: `nblocks` is
+  computed with floor arithmetic and the remainder is dropped, rather than
+  ceil plus a clamped final block that re-uses samples. Records that do not
+  divide evenly therefore change block count (the shipped cylinder_wake
+  example with `Ns=500`, `nfft=128`, `overlap=0.5` goes from 7 blocks to 6),
+  so SPOD / PSD-POD / BSMD numbers on those records move. Short records that
+  cannot form one full block, and callers that request more blocks than fit,
+  now raise `ValueError` instead of returning empty or wrapped indices.
+  The same floor helper (`welch_nblocks`) is used by
+  `BaseAnalyzer.load_and_preprocess` and by `commands._apply_snapshot_limit`
+  after `max_snapshots` truncation — the snapshot-limit path previously
+  recomputed `nblocks` with ceil and could request more blocks than fit
+  (e.g. Ns=400, nfft=128, overlap=0.5 → floor 5 vs ceil 6). `novlap >= nfft`
+  (hop ≤ 0) is rejected in both FFT paths instead of repeating block 0.
+
 ### Fixed
 - POD energy-captured report no longer always prints 100%: the fraction is
   truncated eigenvalue sum over the pre-truncation total, stored as
