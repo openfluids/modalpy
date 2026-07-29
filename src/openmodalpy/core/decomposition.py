@@ -25,6 +25,7 @@ from openmodalpy.core.base import (
     _coerce_spatial_weights,
     canonicalize_modes,
     compute_reduced_svd,
+    require_spatial_metric,
 )
 
 
@@ -129,6 +130,9 @@ class SpatialMetric:
     """Diagonal spatial inner-product weights (the POD/SPOD metric W)."""
 
     def __init__(self, weights: np.ndarray):
+        # Validate on the raw input before any real cast — complex would
+        # otherwise truncate under ComplexWarning and store only the real part.
+        require_spatial_metric(weights)
         self.weights = np.asarray(weights, dtype=float).reshape(-1)
 
     def tile(self, d: int) -> np.ndarray:

@@ -1108,11 +1108,16 @@ def require_spatial_metric(weights):
     A metric that is not an inner product must not reach a solver. Isolated
     zeros among positive weights stay allowed -- the POD seam floors those at
     1e-12, while SPOD and BSMD simply let that cell contribute nothing. What is
-    rejected: non-finite entries, negative entries, and a zero total measure.
-    Single definition, used by the decomposition seam, SPOD (via
-    ``_flatten_weights``) and BSMD.
+    rejected: complex entries, non-finite entries, negative entries, and a
+    zero total measure. Single definition, used by the decomposition seam,
+    SPOD (via ``_flatten_weights``) and BSMD.
     """
     weights = np.asarray(weights)
+    if np.iscomplexobj(weights):
+        raise ValueError(
+            "Spatial metric is complex. Casting it to real would silently discard the "
+            "imaginary part and hand the solver a metric the caller never asked for."
+        )
     if not np.all(np.isfinite(weights)):
         raise ValueError(
             f"Spatial metric contains {np.count_nonzero(~np.isfinite(weights))} non-finite "
@@ -1143,28 +1148,25 @@ def _coerce_spatial_weights(w, expected_len):
     ``(n, k)`` row-major flatten; 3-D per-component stacked diagonals.
     """
     w = np.asarray(w)
-    if np.iscomplexobj(w):
-        raise ValueError(
-            "Spatial metric is complex. Casting it to real would silently discard the "
-            "imaginary part and hand the solver a metric the caller never asked for."
-        )
-    w = w.astype(float, copy=False)
+    # Shape work only — do not cast to float yet. A complex array must reach
+    # require_spatial_metric with its imaginary part intact; casting first would
+    # emit ComplexWarning and hand the real part to the metric checks.
     if w.ndim == 3:
         if w.shape[0] != w.shape[1]:
             raise ValueError("weight array's first two dimensions must be equal")
         w = np.stack([np.diag(w[:, :, i]) for i in range(w.shape[2])], axis=1)
-    if w.ndim == 2:
+    elif w.ndim == 2:
         if w.shape[0] == w.shape[1] and w.shape[1] != 1:
             w = np.diag(w)
         elif w.shape[1] > 1:
             w = w.reshape(-1)
         else:
             w = w.ravel()
-    weights = np.asarray(w, dtype=float).reshape(-1)
+    weights = np.asarray(w).reshape(-1)
     if weights.size != expected_len:
         raise ValueError(f"Weight vector length {weights.size} does not match n_space={expected_len}")
     require_spatial_metric(weights)
-    return weights
+    return np.asarray(weights, dtype=float)
 
 
 def _flatten_weights(w, expected_len):

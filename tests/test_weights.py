@@ -1,12 +1,16 @@
+import warnings
+
 import numpy as np
 import pytest
 
 from openmodalpy.core.base import (
+    _coerce_spatial_weights,
     _flatten_weights,
     calculate_polar_weights,
     calculate_uniform_weights,
+    require_spatial_metric,
 )
-from openmodalpy.core.decomposition import _as_weight_vector
+from openmodalpy.core.decomposition import SpatialMetric, _as_weight_vector
 
 
 def test_square_weight_matrix_yields_diagonal():
@@ -24,9 +28,31 @@ def test_square_weight_matrix_yields_diagonal():
 def test_complex_weights_are_rejected_not_truncated():
     """A complex metric must fail loudly rather than lose its imaginary part."""
     W = np.array([1.0 + 0j, 2.0 + 1j, 3.0 + 0j])
-    for entry in (lambda: _flatten_weights(W, 3), lambda: _as_weight_vector(W, 3)):
-        with pytest.raises(ValueError, match="complex"):
-            entry()
+    for entry in (
+        lambda: require_spatial_metric(W),
+        lambda: _flatten_weights(W, 3),
+        lambda: _as_weight_vector(W, 3),
+        lambda: _as_weight_vector(SpatialMetric(W), 3),
+        lambda: SpatialMetric(W),
+    ):
+        with warnings.catch_warnings(record=True) as rec:
+            warnings.simplefilter("always")
+            with pytest.raises(ValueError, match="complex"):
+                entry()
+        assert not any(w.category is np.exceptions.ComplexWarning for w in rec)
+
+
+def test_three_d_weights_with_equal_space_and_components():
+    """Per-component 3-D weights must not fall through into a second diagonal.
+
+    When the stacked (n, k) matrix is square (n == k), the 3-D branch alone
+    is the correct route: flatten the stacked diagonals, do not re-diag.
+    """
+    w3 = np.stack([np.diag([1.0, 2.0]), np.diag([3.0, 4.0])], axis=2)
+    got = _coerce_spatial_weights(w3, 4)
+    np.testing.assert_allclose(got, [1.0, 3.0, 2.0, 4.0])
+    with pytest.raises(ValueError, match="n_space=2"):
+        _coerce_spatial_weights(w3, 2)
 
 
 def test_uniform_weights_1d_vs_2d():
