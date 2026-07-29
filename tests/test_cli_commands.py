@@ -494,3 +494,56 @@ def test_run_from_config_executes_real_psd_pod(tmp_path: Path) -> None:
     assert "Eigenvalues" in summary["datasets"]
     assert "Modes" in summary["datasets"]
     assert "TimeCoefficients" in summary["datasets"]
+
+
+def test_psd_pod_uses_mean_subtraction_matches_blocksfft_modes(tmp_path: Path) -> None:
+    """PSD-POD must record the centering blocksfft actually applied.
+
+    blocksfft always removes a mean: global when blockwise_mean is False,
+    per-block when True. Both modes must write uses_mean_subtraction=True
+    and echo the configured blockwise_mean flag into the result file.
+    """
+    for blockwise_mean in (False, True):
+        config_path = tmp_path / f"psd_pod_mean_{int(blockwise_mean)}.jsonc"
+        results_root = tmp_path / f"results_bm_{int(blockwise_mean)}"
+        figures_root = tmp_path / f"figures_bm_{int(blockwise_mean)}"
+        _write_jsonc(
+            config_path,
+            {
+                "name": f"PSD-POD mean mode {blockwise_mean}",
+                "description": "uses_mean_subtraction vs blocksfft contract",
+                "case": {
+                    "name": "toy_case",
+                    "case_type": "analytical",
+                    "data": {
+                        "kind": "generator",
+                        "name": "double_gyre",
+                        "params": {"Nx": 8, "Ny": 4, "Nt": 20},
+                    },
+                    "spatial_weight_type": "uniform",
+                    "n_modes_save": 4,
+                    "nfft": 8,
+                    "overlap": 0.5,
+                    "generate_plots": False,
+                    "results_root": str(results_root),
+                    "figures_root": str(figures_root),
+                },
+                "runs": [
+                    {
+                        "id": "psd",
+                        "method": "psd-pod",
+                        "params": {"blockwise_mean": blockwise_mean},
+                    }
+                ],
+            },
+        )
+
+        outcomes = run_from_config(config_path)
+        assert len(outcomes) == 1
+        outcome = outcomes[0]
+        assert outcome.results_path is not None and outcome.results_path.is_file()
+
+        with h5py.File(outcome.results_path, "r") as handle:
+            assert bool(handle.attrs["uses_mean_subtraction"]) is True
+            assert bool(handle.attrs["blockwise_mean"]) is blockwise_mean
+            assert handle.attrs["analysis_type"] == "psd_pod"

@@ -633,6 +633,9 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
     if dry_run:
         return _make_dry_run_outcome(spec, results_dir, figures_dir, results_dir / "dry_run_psd_pod.hdf5")
 
+    # Same flags compute_fft_blocks / blocksfft will use. blocksfft always
+    # removes a mean; blockwise_mean only chooses global vs per-block.
+    blockwise_mean = bool(spec.params.get("blockwise_mean", False))
     analyzer = SPODAnalyzer(
         file_path=file_path,
         nfft=int(spec.params.get("nfft", spec.case.nfft)),
@@ -642,6 +645,7 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         data_loader=data_loader,
         spatial_weight_type=spec.case.spatial_weight_type,
         use_parallel=spec.case.use_parallel,
+        blockwise_mean=blockwise_mean,
     )
     analyzer.load_and_preprocess()
     _apply_snapshot_limit(analyzer, spec)
@@ -683,6 +687,9 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         "psd_pod",
     )
     save_path = results_dir / filename
+    # blocksfft removes a mean on every path, so this is unconditionally True.
+    # blockwise_mean chooses which mean (global or per-block), never whether.
+    # It is recorded separately below so the two facts stay distinguishable.
     with h5py.File(save_path, "w") as handle:
         handle.create_dataset("Eigenvalues", data=np.real(eigenvalues), compression="gzip")
         handle.create_dataset("Modes", data=modes, compression="gzip")
@@ -692,7 +699,8 @@ def _run_psd_pod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
         handle.attrs.update(analyzer._get_metadata())
         handle.attrs["analysis_type"] = "psd_pod"
         handle.attrs["lift_kind"] = "flattened_block_fourier_realizations"
-        handle.attrs["uses_mean_subtraction"] = False
+        handle.attrs["uses_mean_subtraction"] = True
+        handle.attrs["blockwise_mean"] = bool(getattr(analyzer, "blockwise_mean", False))
         handle.attrs["uses_spatial_metric_in_second_order_operator"] = True
         handle.attrs["spectral_estimator"] = "welch_block_average"
         handle.attrs["n_fourier_realizations"] = n_realizations

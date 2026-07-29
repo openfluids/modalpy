@@ -22,7 +22,7 @@ src/openmodalpy/
 ├── mpod.py              # MPODAnalyzer (band-filtered POD)
 ├── spod.py              # SPODAnalyzer (frequency-by-frequency POD)
 ├── dmd.py               # DMDAnalyzer (LS/TLS, delay embedding, HODMD)
-├── bmsd.py              # BSMDAnalyzer (triadic bispectral decomposition)
+├── bsmd.py              # BSMDAnalyzer (triadic bispectral decomposition)
 ├── stpod.py             # STPODAnalyzer (delay-embedded POD via Hankel lift)
 ├── commands.py          # dispatch core: analyze_from_spec, _run_pod_like,
 │                        #   _run_dmd, _run_spod, _run_bsmd, _run_psd_pod,
@@ -130,7 +130,7 @@ pod.run_analysis()
 
 **Key facts:**
 - Modes are W-orthogonal, ranked by captured weighted variance
-- Uses method of snapshots (kernel eigenproblem) when Ns << Nspace
+- Uses method of snapshots (kernel eigenproblem) when Ns < Nspace
 - Mean is subtracted before decomposition
 
 ### 2. mPOD — Multiscale POD
@@ -280,6 +280,12 @@ free of trade-offs; report `effective_rank` and the criterion you used.
 - Implementation uses broadcasting (`/ s_r`) instead of `np.diag(1/s_r)`
 - `named_variant` parameter sets metadata; avoids monkey-patching
 - Explicit large `rank` forces the dense SVD path when `min(X1.shape) ≥ 256`
+- DMD does **not** subtract the temporal mean and does **not** apply the spatial
+  weights `W` in the regression. Both are recorded in the saved metadata
+  (`uses_mean_subtraction=False`, `uses_spatial_metric_in_regression=False`).
+  On a field with a large steady offset (for example the shipped cylinder wake),
+  the mean shows up as a near-unit-circle mode (`|λ| ≈ 1`) with no separate warning.
+  If you want a fluctuation-only DMD, center the snapshots yourself before the fit.
 - Reference: Schmid (2010), JFM 656; Tu et al. (2014), JCD 1; Hemati et al. (2017), TCFD 31; Gavish & Donoho (2014), IEEE TIT
 
 ### 7. HODMD — Higher-Order DMD
@@ -492,7 +498,7 @@ BSMD additionally stores: `energy_map`, `triads`, `Modes1`, `Modes2`.
 
 ## Testing
 
-101 tests across 11 test files. Key test categories:
+Key test categories:
 
 | File | What it tests |
 |------|--------------|
@@ -502,11 +508,13 @@ BSMD additionally stores: `energy_map`, `triads`, `Modes1`, `Modes2`.
 | `test_stpod.py` | Delay embedding, Hankel shape, validation |
 | `test_spod_plot.py` | SPOD plotting paths |
 | `test_bsmd_core.py` | BSMD triad detection, energy map |
-| `test_cli_commands.py` | CLI dispatch, config parsing, dry-run |
+| `test_cli_commands.py` | CLI dispatch, config parsing, dry-run, PSD-POD metadata |
 | `test_dnami_loader.py` | NPZ loading, schema handling |
 | `test_weights.py` | Polar and uniform weight computation |
 
 Run all: `uv run pytest tests/ -q`
+
+To count them: `uv run pytest -q --collect-only`
 
 ---
 

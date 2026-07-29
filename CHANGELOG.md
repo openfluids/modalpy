@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
+  `blocksfft` (which always removes a mean — global by default, per-block when
+  `blockwise_mean` is set). The previous write stored `False`.
+- SPOD `load_and_preprocess` docstring no longer claims parent mean subtraction
+  or a `self.data_matrix` attribute that is never assigned.
+- DOC.md: `bsmd.py` filename, POD branch condition `Ns < Nspace` (no false
+  `<<` margin), dropped a stale hardcoded test count, and notes that DMD neither
+  centers nor applies the spatial metric.
+
 ### Changed
 - Welch block partitioning now matches `scipy.signal.welch`: `nblocks` is
   computed with floor arithmetic and the remainder is dropped, rather than

@@ -79,7 +79,6 @@ class SPODAnalyzer(BaseAnalyzer):
         St (np.ndarray): Array of Strouhal numbers corresponding to `freq`.
         dst (float): Strouhal number step, used for integral weights in `spod_function`.
         qhat_cached (bool): Flag indicating if FFT blocks (q_hat) were loaded from cache.
-        data_matrix (np.ndarray): Preprocessed data matrix [time, space].
         W (np.ndarray): Spatial weighting matrix (diagonal).
         fs (float): Sampling frequency of the data.
         L (float): Characteristic length for Strouhal number calculation.
@@ -203,19 +202,20 @@ class SPODAnalyzer(BaseAnalyzer):
     ############################################################
     def load_and_preprocess(self):
         """
-        Loads data, preprocesses it, and sets SPOD-specific parameters.
+        Loads data, computes spatial weights, and sets SPOD-specific parameters.
 
         This method extends `BaseAnalyzer.load_and_preprocess()` by:
-        1. Calling the parent method to load data, apply spatial weights,
-           subtract the mean, and store `self.data_matrix`, `self.W`, `self.fs`.
+        1. Calling the parent method to load data, compute spatial weights,
+           and set `nblocks` and `fs` (stored on `self.data`, `self.W`, `self.fs`).
+           Mean subtraction is not done here; `blocksfft` removes the mean when
+           FFT blocks are computed.
         2. Setting characteristic length (`self.L`) and velocity (`self.U`)
            based on filename conventions (e.g., 'cavity' or 'jet') for
            Strouhal number calculation.
         3. Calculating the frequency array (`self.freq`) from `rfftfreq`,
            the Strouhal numbers (`self.St`), and the Strouhal step (`self.dst`).
         """
-        super().load_and_preprocess()  # Handles data loading, weighting, mean subtraction.
-        # Sets self.data, self.W, self.fs, self.data_matrix
+        super().load_and_preprocess()  # Loads data, weights, nblocks, fs.
 
         # Resolve characteristic length and velocity for Strouhal normalization.
         # Explicit constructor values take precedence; fall back to data dict
