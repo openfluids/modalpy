@@ -15,6 +15,7 @@ import numpy as np
 from scipy.signal import get_window
 from threadpoolctl import threadpool_info
 
+from openmodalpy.core.threads import apply_blas_limit
 from openmodalpy.core.welch import _validate_welch_blocks
 
 # OpenMP support was removed. All routines rely on NumPy vectorization and the
@@ -245,44 +246,45 @@ def pod_computation_optimized(data_matrix, use_method="svd"):
     data_mean = np.mean(data_matrix, axis=1, keepdims=True)
     data_centered = data_matrix - data_mean
 
-    if use_method == "svd":
-        # Direct SVD - automatically uses optimized BLAS/LAPACK
-        phi, sigma, vt = np.linalg.svd(data_centered, full_matrices=False)
-        temporal_coeffs = vt.T * sigma
-    else:
-        # Choose method based on matrix shape for optimal performance
-        if data_centered.shape[1] > data_centered.shape[0]:
-            # More time steps than spatial points - use spatial covariance
-            cov_matrix = (data_centered @ data_centered.T) / (data_centered.shape[1] - 1)
-            eigenvals, phi = np.linalg.eigh(cov_matrix)
-
-            # Sort in descending order
-            idx = eigenvals.argsort()[::-1]
-            eigenvals = eigenvals[idx]
-            phi = phi[:, idx]
-
-            # Compute temporal coefficients
-            sigma = np.sqrt(np.maximum(eigenvals, 0))
-            temporal_coeffs = phi.T @ data_centered
+    with apply_blas_limit():
+        if use_method == "svd":
+            # Direct SVD - automatically uses optimized BLAS/LAPACK
+            phi, sigma, vt = np.linalg.svd(data_centered, full_matrices=False)
+            temporal_coeffs = vt.T * sigma
         else:
-            # More spatial points than time steps - use temporal covariance
-            cov_matrix = (data_centered.T @ data_centered) / (data_centered.shape[1] - 1)
-            eigenvals, temporal_modes = np.linalg.eigh(cov_matrix)
+            # Choose method based on matrix shape for optimal performance
+            if data_centered.shape[1] > data_centered.shape[0]:
+                # More time steps than spatial points - use spatial covariance
+                cov_matrix = (data_centered @ data_centered.T) / (data_centered.shape[1] - 1)
+                eigenvals, phi = np.linalg.eigh(cov_matrix)
 
-            # Sort in descending order
-            idx = eigenvals.argsort()[::-1]
-            eigenvals = eigenvals[idx]
-            temporal_modes = temporal_modes[:, idx]
+                # Sort in descending order
+                idx = eigenvals.argsort()[::-1]
+                eigenvals = eigenvals[idx]
+                phi = phi[:, idx]
 
-            # Compute spatial modes
-            sigma = np.sqrt(np.maximum(eigenvals, 0))
-            phi = data_centered @ temporal_modes
-            # Normalize spatial modes
-            for i in range(phi.shape[1]):
-                if sigma[i] > 1e-12:
-                    phi[:, i] /= sigma[i]
+                # Compute temporal coefficients
+                sigma = np.sqrt(np.maximum(eigenvals, 0))
+                temporal_coeffs = phi.T @ data_centered
+            else:
+                # More spatial points than time steps - use temporal covariance
+                cov_matrix = (data_centered.T @ data_centered) / (data_centered.shape[1] - 1)
+                eigenvals, temporal_modes = np.linalg.eigh(cov_matrix)
 
-            temporal_coeffs = temporal_modes * sigma
+                # Sort in descending order
+                idx = eigenvals.argsort()[::-1]
+                eigenvals = eigenvals[idx]
+                temporal_modes = temporal_modes[:, idx]
+
+                # Compute spatial modes
+                sigma = np.sqrt(np.maximum(eigenvals, 0))
+                phi = data_centered @ temporal_modes
+                # Normalize spatial modes
+                for i in range(phi.shape[1]):
+                    if sigma[i] > 1e-12:
+                        phi[:, i] /= sigma[i]
+
+                temporal_coeffs = temporal_modes * sigma
 
     return phi, sigma, temporal_coeffs
 

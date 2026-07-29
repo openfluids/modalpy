@@ -13,6 +13,7 @@ from openmodalpy.commands import (
 )
 from openmodalpy.core.provenance import collect_provenance
 from openmodalpy.core.results import AnalysisResults, read_results
+from openmodalpy.core.threads import blas_threads, get_blas_threads, set_blas_threads
 from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.mpod import MPODAnalyzer
 from openmodalpy.pod import PODAnalyzer
@@ -31,6 +32,9 @@ __all__ = [
     "AnalysisResults",
     "read_results",
     "collect_provenance",
+    "set_blas_threads",
+    "get_blas_threads",
+    "blas_threads",
     "AnalyzeSpec",
     "CaseSpec",
     "DataSourceSpec",

@@ -202,18 +202,22 @@ def test_prov_fft_backend_matches_fftkit() -> None:
 
 
 def test_unknown_blas_threads_report_zero() -> None:
-    """When threadpoolctl cannot report a count, the field is 0 (unknown), not a plausible 1."""
+    """With policy=0 (all cores), a failed observation records 0, not a fabricated 1."""
     import threadpoolctl
 
+    import openmodalpy as omp
     from openmodalpy.core import provenance as prov
 
     def _boom(*_a, **_k):
         raise RuntimeError("threadpoolctl unavailable")
 
     saved = threadpoolctl.threadpool_info
+    previous = omp.get_blas_threads()
     threadpoolctl.threadpool_info = _boom
     try:
+        omp.set_blas_threads(0)
         threads = prov.collect_provenance({})["prov_blas_threads"]
     finally:
         threadpoolctl.threadpool_info = saved
+        omp.set_blas_threads(previous)
     assert int(threads) == 0

@@ -103,7 +103,6 @@ class SPODAnalyzer(BaseAnalyzer):
         window_type=WINDOW_TYPE,
         data_loader=None,
         spatial_weight_type="auto",
-        n_threads=None,
         use_parallel=True,
         characteristic_length: float | None = None,
         characteristic_velocity: float | None = None,
@@ -149,7 +148,6 @@ class SPODAnalyzer(BaseAnalyzer):
             figures_dir=figures_dir,
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
-            n_threads=n_threads,
             use_parallel=use_parallel,
         )
 

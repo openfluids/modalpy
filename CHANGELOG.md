@@ -8,11 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Process-wide BLAS thread policy (`openmodalpy.set_blas_threads` /
+  `get_blas_threads` / `blas_threads` context manager; env
+  `OPENMODALPY_BLAS_THREADS`). Default is 1 thread so `svd`/`eigh`/`eig`
+  reduction order is deterministic for a fixed environment; `0` means this
+  package applies no limit (outer env / limiters still apply).
 - Result files record a `prov_*` provenance block (versions, FFT backend, BLAS
   threads, config hash, seed, git SHA, UTC timestamp) via `write_results`;
   `AnalysisResults.provenance` exposes it with the prefix stripped.
 
 ### Breaking
+- Removed the unused `n_threads` parameter from `BaseAnalyzer`, `SPODAnalyzer`,
+  and `blocksfft`. It never affected FFT or BLAS work; use the BLAS thread
+  policy above for pool control.
 - DMD `rank` is required (no silent default to `n_modes_save`). See the
   Changed note below for migration (`rank=n_modes_save` is bit-identical
   to the previous default).

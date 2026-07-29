@@ -46,6 +46,7 @@ from openmodalpy.core.config import (  # noqa: E402
     RESULTS_DIR_DMD,
     require_existing_data_path,
 )
+from openmodalpy.core.threads import apply_blas_limit  # noqa: E402
 
 # Try to import DNamiDataLoader for npz support
 try:
@@ -326,34 +327,36 @@ class DMDAnalyzer(BaseAnalyzer):
         s_r = s[:r]
         v_r = vh[:r].conj().T
 
-        # Reduced operator
-        if method == "tls":
-            Z = np.vstack([X1, X2])
-            Uz, _, _ = compute_reduced_svd(Z, r)
-            Uz = Uz[:, :r]
-            n1 = X1.shape[0]
-            U11 = Uz[:n1, :]
-            U21 = Uz[n1:, :]
-            # Project into the reduced basis so atilde is (r, r)
-            u_r_H_U11 = u_r.conj().T @ U11
-            atilde = (u_r.conj().T @ U21) @ np.linalg.pinv(u_r_H_U11, rcond=rcond)
-        else:
-            atilde = (u_r.conj().T @ X2 @ v_r) / s_r
+        # Reduced operator, eig, and amplitude pinv all under one BLAS seam
+        # (pinv runs an SVD).
+        with apply_blas_limit():
+            if method == "tls":
+                Z = np.vstack([X1, X2])
+                Uz, _, _ = compute_reduced_svd(Z, r)
+                Uz = Uz[:, :r]
+                n1 = X1.shape[0]
+                U11 = Uz[:n1, :]
+                U21 = Uz[n1:, :]
+                # Project into the reduced basis so atilde is (r, r)
+                u_r_H_U11 = u_r.conj().T @ U11
+                atilde = (u_r.conj().T @ U21) @ np.linalg.pinv(u_r_H_U11, rcond=rcond)
+            else:
+                atilde = (u_r.conj().T @ X2 @ v_r) / s_r
 
-        eigvals, w = np.linalg.eig(atilde)
-        # Exact DMD mode recovery.  For TLS this is an approximation: the
-        # eigenvalues benefit from the TLS operator, while the spatial modes
-        # are projected through the LS basis.  This is standard practice;
-        # see Hemati et al. (2017) for a discussion of TLS-DMD variants.
-        modes = X2 @ (v_r / s_r) @ w
+            eigvals, w = np.linalg.eig(atilde)
+            # Exact DMD mode recovery.  For TLS this is an approximation: the
+            # eigenvalues benefit from the TLS operator, while the spatial modes
+            # are projected through the LS basis.  This is standard practice;
+            # see Hemati et al. (2017) for a discussion of TLS-DMD variants.
+            modes = X2 @ (v_r / s_r) @ w
 
-        # Continuous-time eigenvalues (guard against log(0))
-        dt = self._require_dt()
-        safe_eigvals = np.where(np.abs(eigvals) > 0, eigvals, np.finfo(float).tiny)
-        omega = np.log(safe_eigvals.astype(complex)) / dt
+            # Continuous-time eigenvalues (guard against log(0))
+            dt = self._require_dt()
+            safe_eigvals = np.where(np.abs(eigvals) > 0, eigvals, np.finfo(float).tiny)
+            omega = np.log(safe_eigvals.astype(complex)) / dt
 
-        # Amplitudes and time dynamics (use original snapshot count)
-        b = np.linalg.pinv(modes, rcond=rcond) @ X[:, 0]
+            # Amplitudes and time dynamics (use original snapshot count)
+            b = np.linalg.pinv(modes, rcond=rcond) @ X[:, 0]
         t = np.arange(n_snapshots)
         time_dynamics = (b[:, None] * eigvals[:, None] ** t).T
 

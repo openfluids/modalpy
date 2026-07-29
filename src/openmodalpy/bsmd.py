@@ -67,6 +67,7 @@ from openmodalpy.core.config import (
     require_existing_data_path,
 )
 from openmodalpy.core.parallel import print_optimization_status
+from openmodalpy.core.threads import apply_blas_limit
 
 # Try to import DNamiDataLoader for npz support
 try:
@@ -563,6 +564,9 @@ class BSMDAnalyzer(BaseAnalyzer):
         C = (np.conj(Q3).T @ (self.W * prod)) / nblocks  # (Nblocks, Nblocks)
 
         try:
+            # BLAS limit is applied once around the triad loop (serial or
+            # ThreadPoolExecutor), never here: threadpool_limits is process-
+            # global, so a worker exit would un-pin a sibling still in eig.
             eigvals, eigvecs = np.linalg.eig(C)
             dom = np.argmax(np.abs(eigvals))
             a = eigvecs[:, dom]
@@ -662,22 +666,25 @@ class BSMDAnalyzer(BaseAnalyzer):
                 self.modes1[i, :] = np.nan
                 self.modes2[i, :] = np.nan
 
-        if self.use_parallel:
-            n_workers = min(num_triads, os.cpu_count() or 1)
-            print(f"Thread-parallel BSMD with {n_workers} workers.")
-            with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                futures = {
-                    pool.submit(self._compute_single_triad, p1, p2, p3): i
-                    for i, (p1, p2, p3) in enumerate(self.static_triads_list)
-                }
-                for future in tqdm(as_completed(futures), total=num_triads, desc="BSMD Triads"):
-                    i = futures[future]
-                    lam, m1, m2 = future.result()
+        # One limiter spans the whole triad loop (parallel or serial). Do not
+        # enter/exit a process-global limiter from workers.
+        with apply_blas_limit():
+            if self.use_parallel:
+                n_workers = min(num_triads, os.cpu_count() or 1)
+                print(f"Thread-parallel BSMD with {n_workers} workers.")
+                with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                    futures = {
+                        pool.submit(self._compute_single_triad, p1, p2, p3): i
+                        for i, (p1, p2, p3) in enumerate(self.static_triads_list)
+                    }
+                    for future in tqdm(as_completed(futures), total=num_triads, desc="BSMD Triads"):
+                        i = futures[future]
+                        lam, m1, m2 = future.result()
+                        _store_result(i, lam, m1, m2)
+            else:
+                for i, (p1, p2, p3) in enumerate(tqdm(self.static_triads_list, desc="BSMD Triads")):
+                    lam, m1, m2 = self._compute_single_triad(p1, p2, p3)
                     _store_result(i, lam, m1, m2)
-        else:
-            for i, (p1, p2, p3) in enumerate(tqdm(self.static_triads_list, desc="BSMD Triads")):
-                lam, m1, m2 = self._compute_single_triad(p1, p2, p3)
-                _store_result(i, lam, m1, m2)
 
         print(f"Static BSMD core analysis completed in {time.time() - start_time:.2f} seconds.")
 

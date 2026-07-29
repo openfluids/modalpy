@@ -10,8 +10,7 @@ contract, the configuration system, the CLI, and extension paths.
 
 ```
 src/openmodalpy/
-├── __init__.py          # public exports: PODAnalyzer, MPODAnalyzer, DMDAnalyzer,
-│                        #   SPODAnalyzer, BSMDAnalyzer, STPODAnalyzer
+├── __init__.py          # public exports: analyzers + set/get/blas_threads policy
 ├── core/
 │   ├── base.py          # BaseAnalyzer, compute_reduced_svd, blocksfft,
 │   │                    #   spod_function, weight calculation, plot helpers
@@ -19,6 +18,7 @@ src/openmodalpy/
 │   │                    #   (POD, mPOD, ST-POD, PSD-POD share this)
 │   ├── io.py            # MATDataLoader, DNamiDataLoader, _slice_block_in_time
 │   ├── config.py        # FFT_BACKEND, FIG_DPI, directory defaults
+│   ├── threads.py       # process-wide BLAS thread policy (default 1)
 │   └── parallel.py      # thread-pool FFT + SPOD acceleration
 ├── pod.py               # PODAnalyzer (variance-optimal, identity lift)
 ├── mpod.py              # MPODAnalyzer (band-filtered POD)
@@ -40,6 +40,39 @@ FFT backend dispatch lives in the external [`fftkit`](https://github.com/openflu
 package: `get_fft_func()` selects among scipy/numpy/mkl/cupy/accelerate, and
 `core.config.FFT_BACKEND` re-exports the backend fftkit resolved. Override it with the
 `FFTKIT_BACKEND` environment variable.
+
+## BLAS thread policy
+
+OpenModalPy pins the process-wide BLAS/OpenMP thread count for `svd` / `eigh` /
+`eig` so two runs on the same machine, same install, and same policy produce
+**bit-identical** arrays by default. The default is **1 thread** (reproducible);
+speed is opt-in.
+
+```python
+import openmodalpy as omp
+
+omp.get_blas_threads()          # 1 unless OPENMODALPY_BLAS_THREADS is set
+omp.set_blas_threads(4)         # process-wide; 0 means no limit from this package
+with omp.blas_threads(0):       # scoped; restores the previous value
+    ...
+```
+
+Environment variable `OPENMODALPY_BLAS_THREADS` is parsed lazily on the first
+`get_blas_threads()` call (not at import time). `0` means this package applies
+no limit — an existing `OMP_NUM_THREADS` or outer `threadpoolctl` limiter still
+applies. The effective count is written into every result file as
+`prov_blas_threads`.
+
+**What is guaranteed.** Given a fixed environment (same OS, same NumPy/SciPy
+build, same BLAS vendor and version, same policy), repeated runs are
+deterministic: reduction order inside the kernels does not wander with core
+count.
+
+**What is not guaranteed.** Bit-identical results across BLAS vendors (OpenBLAS
+vs MKL vs Accelerate) are not promised and are generally not achievable. Record
+`prov_blas_threads` and the package versions in the provenance block when
+comparing machines.
+
 
 ### Analyzer lifecycle
 
@@ -536,7 +569,7 @@ exist report an empty mapping; missing keys never raise.
 | `prov_h5py_version` | str | Installed h5py version |
 | `prov_fftkit_version` | str | Installed fftkit version |
 | `prov_fft_backend` | str | `fftkit.DEFAULT_BACKEND` at write time |
-| `prov_blas_threads` | int | Observed BLAS/OpenMP thread count (record only; `0` = could not be determined) |
+| `prov_blas_threads` | int | Effective BLAS thread limit used by kernels (`0` = no package limit / observation failed) |
 | `prov_config_sha256` | str | SHA-256 of analysis attrs (not data); excludes `prov_*` |
 | `prov_created_utc` | str | UTC write timestamp (`YYYY-MM-DDTHH:MM:SSZ`) |
 | `prov_git_sha` | str | openmodalpy package checkout HEAD when available, else `unavailable` |

@@ -59,10 +59,18 @@ def _fft_backend() -> str:
 
 
 def _blas_threads() -> int:
-    """Observed BLAS/OpenMP thread count (record only; never set).
+    """Effective BLAS thread limit for this process.
 
-    Returns ``0`` when the count cannot be determined (not a plausible ``1``).
+    When the library policy is a positive limit (default 1), record that value —
+    it is what the kernels ran under. When the policy is ``0`` (all cores),
+    observe the live pool size via threadpoolctl; return ``0`` only if that
+    observation fails (unknown), never a fabricated default.
     """
+    from openmodalpy.core.threads import get_blas_threads
+
+    n = get_blas_threads()
+    if n != 0:
+        return int(n)
     try:
         from threadpoolctl import threadpool_info
 

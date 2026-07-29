@@ -28,6 +28,7 @@ from openmodalpy.core.base import (
     compute_reduced_svd,
     require_spatial_metric,
 )
+from openmodalpy.core.threads import apply_blas_limit
 
 
 @runtime_checkable
@@ -187,15 +188,16 @@ def weighted_second_order(
     data = np.asarray(data)
     if data.ndim != 2:
         raise ValueError(f"weighted_second_order expects 2D data, got shape {data.shape}")
-    if method == "svd":
-        return _solve_svd(data, metric, n_keep=n_keep)
-    if method == "eigh":
-        return _solve_eigh(
-            data,
-            metric,
-            drop_nonpositive=drop_nonpositive,
-            n_keep=n_keep,
-        )
+    with apply_blas_limit():
+        if method == "svd":
+            return _solve_svd(data, metric, n_keep=n_keep)
+        if method == "eigh":
+            return _solve_eigh(
+                data,
+                metric,
+                drop_nonpositive=drop_nonpositive,
+                n_keep=n_keep,
+            )
     raise ValueError(f"method must be 'eigh' or 'svd', got {method!r}")
 
 
@@ -376,22 +378,23 @@ def spod_single_frequency(
     ``1/sqrt(nblocks * dst)``. Optional ``num_modes`` truncates after sorting;
     ``return_psi`` also returns the block-space eigenvectors.
     """
-    x = qhat / np.sqrt(nblocks * dst)
-    w_col = _coerce_spatial_weights(w, qhat.shape[0]).reshape(-1, 1)
-    xprime_w = np.conj(x).T * w_col.T  # X_f^H * W
-    m = xprime_w @ x
-    lambda_tilde, psi = np.linalg.eigh(m)
-    idx = lambda_tilde.argsort()[::-1]
-    lambda_tilde = lambda_tilde[idx]
-    psi = psi[:, idx]
-    if num_modes is not None:
-        keep = min(int(num_modes), len(lambda_tilde))
-        lambda_tilde = lambda_tilde[:keep]
-        psi = psi[:, :keep]
-    inv_sqrt_lambda = np.zeros_like(lambda_tilde)
-    mask = lambda_tilde > 1e-12
-    inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
-    phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
-    if return_psi:
-        return phi, np.abs(lambda_tilde), psi
-    return phi, np.abs(lambda_tilde)
+    with apply_blas_limit():
+        x = qhat / np.sqrt(nblocks * dst)
+        w_col = _coerce_spatial_weights(w, qhat.shape[0]).reshape(-1, 1)
+        xprime_w = np.conj(x).T * w_col.T  # X_f^H * W
+        m = xprime_w @ x
+        lambda_tilde, psi = np.linalg.eigh(m)
+        idx = lambda_tilde.argsort()[::-1]
+        lambda_tilde = lambda_tilde[idx]
+        psi = psi[:, idx]
+        if num_modes is not None:
+            keep = min(int(num_modes), len(lambda_tilde))
+            lambda_tilde = lambda_tilde[:keep]
+            psi = psi[:, :keep]
+        inv_sqrt_lambda = np.zeros_like(lambda_tilde)
+        mask = lambda_tilde > 1e-12
+        inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
+        phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
+        if return_psi:
+            return phi, np.abs(lambda_tilde), psi
+        return phi, np.abs(lambda_tilde)

@@ -29,6 +29,7 @@ from openmodalpy.core.io import load_mat_data as di_load_mat_data
 
 # Welch helpers live in welch.py (single definition; no heavy deps) so base
 # remains importable when the parallel stack fails to load.
+from openmodalpy.core.threads import apply_blas_limit
 from openmodalpy.core.welch import _validate_welch_blocks, welch_nblocks
 
 try:
@@ -53,17 +54,20 @@ def compute_reduced_svd(X: np.ndarray, rank: int, v0_seed: int = 0):
     faster for large matrices; below it we use dense SVD. Results differ across
     this threshold by design (different algorithms) — do not remove it without a
     separate review of numerical contracts that depend on it.
+
+    Runs under the process-wide BLAS thread policy (see ``core.threads``).
     """
-    min_dim = min(X.shape)
-    # ARPACK for large matrices only; dense SVD below 256 is faster/stabler.
-    # Crossing this threshold changes the algorithm, so numbers will differ.
-    if rank < min_dim and min_dim >= 256:
-        # Local deterministic start vector — never reseed the caller's global RNG.
-        v0 = np.random.default_rng(v0_seed).standard_normal(min_dim)
-        u, s, vh = svds(X, k=rank, v0=v0)
-        order = np.argsort(s)[::-1]
-        return u[:, order], s[order], vh[order, :]
-    return np.linalg.svd(X, full_matrices=False)
+    with apply_blas_limit():
+        min_dim = min(X.shape)
+        # ARPACK for large matrices only; dense SVD below 256 is faster/stabler.
+        # Crossing this threshold changes the algorithm, so numbers will differ.
+        if rank < min_dim and min_dim >= 256:
+            # Local deterministic start vector — never reseed the caller's global RNG.
+            v0 = np.random.default_rng(v0_seed).standard_normal(min_dim)
+            u, s, vh = svds(X, k=rank, v0=v0)
+            order = np.argsort(s)[::-1]
+            return u[:, order], s[order], vh[order, :]
+        return np.linalg.svd(X, full_matrices=False)
 
 
 # Relative band around the peak magnitude used when choosing the pivot index for
@@ -1022,7 +1026,6 @@ def blocksfft(
     normvar=False,
     window_norm="power",
     window_type="hamming",
-    n_threads=None,
     use_parallel=True,
 ):
     """
@@ -1097,8 +1100,7 @@ def blocksfft(
     q_mean = np.mean(q, axis=0)
     window_broadcast = window[:, np.newaxis]
 
-    # ``n_threads`` is accepted for backward compatibility but FFT blocks are
-    # processed sequentially to avoid oversubscribing underlying math libraries.
+    # FFT blocks are processed sequentially to avoid oversubscribing the math libs.
     fft_func = get_fft_func()
     hop = nfft - novlap
     for iblk in range(nblocks):
@@ -1251,7 +1253,6 @@ class BaseAnalyzer:
         figures_dir="./figs",
         data_loader=None,
         spatial_weight_type="auto",
-        n_threads=None,
         use_parallel=True,
     ):
         """Initialize the analyzer.
@@ -1273,7 +1274,6 @@ class BaseAnalyzer:
 
         # Set default data loader based on file type
         self.data_loader = data_loader or load_data
-        self.n_threads = n_threads if n_threads is not None else get_num_threads()
         self.use_parallel = use_parallel
 
         # Set default weight type
@@ -1436,7 +1436,6 @@ class BaseAnalyzer:
             normvar=getattr(self, "normvar", False),
             window_norm=getattr(self, "window_norm", "power"),
             window_type=getattr(self, "window_type", "hamming"),
-            n_threads=self.n_threads,
             use_parallel=self.use_parallel,
         )
         print("FFT computation complete.")
