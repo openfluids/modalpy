@@ -24,8 +24,10 @@ def test_perform_pod_simple():
     )
     analyzer.load_and_preprocess()
     analyzer.perform_pod()
-    assert analyzer.modes.shape == (2, 2)
-    assert analyzer.time_coefficients.shape == (3, 2)
+    # Centered snapshots are rank-1 (q = a * [1,1]); the relative Gram cutoff
+    # returns that single mode rather than padding to n_modes_save=2.
+    assert analyzer.modes.shape == (2, 1)
+    assert analyzer.time_coefficients.shape == (3, 1)
     assert np.isclose(analyzer.eigenvalues[0], 5.333333333333333, atol=1e-6)
 
 

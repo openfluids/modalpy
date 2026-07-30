@@ -111,8 +111,11 @@ def test_manufactured_rank_one_ensemble_matches_closed_form():
     modes, eigenvalues, _coeffs = _run_solver(ensemble, weights, n_keep=n_realizations)
 
     expected_leading = float(np.sum(np.abs(amplitudes) ** 2) * 1.0 / n_realizations)
+    # Relative Gram-rank filter keeps only the single significant eigenvalue;
+    # residual directions sit at the noise floor and are not returned as modes.
+    assert eigenvalues.size == 1
+    assert modes.shape[1] == 1
     np.testing.assert_allclose(np.real(eigenvalues[0]), expected_leading, rtol=1e-10, atol=1e-12)
-    np.testing.assert_allclose(np.real(eigenvalues[1:]), 0.0, atol=1e-10)
 
     # Leading mode recovers phi up to a global phase (real phi → sign only).
     mode0 = modes[:, 0]

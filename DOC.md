@@ -175,6 +175,40 @@ pod.run_analysis()
 - Uses method of snapshots (kernel eigenproblem) when Ns < Nspace
 - Mean is subtracted before decomposition
 
+### Non-positive eigenvalues and rank-deficient input
+
+POD, mPOD and PSD-POD share one relative cutoff on the correlation (Gram)
+eigenvalues after the eigendecomposition:
+
+\[
+\lambda \le n_{\mathrm{kernel}}\,\varepsilon\,\lambda_{\max}
+\]
+
+is discarded. Here \(\varepsilon\) is machine epsilon of the working real
+dtype (`np.finfo(float).eps` on the default real path), \(\lambda_{\max}\) is
+the largest eigenvalue, and \(n_{\mathrm{kernel}}\) is the dimension of the
+matrix that was actually factored — `n_samples` on the temporal branch
+(`Ns < Nspace`) and on the complex PSD-POD path, `n_space` on the spatial
+branch. The same rule replaces the old absolute `1e-12` floor that mPOD used
+and the old keep-all behaviour that POD used, so the returned count is scale
+invariant (a flow expressed in millimetres yields the same mode count as the
+same flow in metres).
+
+Returned modes always have unit weighted norm, and no returned eigenvalue is
+negative. When the data supports fewer modes than `n_modes_save` / `n_keep`,
+the solver returns the shorter basis — it does not pad with noise directions.
+Code that indexes a fixed mode width should use `modes.shape[1]` (or the
+length of `eigenvalues`), not assume the request was filled.
+
+**This cutoff is the numerical rank of the correlation matrix, NOT of the
+snapshot data.** Measured: a mode at singular-value ratio \(10^{-8}\)
+(eigenvalue ratio \(10^{-16}\)) is recovered exactly by the SVD route
+(correlation 1.000000, `matrix_rank` 3) while its Gram eigenvalue is
+indistinguishable from the noise floor. The snapshot / Gram route cannot
+resolve below \(\lambda / \lambda_{\max} \sim n\,\varepsilon\); users who need
+that resolution must use `method="svd"` (ST-POD’s path). Do not read the
+number of returned eigenvalues as the rank of the snapshot matrix itself.
+
 ### 2. mPOD — Multiscale POD
 
 **Class:** `MPODAnalyzer` · **Lift:** temporal band filtering · **Operator:** POD per band

@@ -39,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the previous default).
 
 ### Changed
+- POD, mPOD and PSD-POD share one relative eigenvalue cutoff
+  (`λ ≤ n_kernel·ε·λ_max`) on the correlation matrix, so rank-deficient input
+  returns only honest unit-norm modes and the count is scale-invariant across
+  unit systems. The previous absolute `1e-12` energy floor is gone; the basis
+  is not padded when fewer modes are supported than requested. Eigenvalues
+  themselves are unchanged on every recorded fixture, but reported energy
+  fractions move in the last digit or two: the total they are normalised by no
+  longer includes the noise-level and negative eigenvalues that the old floor
+  let through, so `energy_captured_fraction` and the per-mode fractions shift by
+  around 1e-16 relative. Rank-deficient cases also return fewer modes, because
+  the noise tail is no longer reported as modes. Reference fixtures were updated
+  for both. No physical result changes.
 - The ten `plot_modes_3d_{slices,isometric}` methods share one driver in
   `core/base.py`; each analyzer keeps a private helper for mode selection and
   titles. No figure output changed.

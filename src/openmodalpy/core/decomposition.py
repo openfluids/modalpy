@@ -11,8 +11,9 @@ to different lifts of the raw snapshot data. This module names those pieces:
   operator routes go through;
 - **``spod_single_frequency``**, the single-frequency SPOD eigenproblem.
 
-The analyzers keep their historical truncation policies via
-``drop_nonpositive`` and ``n_keep`` rather than silently converging on one.
+Every eigh route drops eigenvalues at or below the relative cutoff
+``n_kernel * eps * lambda_max`` (numerical rank of the correlation matrix).
+``n_keep`` still truncates the leading end after that filter.
 """
 
 from __future__ import annotations
@@ -150,12 +151,35 @@ def _as_weight_vector(metric: SpatialMetric | np.ndarray, n_space: int) -> np.nd
     return _coerce_spatial_weights(metric, n_space)
 
 
+def _significant_eigenvalue_mask(
+    eigenvalues: np.ndarray,
+    n_kernel: int,
+) -> np.ndarray:
+    """Keep eigenvalues above ``n_kernel * eps * lambda_max``.
+
+    This is the numerical rank of the correlation (Gram) matrix that was
+    factored, not of the snapshot data. ``n_kernel`` is the dimension of that
+    matrix (``n_samples`` on the temporal branch, ``n_space`` on the spatial
+    branch). ``eps`` is machine epsilon of the working real dtype.
+    """
+    real = np.asarray(np.real(eigenvalues))
+    if real.size == 0:
+        return np.zeros(0, dtype=bool)
+    lam_max = float(np.max(real))
+    if not np.isfinite(lam_max) or lam_max <= 0.0:
+        return np.zeros(real.shape, dtype=bool)
+    work = real.dtype if real.dtype.kind == "f" else np.dtype(float)
+    eps = float(np.finfo(work).eps)
+    cutoff = float(n_kernel) * eps * lam_max
+    return real > cutoff
+
+
 def weighted_second_order(
     data: np.ndarray,
     metric: SpatialMetric | np.ndarray,
     *,
     method: Literal["eigh", "svd"] = "eigh",
-    drop_nonpositive: bool = False,
+    drop_nonpositive: bool = True,
     n_keep: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Solve the weighted second-order problem on lifted data.
@@ -173,8 +197,10 @@ def weighted_second_order(
         PSD-POD). ``"svd"`` — weighted SVD of the data matrix (ST-POD); use
         this rather than squaring a Hankel matrix.
     drop_nonpositive
-        If True, discard eigenvalues ``<= 1e-12`` inside the solver (mPOD's
-        historical behaviour). POD leaves this False and truncates outside.
+        Retained for call-site compatibility. The eigh routes always drop
+        eigenvalues at or below the relative cutoff
+        ``n_kernel * eps * lambda_max``; this flag no longer selects an
+        absolute floor or a keep-all policy.
     n_keep
         If set, keep only the leading ``n_keep`` modes inside the solver
         (mPOD / ST-POD / PSD-POD). POD passes None and truncates after.
@@ -183,7 +209,9 @@ def weighted_second_order(
     -------
     modes, eigenvalues, time_coefficients
         ``modes`` has shape ``(n_space, r)``, ``eigenvalues`` shape ``(r,)``,
-        ``time_coefficients`` shape ``(n_samples, r)``.
+        ``time_coefficients`` shape ``(n_samples, r)``. Rank-deficient input
+        returns fewer than ``n_keep`` / ``n_modes_save`` modes — the honest
+        count of eigenvalues above the relative cutoff.
     """
     data = np.asarray(data)
     if data.ndim != 2:
@@ -195,7 +223,6 @@ def weighted_second_order(
             return _solve_eigh(
                 data,
                 metric,
-                drop_nonpositive=drop_nonpositive,
                 n_keep=n_keep,
             )
     raise ValueError(f"method must be 'eigh' or 'svd', got {method!r}")
@@ -205,7 +232,6 @@ def _solve_eigh(
     data: np.ndarray,
     metric: SpatialMetric | np.ndarray,
     *,
-    drop_nonpositive: bool,
     n_keep: int | None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     n_samples, n_space = data.shape
@@ -221,61 +247,71 @@ def _solve_eigh(
             data_weighted,
             weights,
             n_samples,
-            drop_nonpositive=drop_nonpositive,
             n_keep=n_keep,
         )
 
     use_temporal = n_samples < n_space
     if use_temporal:
+        n_kernel = n_samples
         kernel = np.dot(data_weighted, data_weighted.T) / n_samples
         eigenvalues, vectors = scipy.linalg.eigh(kernel)
         order = np.argsort(eigenvalues)[::-1]
         eigenvalues = eigenvalues[order]
         vectors = vectors[:, order]
+        # Recompute each eigenvalue as the Rayleigh quotient v.K.v. The
+        # quotient is stationary at an eigenvector, so a first-order error in
+        # the vector costs only a second-order error in the value: it is a
+        # more accurate eigenvalue than the one LAPACK returns, which is what
+        # makes the rank test below trustworthy for a value near the cutoff.
+        # On well-conditioned data it agrees with LAPACK to the last bit; it can
+        # differ by about 1e-15 relative when the kernel is poorly conditioned.
+        # The spatial branch below and the complex path do the same thing.
+        eigenvalues = np.sum(vectors * (kernel @ vectors), axis=0)
 
-        if drop_nonpositive:
-            positive = eigenvalues > 1e-12
-            eigenvalues = eigenvalues[positive]
-            vectors = vectors[:, positive]
-            if eigenvalues.size == 0:
-                return (
-                    np.empty((n_space, 0)),
-                    np.empty((0,)),
-                    np.empty((n_samples, 0)),
-                )
+        keep = _significant_eigenvalue_mask(eigenvalues, n_kernel)
+        eigenvalues = eigenvalues[keep]
+        vectors = vectors[:, keep]
+        if eigenvalues.size == 0:
+            return (
+                np.empty((n_space, 0)),
+                np.empty((0,)),
+                np.empty((n_samples, 0)),
+            )
 
         if n_keep is not None:
-            keep = min(int(n_keep), eigenvalues.size)
-            eigenvalues = eigenvalues[:keep]
-            vectors = vectors[:, :keep]
+            take = min(int(n_keep), eigenvalues.size)
+            eigenvalues = eigenvalues[:take]
+            vectors = vectors[:, :take]
 
-        safe = np.maximum(eigenvalues * n_samples, 1e-12)
+        # After the relative filter every eigenvalue is strictly positive.
+        safe = eigenvalues * n_samples
         normalization = 1.0 / np.sqrt(safe)
         weighted_modes = np.dot(data_weighted.T, vectors) * normalization
         modes = weighted_modes / sqrt_weights[:, np.newaxis]
         coeffs = vectors * np.sqrt(safe)
     else:
+        n_kernel = n_space
         kernel = np.dot(data_weighted.T, data_weighted) / n_samples
         eigenvalues, weighted_modes = scipy.linalg.eigh(kernel)
         order = np.argsort(eigenvalues)[::-1]
         eigenvalues = eigenvalues[order]
         weighted_modes = weighted_modes[:, order]
+        eigenvalues = np.sum(weighted_modes * (kernel @ weighted_modes), axis=0)
 
-        if drop_nonpositive:
-            positive = eigenvalues > 1e-12
-            eigenvalues = eigenvalues[positive]
-            weighted_modes = weighted_modes[:, positive]
-            if eigenvalues.size == 0:
-                return (
-                    np.empty((n_space, 0)),
-                    np.empty((0,)),
-                    np.empty((n_samples, 0)),
-                )
+        keep = _significant_eigenvalue_mask(eigenvalues, n_kernel)
+        eigenvalues = eigenvalues[keep]
+        weighted_modes = weighted_modes[:, keep]
+        if eigenvalues.size == 0:
+            return (
+                np.empty((n_space, 0)),
+                np.empty((0,)),
+                np.empty((n_samples, 0)),
+            )
 
         if n_keep is not None:
-            keep = min(int(n_keep), eigenvalues.size)
-            eigenvalues = eigenvalues[:keep]
-            weighted_modes = weighted_modes[:, :keep]
+            take = min(int(n_keep), eigenvalues.size)
+            eigenvalues = eigenvalues[:take]
+            weighted_modes = weighted_modes[:, :take]
 
         modes = weighted_modes / sqrt_weights[:, np.newaxis]
         coeffs = np.dot(data_weighted, weighted_modes)
@@ -290,36 +326,38 @@ def _solve_eigh_complex(
     weights: np.ndarray,
     n_samples: int,
     *,
-    drop_nonpositive: bool,
     n_keep: int | None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Hermitian temporal-kernel path used by PSD-POD Fourier ensembles."""
     n_space = data.shape[1]
+    n_kernel = n_samples
     kernel = (data_weighted @ data_weighted.conj().T) / n_samples
     # eigh on a Hermitian Gram matrix — same contract as the real POD path.
     eigenvalues, eigenvectors = scipy.linalg.eigh(kernel)
     order = np.argsort(eigenvalues.real)[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
+    eigenvalues = np.sum(
+        np.conj(eigenvectors) * (kernel @ eigenvectors), axis=0
+    ).real
 
-    if drop_nonpositive:
-        positive = eigenvalues.real > 1e-12
-        eigenvalues = eigenvalues[positive]
-        eigenvectors = eigenvectors[:, positive]
-        if eigenvalues.size == 0:
-            return (
-                np.empty((n_space, 0), dtype=data.dtype),
-                np.empty((0,)),
-                np.empty((n_samples, 0), dtype=data.dtype),
-            )
+    keep = _significant_eigenvalue_mask(eigenvalues, n_kernel)
+    eigenvalues = eigenvalues[keep]
+    eigenvectors = eigenvectors[:, keep]
+    if eigenvalues.size == 0:
+        return (
+            np.empty((n_space, 0), dtype=data.dtype),
+            np.empty((0,)),
+            np.empty((n_samples, 0), dtype=data.dtype),
+        )
 
     if n_keep is not None:
-        keep = min(int(n_keep), eigenvalues.size)
-        eigenvalues = eigenvalues[:keep]
-        eigenvectors = eigenvectors[:, :keep]
+        take = min(int(n_keep), eigenvalues.size)
+        eigenvalues = eigenvalues[:take]
+        eigenvectors = eigenvectors[:, :take]
 
     eigenvalues = np.real_if_close(eigenvalues)
-    safe_eigs = np.maximum(np.real(eigenvalues), 1e-16)
+    safe_eigs = np.real(eigenvalues)
     modes = (data.conj().T @ eigenvectors) / np.sqrt(safe_eigs * n_samples)
     coeffs = data.conj() @ (weights[:, np.newaxis] * modes)
     modes, coeffs = canonicalize_modes(modes, coeffs)
@@ -392,7 +430,8 @@ def spod_single_frequency(
             lambda_tilde = lambda_tilde[:keep]
             psi = psi[:, :keep]
         inv_sqrt_lambda = np.zeros_like(lambda_tilde)
-        mask = lambda_tilde > 1e-12
+        # n_kernel is the block dimension of the CSD matrix that was factored.
+        mask = _significant_eigenvalue_mask(lambda_tilde, nblocks)
         inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
         phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
         if return_psi:

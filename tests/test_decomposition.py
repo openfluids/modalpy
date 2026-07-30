@@ -15,6 +15,7 @@ from openmodalpy.core.decomposition import (
     DelayEmbeddingLift,
     IdentityLift,
     SpatialMetric,
+    _significant_eigenvalue_mask,
     weighted_second_order,
 )
 
@@ -94,13 +95,12 @@ def test_weighted_second_order_drop_nonpositive_and_n_keep():
         q,
         np.ones(6),
         method="eigh",
-        drop_nonpositive=True,
         n_keep=2,
     )
     assert eigs.size == 2
     assert modes.shape == (6, 2)
     assert coeffs.shape == (30, 2)
-    assert np.all(eigs > 1e-12)
+    assert np.all(eigs > 0.0)
 
 
 def test_weighted_second_order_svd_route():
@@ -298,13 +298,10 @@ def test_eigh_temporal_nonuniform_metric_matches_temporal_kernel():
     w = np.linspace(0.5, 2.5, n_space)
     xw = x * np.sqrt(w)
     ref_eigs = np.sort(np.linalg.eigvalsh((xw @ xw.T) / n_samples))[::-1]
-    # Drop the numerical null of the temporal Gram (rank ≤ n_samples).
-    pos = ref_eigs > 1e-12
-    ref_pos = ref_eigs[pos]
+    # Centered data has rank ≤ n_samples-1; drop the numerical null of the Gram.
+    ref_pos = ref_eigs[_significant_eigenvalue_mask(ref_eigs, n_samples)]
 
-    modes, eigs, coeffs = weighted_second_order(
-        x, w, method="eigh", drop_nonpositive=True
-    )
+    modes, eigs, coeffs = weighted_second_order(x, w, method="eigh")
     assert modes.shape == (n_space, ref_pos.size)
     assert coeffs.shape == (n_samples, ref_pos.size)
     np.testing.assert_allclose(eigs, ref_pos, rtol=1e-10, atol=1e-12)
@@ -341,12 +338,13 @@ def test_svd_nonuniform_metric_matches_weighted_singular_values():
 
 
 def test_drop_nonpositive_keeps_leading_reference_spectrum():
-    """drop_nonpositive retains only eigenvalues above 1e-12, and those values.
+    """Relative cutoff keeps only significant eigenvalues, and those values.
 
     Rank-2 product ``a @ b`` in 6-D space: the weighted spatial Gram has two
-    positive eigenvalues (eigvalsh of ``Xw.T @ Xw / n``, formed in-test) and
-    four near-zero. With ``n_keep=None`` the kept spectrum must equal that
-    positive pair — not merely have size 2.
+    eigenvalues above ``n_space * eps * lambda_max`` (eigvalsh of
+    ``Xw.T @ Xw / n``, formed in-test) and four near-zero. With
+    ``n_keep=None`` the kept spectrum must equal that leading pair — not
+    merely have size 2.
     """
     rng = np.random.default_rng(24)
     n_samples, n_space = 30, 6
@@ -357,19 +355,16 @@ def test_drop_nonpositive_keeps_leading_reference_spectrum():
     w = np.ones(n_space)
     xw = x * np.sqrt(w)
     ref_all = np.sort(np.linalg.eigvalsh((xw.T @ xw) / n_samples))[::-1]
-    ref_pos = ref_all[ref_all > 1e-12]
+    cutoff = n_space * float(np.finfo(float).eps) * float(ref_all[0])
+    ref_pos = ref_all[ref_all > cutoff]
     assert ref_pos.size == 2
 
-    modes, eigs, coeffs = weighted_second_order(
-        x, w, method="eigh", drop_nonpositive=True, n_keep=None
-    )
+    modes, eigs, coeffs = weighted_second_order(x, w, method="eigh", n_keep=None)
     assert modes.shape == (n_space, 2)
     assert coeffs.shape == (n_samples, 2)
     np.testing.assert_allclose(eigs, ref_pos, rtol=1e-10, atol=1e-12)
-    # n_keep larger than the positive count still returns only the leading pair.
-    _m2, eigs2, _c2 = weighted_second_order(
-        x, w, method="eigh", drop_nonpositive=True, n_keep=10
-    )
+    # n_keep larger than the significant count still returns only the leading pair.
+    _m2, eigs2, _c2 = weighted_second_order(x, w, method="eigh", n_keep=10)
     np.testing.assert_allclose(eigs2, ref_pos, rtol=1e-10, atol=1e-12)
 
 
@@ -384,19 +379,17 @@ def test_drop_nonpositive_empty_result_shapes():
         np.zeros((n_samples, n_space)),
         np.ones(n_space),
         method="eigh",
-        drop_nonpositive=True,
     )
     assert modes.shape == (n_space, 0)
     assert eigs.shape == (0,)
     assert coeffs.shape == (n_samples, 0)
 
 
-def test_n_keep_exceeds_available_rank_without_drop():
-    """n_keep above the matrix rank, without drop_nonpositive, returns full rank.
+def test_n_keep_exceeds_available_rank_returns_significant_count():
+    """n_keep above the significant rank returns only significant modes.
 
-    Rank-2 product in 6-D space with ``drop_nonpositive=False`` and
-    ``n_keep=100``: the seam keeps ``min(n_keep, n_space)`` eigenvalues (the
-    full spatial spectrum), not an empty or truncated-to-positive set.
+    Rank-2 product in 6-D space with ``n_keep=100``: the seam keeps the two
+    eigenvalues above the relative cutoff, not the full spatial spectrum.
     """
     rng = np.random.default_rng(25)
     n_samples, n_space = 30, 6
@@ -407,11 +400,67 @@ def test_n_keep_exceeds_available_rank_without_drop():
     w = np.ones(n_space)
     xw = x * np.sqrt(w)
     ref_all = np.sort(np.linalg.eigvalsh((xw.T @ xw) / n_samples))[::-1]
+    cutoff = n_space * float(np.finfo(float).eps) * float(ref_all[0])
+    ref_pos = ref_all[ref_all > cutoff]
+    assert ref_pos.size == 2
 
-    modes, eigs, coeffs = weighted_second_order(
-        x, w, method="eigh", drop_nonpositive=False, n_keep=100
-    )
-    assert modes.shape == (n_space, n_space)
-    assert eigs.shape == (n_space,)
-    assert coeffs.shape == (n_samples, n_space)
-    np.testing.assert_allclose(eigs, ref_all, rtol=1e-10, atol=1e-12)
+    modes, eigs, coeffs = weighted_second_order(x, w, method="eigh", n_keep=100)
+    assert modes.shape == (n_space, 2)
+    assert eigs.shape == (2,)
+    assert coeffs.shape == (n_samples, 2)
+    np.testing.assert_allclose(eigs, ref_pos, rtol=1e-10, atol=1e-12)
+
+
+def _rank_deficient_field(nt=20, nsp=64, r=3, scale=1.0, seed=0):
+    rng = np.random.default_rng(seed)
+    x = np.linspace(0.0, 1.0, nsp)
+    p = np.stack([np.sin((k + 1) * np.pi * x) for k in range(r)])
+    a = rng.standard_normal((nt, r))
+    q = (a @ p) * scale
+    return q - q.mean(axis=0, keepdims=True), np.full(nsp, 1.0 / nsp)
+
+
+def test_eigh_scale_invariant_mode_count_and_spectrum():
+    """Same flow in different units keeps mode count and normalised spectrum.
+
+    Absolute eigenvalue floors fail here: eigenvalues carry units, so a
+    millimetre-scale copy of a metre-scale field would drop every mode.
+    """
+    scales = [1.0, 1e-3, 1e-6, 1e-9]
+    counts = []
+    spectra = []
+    for s in scales:
+        q, w = _rank_deficient_field(scale=s)
+        _m, lam, _c = weighted_second_order(q, w, method="eigh")
+        counts.append(lam.size)
+        spectra.append(np.sort(lam / lam.max())[::-1] if lam.size else np.zeros(0))
+    assert len(set(counts)) == 1, f"mode count drifted across units: {counts}"
+    assert counts[0] == 3
+    ref = spectra[0]
+    for sp in spectra[1:]:
+        np.testing.assert_allclose(sp, ref, rtol=0, atol=1e-10)
+
+
+def test_eigh_rank_deficient_returns_three_unit_norm_modes():
+    """Rank-3 snapshot field returns three modes, each with unit weighted norm."""
+    q, w = _rank_deficient_field()
+    modes, lam, _c = weighted_second_order(q, w, method="eigh")
+    assert lam.size == 3
+    assert np.all(lam >= 0.0)
+    norms = np.sqrt(np.sum(w[:, None] * modes**2, axis=0))
+    np.testing.assert_allclose(norms, np.ones(3), rtol=0, atol=1e-8)
+
+
+def test_eigh_spatial_branch_rank_deficient_uses_n_space():
+    """Spatial branch (n_samples >= n_space): rank-2 field returns two modes.
+
+    n_kernel must be n_space here — using n_samples would mis-place the cutoff.
+    """
+    # nt=40, nsp=8 → spatial kernel (8 × 8)
+    q, w = _rank_deficient_field(nt=40, nsp=8, r=2, scale=1.0, seed=3)
+    modes, lam, _c = weighted_second_order(q, w, method="eigh")
+    assert lam.size == 2
+    assert modes.shape == (8, 2)
+    assert np.all(lam >= 0.0)
+    norms = np.sqrt(np.sum(w[:, None] * modes**2, axis=0))
+    np.testing.assert_allclose(norms, np.ones(2), rtol=0, atol=1e-8)

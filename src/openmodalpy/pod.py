@@ -206,7 +206,8 @@ class PODAnalyzer(BaseAnalyzer):
             print(f"Using spatial kernel: {num_space_points} spatial points <= {num_snapshots} snapshots")
 
         # 3. Identity lift + weighted second-order eigenproblem.
-        # POD keeps all eigenvalues here and truncates after the energy ratio.
+        # The solver drops eigenvalues below its relative cutoff; POD truncates
+        # what survives by the energy ratio afterwards.
         self._lift = decomposition.IdentityLift()
         metric = decomposition.SpatialMetric(weight_vector)
         lifted = self._lift.apply(data_mean_removed)
