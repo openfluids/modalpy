@@ -22,7 +22,6 @@ Reference:
       "Spectral proper orthogonal decomposition." JFM, 792, 798-828.
 """
 
-import argparse
 import os
 import time
 from typing import Optional
@@ -49,7 +48,6 @@ from openmodalpy.core.config import (
     FIG_DPI,
     FIGURES_DIR_STPOD,
     RESULTS_DIR_STPOD,
-    require_existing_data_path,
 )
 
 
@@ -811,38 +809,3 @@ class STPODAnalyzer(BaseAnalyzer):
         end_time = time.time()
         print(f"\nST-POD analysis completed in {end_time - start_time:.2f} seconds.")
         print_summary("ST-POD", self.results_dir, self.figures_dir)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run ST-POD analysis")
-    parser.add_argument("--data", type=str, default=None, help="Path to data file")
-    parser.add_argument("--embedding-dim", type=int, default=10, help="Time delay embedding dimension")
-    parser.add_argument("--n-modes", type=int, default=10, help="Number of modes to save")
-    parser.add_argument("--compute", action="store_true", help="Compute analysis")
-    parser.add_argument("--plot", action="store_true", help="Generate plots only")
-    args = parser.parse_args()
-
-    if not any([args.compute, args.plot]):
-        args.compute = True
-
-    try:
-        data_file = require_existing_data_path(args.data)
-    except (FileNotFoundError, ValueError) as exc:
-        parser.error(str(exc))
-
-    analyzer = STPODAnalyzer(
-        file_path=data_file,
-        embedding_dim=args.embedding_dim,
-        n_modes_save=args.n_modes,
-        spatial_weight_type="uniform",
-    )
-
-    if args.compute:
-        analyzer.run_analysis()
-    elif args.plot:
-        analyzer.load_results()
-        analyzer.plot_eigenvalues()
-        analyzer.plot_modes()
-        analyzer.plot_spacetime_mode()
-        analyzer.plot_time_coefficients()
-        analyzer.plot_cumulative_energy()

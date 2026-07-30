@@ -13,7 +13,6 @@ Reference codes:
 """
 
 # Standard library imports
-import argparse
 import os
 import time
 from typing import Optional
@@ -46,9 +45,7 @@ from openmodalpy.core.config import (
     FIG_DPI,
     FIGURES_DIR_POD,
     RESULTS_DIR_POD,
-    require_existing_data_path,
 )
-from openmodalpy.core.parallel import print_optimization_status
 
 
 class PODAnalyzer(BaseAnalyzer):
@@ -1346,80 +1343,3 @@ class PODAnalyzer(BaseAnalyzer):
         end_total_time = time.time()
         print(f"\nPOD analysis and plotting completed successfully in {end_total_time - start_total_time:.2f} seconds.")
         print_summary("POD", self.results_dir, self.figures_dir)
-
-
-# Example usage when the script is run directly
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run POD analysis")
-    parser.add_argument("--config", help="Path to JSON/YAML configuration file", default=None)
-    parser.add_argument("--data", help="Path to input data file", default=None)
-    parser.add_argument("--prep", action="store_true", help="Load data and prepare for POD")
-    parser.add_argument("--compute", action="store_true", help="Perform POD and save results")
-    parser.add_argument("--plot", action="store_true", help="Generate default plots")
-    args = parser.parse_args()
-
-    # If no arguments are provided, run the full analysis (compute + plot)
-    if not any([args.prep, args.compute, args.plot]):
-        args.compute = True
-        args.plot = True
-
-    print_optimization_status()
-
-    if args.config:
-        from openmodalpy.core.config import load_config
-
-        load_config(args.config)
-
-    try:
-        data_file = require_existing_data_path(args.data)
-    except (FileNotFoundError, ValueError) as exc:
-        parser.error(str(exc))
-
-    n_modes_to_save_main = 10  # Number of POD modes to save
-    n_modes_to_plot_spatial_main = 4  # Number of spatial modes to visualize
-    n_coeffs_to_plot_time_main = 5  # Number of temporal coefficients to visualize
-
-    # Loop over all available fields in the consolidated npz
-    from openmodalpy.core.io import DNamiDataLoader
-
-    loader = DNamiDataLoader()
-    available_fields = loader.get_available_fields(data_file)
-    print(f"Available fields in {data_file}: {available_fields}")
-
-    for field in available_fields:
-        print(f"\n===== Running POD for variable: {field} =====")
-        # Set up variable-specific result and figure directories
-        results_dir = os.path.join(RESULTS_DIR_POD, field)
-        figures_dir = os.path.join(FIGURES_DIR_POD, field)
-        os.makedirs(results_dir, exist_ok=True)
-        os.makedirs(figures_dir, exist_ok=True)
-        analyzer = PODAnalyzer(
-            file_path=data_file,
-            results_dir=results_dir,
-            figures_dir=figures_dir,
-            data_loader=lambda fp: loader.load(fp, field=field),
-            n_modes_save=n_modes_to_save_main,
-            spatial_weight_type="uniform",
-        )
-        analyzer.analysis_type = f"pod_{field}"
-
-        if args.compute or args.prep:
-            data = loader.load(data_file, field=field)
-            analyzer.data = data
-            if args.compute:
-                analyzer.run_analysis(
-                    plot_n_modes_spatial=n_modes_to_plot_spatial_main,
-                    plot_n_coeffs_time=n_coeffs_to_plot_time_main,
-                )
-            elif args.prep:
-                analyzer.load_and_preprocess()
-                # Optionally save preprocessed data if needed
-        elif args.plot:
-            analyzer.load_results()
-            analyzer.plot_eigenvalues()
-            analyzer.plot_modes_pair_detailed(plot_n_modes=n_modes_to_plot_spatial_main)
-            analyzer.plot_modes_grid(energy_threshold=99.7)
-            analyzer.plot_time_coefficients(n_coeffs_to_plot=n_coeffs_to_plot_time_main)
-            analyzer.plot_cumulative_energy()
-            analyzer.plot_reconstruction_error()
-            analyzer.plot_reconstruction_comparison()

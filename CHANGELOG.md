@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DMD `rank` is required (no silent default to `n_modes_save`). See the
   Changed note below for migration (`rank=n_modes_save` is bit-identical
   to the previous default).
+- Removed the undocumented per-module entry points
+  (`python -m openmodalpy.pod`, `python -m openmodalpy.spod`,
+  `python -m openmodalpy.dmd`, `python -m openmodalpy.bsmd`,
+  `python -m openmodalpy.stpod`). Use `openmodalpy` / `python -m openmodalpy`
+  instead.
 
 ### Changed
 - POD, mPOD and PSD-POD share one relative eigenvalue cutoff

@@ -1,5 +1,4 @@
 # Standard library imports
-import argparse
 import os
 import time
 import warnings
@@ -19,11 +18,8 @@ from openmodalpy.core.base import (
     _verify_qhat_stamp,
     _write_qhat_stamp,
     add_inset_colorbar,
-    auto_detect_weight_type,
     format_mode_title,
     get_fig_aspect_ratio,
-    load_jetles_data,
-    load_mat_data,
     make_result_filename,
     plot_modes_3d,
     print_summary,
@@ -40,15 +36,7 @@ from openmodalpy.core.config import (
     RESULTS_DIR_SPOD,
     WINDOW_NORM,
     WINDOW_TYPE,
-    require_existing_data_path,
 )
-from openmodalpy.core.parallel import print_optimization_status
-
-# Try to import DNamiDataLoader for npz support
-try:
-    from openmodalpy.core.io import DNamiDataLoader
-except ImportError:
-    DNamiDataLoader = None
 
 
 class SPODAnalyzer(BaseAnalyzer):
@@ -936,138 +924,3 @@ class SPODAnalyzer(BaseAnalyzer):
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
         print(f"Complex plane plot saved to {plot_filename}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run SPOD analysis")
-    parser.add_argument("--config", help="Path to JSON/YAML configuration file", default=None)
-    parser.add_argument("--data", help="Path to input data file", default=None)
-    parser.add_argument("--prep", action="store_true", help="Load data and compute FFT blocks")
-    parser.add_argument("--compute", action="store_true", help="Perform SPOD and save results")
-    parser.add_argument("--plot", action="store_true", help="Generate default plots")
-    args = parser.parse_args()
-
-    from openmodalpy.core.parallel import get_threadpool_summary
-
-    print(f"Thread pools: {get_threadpool_summary()}")
-
-    print_optimization_status()
-
-    if args.config:
-        from openmodalpy.core.config import load_config
-
-        load_config(args.config)
-
-    try:
-        data_file = require_existing_data_path(args.data)
-    except (FileNotFoundError, ValueError) as exc:
-        parser.error(str(exc))
-
-    # Default parameters
-    nfft_param = 128  # FFT block size
-    overlap_param = 0.5  # Overlap fraction (50%)
-    freq_target_for_plots = None  # Target St for plotting, if None, picks dominant
-
-    # Set case-specific parameters and data loader
-    if DNamiDataLoader is not None and data_file.endswith(".npz"):
-        loader = DNamiDataLoader()
-        available_fields = loader.get_available_fields(data_file)
-        print(f"Available fields in {data_file}: {available_fields}")
-        for field in available_fields:
-            print(f"\n===== Running SPOD for variable: {field} =====")
-            results_dir = os.path.join(RESULTS_DIR_SPOD, field)
-            figures_dir = os.path.join(FIGURES_DIR_SPOD, field)
-            os.makedirs(results_dir, exist_ok=True)
-            os.makedirs(figures_dir, exist_ok=True)
-            analyzer = SPODAnalyzer(
-                file_path=data_file,
-                nfft=nfft_param,
-                overlap=overlap_param,
-                data_loader=lambda fp: loader.load(fp, field=field),
-                spatial_weight_type="uniform",
-            )
-            analyzer.analysis_type = f"spod_{field}"
-
-            run_all = not (args.prep or args.compute or args.plot)
-            if run_all or args.prep:
-                data = loader.load(data_file, field=field)
-                analyzer.data = data
-                analyzer.load_and_preprocess()
-                analyzer.compute_fft_blocks()
-            if run_all or args.compute:
-                if analyzer.data == {}:
-                    analyzer.load_and_preprocess()
-                    analyzer.compute_fft_blocks()
-                analyzer.perform_spod()
-                analyzer.save_results()
-                analyzer.plot_eigenvalues_v2()
-                analyzer.plot_modes()
-            if run_all or args.plot:
-                if analyzer.eigenvalues.size == 0 or analyzer.St.size == 0:
-                    print("No SPOD results to plot. Run with --compute first.")
-                else:
-                    analyzer.plot_eigenvalues_v2()
-                    analyzer.plot_modes()
-            if run_all:
-                print_summary("SPOD", analyzer.results_dir, analyzer.figures_dir)
-        exit(0)
-    elif "cavity" in data_file.lower():
-        nfft_param = 256
-        overlap_param = 128 / 256  # 0.5
-        window_type_param = "sine"
-        spatial_weight_type_param = "uniform"
-        data_loader_param = load_mat_data
-        print("Cavity case: Using nfft=256, sine window, uniform weights, load_mat_data.")
-    elif "jet" in data_file.lower() or "dummy_jetles_data" in data_file.lower():
-        nfft_param = 256
-        overlap_param = 0.5
-        window_type_param = WINDOW_TYPE
-        spatial_weight_type_param = auto_detect_weight_type(data_file)
-        data_loader_param = load_jetles_data
-        print(
-            f"Jet case: Using nfft={nfft_param}, overlap={overlap_param * 100}%, {window_type_param} window, {spatial_weight_type_param} weights, load_jetles_data."
-        )
-    else:
-        print(f"Warning: Unknown data case for '{data_file}'. Using default jet parameters.")
-        nfft_param = 256
-        overlap_param = 0.5
-        window_type_param = WINDOW_TYPE
-        spatial_weight_type_param = "auto"
-        data_loader_param = load_jetles_data
-
-    # Further configuration
-    n_modes_to_save = 50  # Number of SPOD modes to save
-
-    analyzer = SPODAnalyzer(
-        file_path=data_file,
-        nfft=nfft_param,
-        overlap=overlap_param,
-        data_loader=data_loader_param,
-        spatial_weight_type=spatial_weight_type_param,
-    )
-
-    run_all = not (args.prep or args.compute or args.plot)
-
-    if run_all or args.prep:
-        analyzer.load_and_preprocess()
-        analyzer.compute_fft_blocks()
-
-    if run_all or args.compute:
-        if analyzer.qhat.size == 0:
-            analyzer.load_and_preprocess()
-            analyzer.compute_fft_blocks()
-        analyzer.perform_spod()
-        analyzer.save_results()
-
-    if run_all or args.plot:
-        if analyzer.eigenvalues.size == 0 or analyzer.St.size == 0:
-            print("No SPOD results to plot. Run with --compute first.")
-        else:
-            analyzer.plot_eigenvalues_v2()
-            analyzer.plot_modes()
-
-    if run_all:
-        print_summary("SPOD", analyzer.results_dir, analyzer.figures_dir)
-
-    # Example of calling plot_eigenvalues_v2 directly if needed for specific params
-    # analyzer.plot_eigenvalues_v2(n_modes_line_plot=15, shading_cmap='viridis_r')

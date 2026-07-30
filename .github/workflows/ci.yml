@@ -94,6 +94,18 @@ jobs:
       - name: Build wheel
         run: uv build
 
+      - name: Wheel must not ship the ruff indent wrapper
+        run: |
+          python3 -c "
+          import glob, sys, zipfile
+          whl = sorted(glob.glob('dist/*.whl'))[0]
+          bad = [n for n in zipfile.ZipFile(whl).namelist() if 'indent' in n]
+          if bad:
+              print('wheel contains unexpected indent path(s):', bad)
+              sys.exit(1)
+          print('ok: no indent file in', whl)
+          "
+
       - name: Install wheel into a clean environment and import
         run: |
           uv venv /tmp/wheelcheck

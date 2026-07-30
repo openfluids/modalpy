@@ -8,7 +8,6 @@ with Euclidean least squares. It does not currently apply the spatial metric
 """
 
 # Standard library imports
-import argparse
 import os
 
 import h5py
@@ -33,7 +32,6 @@ from openmodalpy.core.base import (  # noqa: E402
     get_fig_aspect_ratio,
     make_result_filename,
     plot_modes_3d,
-    print_summary,
     reshape_mode_to_volume,
     resolve_volume_layout,
     style_spatial_axes,
@@ -44,15 +42,8 @@ from openmodalpy.core.config import (  # noqa: E402
     FIG_DPI,
     FIGURES_DIR_DMD,
     RESULTS_DIR_DMD,
-    require_existing_data_path,
 )
 from openmodalpy.core.threads import apply_blas_limit  # noqa: E402
-
-# Try to import DNamiDataLoader for npz support
-try:
-    from openmodalpy.core.io import DNamiDataLoader
-except ImportError:
-    DNamiDataLoader = None
 
 
 def _delay_embed(X, d):
@@ -1022,105 +1013,3 @@ class DMDAnalyzer(BaseAnalyzer):
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         print(f"Saving figure {plot_filename}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run DMD analysis")
-    parser.add_argument("--config", help="Path to JSON/YAML configuration file", default=None)
-    parser.add_argument("--data", help="Path to input data file", default=None)
-    parser.add_argument("--prep", action="store_true", help="Load data and prepare for DMD")
-    parser.add_argument("--compute", action="store_true", help="Perform DMD and save results")
-    parser.add_argument("--plot", action="store_true", help="Generate default plots")
-    args = parser.parse_args()
-
-    if args.config:
-        from openmodalpy.core.config import load_config
-
-        load_config(args.config)
-
-    try:
-        data_file = require_existing_data_path(args.data)
-    except (FileNotFoundError, ValueError) as exc:
-        parser.error(str(exc))
-
-    n_modes_to_save_main = 8
-    n_modes_to_plot_spatial_main = 8
-    n_coeffs_to_plot_time_main = 8
-
-    # Support batch field analysis for npz files
-    if DNamiDataLoader is not None and data_file.endswith(".npz"):
-        loader = DNamiDataLoader()
-        available_fields = loader.get_available_fields(data_file)
-        print(f"Available fields in {data_file}: {available_fields}")
-        for field in available_fields:
-            print(f"\n===== Running DMD for variable: {field} =====")
-            results_dir = os.path.join(RESULTS_DIR_DMD, field)
-            figures_dir = os.path.join(FIGURES_DIR_DMD, field)
-            os.makedirs(results_dir, exist_ok=True)
-            os.makedirs(figures_dir, exist_ok=True)
-            analyzer = DMDAnalyzer(
-                file_path=data_file,
-                results_dir=results_dir,
-                figures_dir=figures_dir,
-                data_loader=lambda fp: loader.load(fp, field=field),
-                n_modes_save=n_modes_to_save_main,
-                rank=n_modes_to_save_main,
-                spatial_weight_type="uniform",
-            )
-            analyzer.analysis_type = f"dmd_{field}"
-
-            if args.compute or args.prep:
-                data = loader.load(data_file, field=field)
-                analyzer.data = data
-                if args.compute:
-                    analyzer.perform_dmd()
-                    analyzer.save_results()
-                    analyzer.plot_eigenspectra()
-                    analyzer.plot_modes_detailed(plot_n_modes=n_modes_to_plot_spatial_main)
-                    analyzer.plot_time_coefficients(n_coeffs_to_plot=n_coeffs_to_plot_time_main)
-                    analyzer.plot_cumulative_energy()
-                    analyzer.plot_reconstruction_error()
-                elif args.prep:
-                    analyzer.load_and_preprocess()
-                    # Optionally save preprocessed data if needed
-            elif args.plot:
-                analyzer.load_results()
-                analyzer.plot_eigenspectra()
-                analyzer.plot_modes_detailed(plot_n_modes=n_modes_to_plot_spatial_main)
-                analyzer.plot_time_coefficients(n_coeffs_to_plot=n_coeffs_to_plot_time_main)
-                analyzer.plot_cumulative_energy()
-                analyzer.plot_reconstruction_error()
-            print_summary("DMD", analyzer.results_dir, analyzer.figures_dir)
-    else:
-        # Fallback for legacy .mat/.h5 files
-        from openmodalpy.core.base import load_mat_data
-
-        loader = load_mat_data
-        analyzer = DMDAnalyzer(
-            file_path=data_file,
-            results_dir=RESULTS_DIR_DMD,
-            figures_dir=FIGURES_DIR_DMD,
-            data_loader=loader,
-            spatial_weight_type="uniform",
-            n_modes_save=n_modes_to_save_main,
-            rank=n_modes_to_save_main,
-        )
-        run_all = not (args.prep or args.compute or args.plot)
-        if run_all or args.prep:
-            analyzer.load_and_preprocess()
-        if run_all or args.compute:
-            if analyzer.data == {}:
-                analyzer.load_and_preprocess()
-            analyzer.perform_dmd()
-            analyzer.save_results()
-        if run_all or args.plot:
-            if analyzer.eigenvalues.size == 0:
-                print("No DMD results to plot. Run with --compute first.")
-            else:
-                analyzer.plot_eigenspectra()
-                analyzer.plot_modes_detailed(plot_n_modes=n_modes_to_plot_spatial_main)
-                analyzer.plot_time_coefficients(n_coeffs_to_plot=n_coeffs_to_plot_time_main)
-                analyzer.plot_cumulative_energy()
-                analyzer.plot_reconstruction_error()
-        if run_all:
-            print_summary("DMD", analyzer.results_dir, analyzer.figures_dir)

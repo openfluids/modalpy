@@ -5,7 +5,6 @@ NOTE: ALL imports are available here and this is imported in utils.py
 so we only need to import utils in other files.
 """
 
-import json
 import os
 
 from fftkit import DEFAULT_BACKEND as _FFTKIT_BACKEND
@@ -41,22 +40,8 @@ DATA_DIR_CAVITY = "./data/cavity"
 DATA_DIR_JET = "./data/jet"
 DATA_DIR_DNAMIX = "./data/dnamix"
 
-# No benchmark dataset is bundled with the public package. Direct module
-# execution should always receive an explicit input path.
+# No benchmark dataset is bundled with the public package.
 DEFAULT_DATA_FILE = None
-
-
-def require_existing_data_path(data_file: str | None) -> str:
-    """Validate an explicit input path for direct module execution."""
-    if not data_file:
-        raise ValueError(
-            "No default input dataset is bundled with openmodalpy. "
-            "Provide --data PATH or use a packaged generator-backed example."
-        )
-    if not os.path.exists(data_file):
-        raise FileNotFoundError(f"Input data path does not exist: {data_file}")
-    return data_file
-
 
 # Figure saving options
 FIG_DPI = 500
@@ -81,39 +66,3 @@ WINDOW_TYPE = "hamming"
 WINDOW_NORM = "power"
 
 # Other global options can be added here as needed
-
-
-def load_config(config_path):
-    """Load a JSON or YAML configuration file and override defaults.
-
-    Parameters
-    ----------
-    config_path : str
-        Path to the configuration file. Supported formats are JSON
-        and YAML (requires ``PyYAML``).
-    """
-
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(f"Config file '{config_path}' not found")
-
-    _, ext = os.path.splitext(config_path)
-    ext = ext.lower()
-
-    with open(config_path, "r") as f:
-        if ext in {".yml", ".yaml"}:
-            try:
-                import yaml
-            except Exception as exc:  # pragma: no cover - import error path
-                raise ImportError("PyYAML must be installed to read YAML configuration files") from exc
-            config = yaml.safe_load(f)
-        else:
-            config = json.load(f)
-
-    if not isinstance(config, dict):
-        raise ValueError("Configuration file must define a dictionary")
-
-    # Update any matching globals using upper-case keys
-    for key, value in config.items():
-        key_upper = key.upper()
-        if key_upper in globals():
-            globals()[key_upper] = value
