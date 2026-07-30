@@ -1,14 +1,17 @@
-"""Result contract: every producer writes the same dataset names.
+"""Result contract: every producer writes the same dataset names and values.
 
 One reader (:func:`read_results`) loads any result file — including the old
-capitalised layout — into :class:`AnalysisResults`. The gate for
-openmodalpy-unify-result-contract-vig greps this file for every producer name.
+capitalised layout — into :class:`AnalysisResults`. Names and shapes alone are
+not enough: each in-memory array is compared element-wise with what comes back
+from the file. The gate for openmodalpy-unify-result-contract-vig greps this
+file for every producer name.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import h5py
 import numpy as np
@@ -19,6 +22,7 @@ from openmodalpy import (
     DMDAnalyzer,
     MPODAnalyzer,
     PODAnalyzer,
+    PSDPODAnalyzer,
     SPODAnalyzer,
     STPODAnalyzer,
     read_results,
@@ -65,8 +69,18 @@ def _assert_canonical_keys(path: Path, required: set[str]) -> None:
     assert not (keys & capitalised), f"{path}: still writing capitalised names {keys & capitalised}"
 
 
+def _assert_roundtrip(disk: Any, mem: Any, name: str) -> None:
+    """Loaded array must match the producer's in-memory array element-wise.
+
+    gzip + h5py preserve values and dtypes, so exact equality is the default.
+    """
+    assert disk is not None, f"{name}: missing on disk"
+    assert mem is not None, f"{name}: missing in memory"
+    np.testing.assert_array_equal(disk, mem, err_msg=name)
+
+
 def test_result_contract_all_producers(tmp_path: Path) -> None:
-    """Every producer writes lowercase result keys; read_results loads them all.
+    """Every producer writes lowercase keys and round-trips array values.
 
     Producers covered (gate greps these names): PODAnalyzer, MPODAnalyzer,
     DMDAnalyzer, SPODAnalyzer, BSMDAnalyzer, STPODAnalyzer, psd_pod.
@@ -88,6 +102,13 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     _assert_canonical_keys(pod_path, {"modes", "eigenvalues", "time_coefficients"})
     pod_res = read_results(pod_path)
     assert pod_res.modes is not None and pod_res.modes.shape[1] == 3
+    _assert_roundtrip(pod_res.modes, pod.modes, "POD.modes")
+    _assert_roundtrip(pod_res.eigenvalues, pod.eigenvalues, "POD.eigenvalues")
+    _assert_roundtrip(pod_res.time_coefficients, pod.time_coefficients, "POD.time_coefficients")
+    _assert_roundtrip(pod_res.W, pod.W, "POD.W")
+    _assert_roundtrip(pod_res.temporal_mean, pod.temporal_mean, "POD.temporal_mean")
+    _assert_roundtrip(pod_res.x, pod.data["x"], "POD.x")
+    _assert_roundtrip(pod_res.y, pod.data["y"], "POD.y")
 
     # MPODAnalyzer (inherits POD save_results)
     mpod = MPODAnalyzer(file_path="mpod_contract", n_modes_save=2, band_edges=[0.0, 2.0, 5.0], **common)
@@ -96,7 +117,15 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     mpod.save_results("mpod.hdf5")
     mpod_path = tmp_path / "mpod.hdf5"
     _assert_canonical_keys(mpod_path, {"modes", "eigenvalues", "time_coefficients"})
-    assert read_results(mpod_path).eigenvalues is not None
+    mpod_res = read_results(mpod_path)
+    assert mpod_res.eigenvalues is not None
+    _assert_roundtrip(mpod_res.modes, mpod.modes, "mPOD.modes")
+    _assert_roundtrip(mpod_res.eigenvalues, mpod.eigenvalues, "mPOD.eigenvalues")
+    _assert_roundtrip(mpod_res.time_coefficients, mpod.time_coefficients, "mPOD.time_coefficients")
+    _assert_roundtrip(mpod_res.W, mpod.W, "mPOD.W")
+    _assert_roundtrip(mpod_res.temporal_mean, mpod.temporal_mean, "mPOD.temporal_mean")
+    _assert_roundtrip(mpod_res.x, mpod.data["x"], "mPOD.x")
+    _assert_roundtrip(mpod_res.y, mpod.data["y"], "mPOD.y")
 
     # DMDAnalyzer
     dmd = DMDAnalyzer(file_path="dmd_contract", n_modes_save=2, **common, rank=2)
@@ -105,7 +134,16 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     dmd.save_results("dmd.hdf5")
     dmd_path = tmp_path / "dmd.hdf5"
     _assert_canonical_keys(dmd_path, {"modes", "eigenvalues", "time_coefficients", "amplitudes"})
-    assert read_results(dmd_path).amplitudes is not None
+    dmd_res = read_results(dmd_path)
+    assert dmd_res.amplitudes is not None
+    _assert_roundtrip(dmd_res.modes, dmd.modes, "DMD.modes")
+    _assert_roundtrip(dmd_res.eigenvalues, dmd.eigenvalues, "DMD.eigenvalues")
+    _assert_roundtrip(dmd_res.time_coefficients, dmd.time_coefficients, "DMD.time_coefficients")
+    _assert_roundtrip(dmd_res.amplitudes, dmd.amplitudes, "DMD.amplitudes")
+    if dmd.omega.size > 0:
+        _assert_roundtrip(dmd_res.omega, dmd.omega, "DMD.omega")
+    _assert_roundtrip(dmd_res.x, dmd.data["x"], "DMD.x")
+    _assert_roundtrip(dmd_res.y, dmd.data["y"], "DMD.y")
 
     # SPODAnalyzer
     spod = SPODAnalyzer(file_path="spod_contract", nfft=8, overlap=0.0, **common)
@@ -118,8 +156,30 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     spod_res = read_results(spod_path)
     assert spod_res.freq is not None and spod_res.st is not None
     assert spod_res.W is not None  # SPOD used to write Weights
+    _assert_roundtrip(spod_res.modes, spod.modes, "SPOD.modes")
+    _assert_roundtrip(spod_res.eigenvalues, spod.eigenvalues, "SPOD.eigenvalues")
+    _assert_roundtrip(spod_res.freq, spod.freq, "SPOD.freq")
+    _assert_roundtrip(spod_res.st, spod.St, "SPOD.st")
+    _assert_roundtrip(spod_res.W, spod.W, "SPOD.W")
+    if spod.time_coefficients is not None and spod.time_coefficients.size > 0:
+        _assert_roundtrip(spod_res.time_coefficients, spod.time_coefficients, "SPOD.time_coefficients")
+    if spod.qhat is not None and spod.qhat.size > 0:
+        _assert_roundtrip(spod_res.FFTBlocks, spod.qhat, "SPOD.FFTBlocks")
+    _assert_roundtrip(spod_res.x, spod.data["x"], "SPOD.x")
+    _assert_roundtrip(spod_res.y, spod.data["y"], "SPOD.y")
+    # read_results routes x_coords/y_coords into .extra (not named fields)
+    _assert_roundtrip(
+        spod_res.extra["x_coords"],
+        spod.data["x_coords"] if "x_coords" in spod.data else spod.data["x"],
+        "SPOD.x_coords",
+    )
+    _assert_roundtrip(
+        spod_res.extra["y_coords"],
+        spod.data["y_coords"] if "y_coords" in spod.data else spod.data["y"],
+        "SPOD.y_coords",
+    )
 
-    # BSMDAnalyzer
+    # BSMDAnalyzer — modes1 and modes2 compared separately so a swap fails
     bsmd = BSMDAnalyzer(
         file_path="bsmd_contract",
         nfft=8,
@@ -137,6 +197,15 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     _assert_canonical_keys(bsmd_path, {"modes1", "modes2", "triads", "eigenvalues"})
     bsmd_res = read_results(bsmd_path)
     assert bsmd_res.modes1 is not None and bsmd_res.modes2 is not None
+    _assert_roundtrip(bsmd_res.modes1, bsmd.modes1, "BSMD.modes1")
+    _assert_roundtrip(bsmd_res.modes2, bsmd.modes2, "BSMD.modes2")
+    _assert_roundtrip(bsmd_res.triads, np.array(bsmd.triads), "BSMD.triads")
+    _assert_roundtrip(bsmd_res.eigenvalues, bsmd.eigenvalues, "BSMD.eigenvalues")
+    _assert_roundtrip(bsmd_res.W, bsmd.W, "BSMD.W")
+    if bsmd.energy_map.size:
+        _assert_roundtrip(bsmd_res.energy_map, bsmd.energy_map, "BSMD.energy_map")
+    _assert_roundtrip(bsmd_res.x, bsmd.data["x"], "BSMD.x")
+    _assert_roundtrip(bsmd_res.y, bsmd.data["y"], "BSMD.y")
 
     # STPODAnalyzer
     stpod = STPODAnalyzer(file_path="stpod_contract", embedding_dim=2, n_modes_save=2, **common)
@@ -145,9 +214,41 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     stpod.save_results("stpod.hdf5")
     stpod_path = tmp_path / "stpod.hdf5"
     _assert_canonical_keys(stpod_path, {"modes", "eigenvalues", "time_coefficients"})
-    assert read_results(stpod_path).modes is not None
+    stpod_res = read_results(stpod_path)
+    assert stpod_res.modes is not None
+    _assert_roundtrip(stpod_res.modes, stpod.modes, "ST-POD.modes")
+    _assert_roundtrip(stpod_res.eigenvalues, stpod.eigenvalues, "ST-POD.eigenvalues")
+    _assert_roundtrip(stpod_res.time_coefficients, stpod.time_coefficients, "ST-POD.time_coefficients")
+    _assert_roundtrip(stpod_res.W, stpod.W, "ST-POD.W")
+    if stpod.temporal_mean.size > 0:
+        _assert_roundtrip(stpod_res.temporal_mean, stpod.temporal_mean, "ST-POD.temporal_mean")
+    _assert_roundtrip(stpod_res.x, stpod.data["x"], "ST-POD.x")
+    _assert_roundtrip(stpod_res.y, stpod.data["y"], "ST-POD.y")
 
-    # psd_pod (commands path)
+    # psd_pod via PSDPODAnalyzer (in-memory arrays for value comparison)
+    psd = PSDPODAnalyzer(
+        file_path="psd_pod_contract",
+        n_modes_save=2,
+        nfft=8,
+        overlap=0.0,
+        use_parallel=False,
+        **common,
+    )
+    psd.load_and_preprocess()
+    psd.compute_fft_blocks()
+    psd.perform_psd_pod()
+    psd.save_results("psd_pod.hdf5")
+    psd_path = tmp_path / "psd_pod.hdf5"
+    _assert_canonical_keys(psd_path, {"modes", "eigenvalues", "time_coefficients", "freq", "st"})
+    psd_res = read_results(psd_path)
+    assert psd_res.attrs.get("analysis_type") == "psd_pod"
+    _assert_roundtrip(psd_res.modes, psd.modes, "psd_pod.modes")
+    _assert_roundtrip(psd_res.eigenvalues, psd.eigenvalues, "psd_pod.eigenvalues")
+    _assert_roundtrip(psd_res.time_coefficients, psd.time_coefficients, "psd_pod.time_coefficients")
+    _assert_roundtrip(psd_res.freq, psd.freq, "psd_pod.freq")
+    _assert_roundtrip(psd_res.st, psd.St, "psd_pod.st")
+
+    # config path still reaches psd_pod and writes the same canonical keys
     config_path = tmp_path / "psd_pod.jsonc"
     config_path.write_text(
         json.dumps(
@@ -177,9 +278,9 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     )
     outcome = analyze_from_config(config_path, method="psd-pod")
     assert outcome.results_path is not None
-    psd_path = Path(outcome.results_path)
-    _assert_canonical_keys(psd_path, {"modes", "eigenvalues", "time_coefficients", "freq", "st"})
-    assert read_results(psd_path).attrs.get("analysis_type") == "psd_pod"
+    config_psd_path = Path(outcome.results_path)
+    _assert_canonical_keys(config_psd_path, {"modes", "eigenvalues", "time_coefficients", "freq", "st"})
+    assert read_results(config_psd_path).attrs.get("analysis_type") == "psd_pod"
 
 
 def test_read_results_legacy_layout_emits_deprecation(tmp_path: Path) -> None:
