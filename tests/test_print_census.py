@@ -9,8 +9,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 # Upper bounds measured after phase-1 conversion (core/ → 0). Counts are
 # inclusive of the one removed SPOD qhat-guard print (spod.py was 31).
 PRINT_UPPER_BOUNDS: dict[str, int] = {

@@ -1,7 +1,8 @@
+import warnings
+
 import h5py
 import numpy as np
 import pytest
-import warnings
 
 from openmodalpy import BSMDAnalyzer
 from openmodalpy.bsmd import ALL_TRIADS
