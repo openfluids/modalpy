@@ -18,6 +18,7 @@
     },
     "spatial_weight_type": "uniform",
     "n_modes_save": 10,
+    "rank": 10,
     "nfft": 128,
     "overlap": 0.5,
     "embedding_dim": 20,
