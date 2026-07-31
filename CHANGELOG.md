@@ -69,6 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead.
 
 ### Changed
+- Default DMD rank for the shipped `double_gyre` example moved from 10 to 8.
+  On the packaged 80×40/Nt=200 grid, rank 10 keeps singular values with
+  s9/s0 ~ 2e-12, so machine round-off in the DMD operator is amplified to
+  ~1e-4 — a hundred times looser than the fixture `rtol=1e-6`. Rank 8 keeps
+  s7/s0 ~ 4e-9 (implied error ~5e-8) and is honest at that tolerance. Only the
+  DMD family is affected: `dmd`, `hodmd` and `tls-hodmd` runs on the shipped
+  config now return 8 modes instead of 10, matching the reference fixture. POD,
+  mPOD, SPOD, PSD-POD, ST-POD and BSMD are unchanged — they read `n_modes_save`,
+  which stays at 10, not `rank`.
 - Analytic reference fixtures under `tests/fixtures/reference/` now use the
   grids from the packaged example configs (`src/openmodalpy/examples/*.jsonc`):
   double_gyre 80×40/Nt=200, taylor_green 64×64/Nt=100, cylinder_wake

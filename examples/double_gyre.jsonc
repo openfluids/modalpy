@@ -17,7 +17,9 @@
     },
     "spatial_weight_type": "uniform",
     "n_modes_save": 10,
-    "rank": 10,
+    // rank 8: at 80x40x200, s7/s0 ~ 4e-9 keeps eps/(s_r/s0) ~ 5e-8 under
+    // rtol=1e-6; rank 10 (s9/s0 ~ 2e-12) implies error ~1e-4 and is not honest.
+    "rank": 8,
     "nfft": 64,
     "overlap": 0.5,
     "embedding_dim": 20,

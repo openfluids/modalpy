@@ -70,8 +70,12 @@ GENERATOR_PARAMS: dict[str, dict[str, Any]] = {name: _params_from_packaged(name)
 # values were partly round-off. Rank 8 keeps s[7]/s[0] = 4.2e-9, implying 5.2e-8
 # and leaving rtol=1e-6 honest.
 #
-# The other two generators decay slowly enough that rank 10 already satisfies
-# the same inequality, so they are unchanged.
+# cylinder_wake at rank 10 is fine: s9/s0 ~ 2e-3, so the amplified error is
+# eps/(s9/s0) ~ 1e-13, far inside rtol. taylor_green is not: its
+# s9/s0 is ~ 3e-17, so eps/(s9/s0) is order 1 and rank 10 fails the same
+# inequality. The recorded taylor_green fixture is still valid because the
+# analyzer truncates to effective rank and warns before those modes are used —
+# the fixture records that truncated spectrum, not ten fully-conditioned modes.
 N_MODES_BY_GENERATOR: dict[str, int] = {
     "double_gyre": 8,
     "taylor_green": 10,

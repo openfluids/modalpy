@@ -197,13 +197,8 @@ def test_fixture_generator_params_match_packaged_example_config(path: Path):
 
     Pins how the DATA is generated — Nx/Ny/Nt and seed — so the fixture and the
     shipped example cannot describe different fields. If either side moves
-    alone, this test fails.
-
-    It does not pin how the data is ANALYSED. The packaged configs set
-    ``rank: 10`` while ``double_gyre``'s fixture uses ``n_modes: 8``, because
-    rank 10 is not honest at ``rtol=1e-6`` under the conditioning bound in
-    ``scripts/regen_reference_fixtures.py``. So a shipped-config run and this
-    fixture agree on the input and can still differ in the DMD spectrum length.
+    alone, this test fails. Rank agreement (config rank vs fixture ``n_modes``)
+    is pinned separately in ``tests/test_example_configs.py``.
     """
     with path.open(encoding="utf-8") as fh:
         doc = json.load(fh)
