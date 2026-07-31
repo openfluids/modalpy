@@ -60,6 +60,10 @@ LEGACY_ALIASES: dict[str, str] = {
     "Modes2": "modes2",
     "Weights": "W",
     "Triads": "triads",
+    # Older SPOD files wrote the grid twice (x/y/z and x_coords/y_coords/z_coords).
+    "x_coords": "x",
+    "y_coords": "y",
+    "z_coords": "z",
 }
 
 _KNOWN_FIELD_NAMES: frozenset[str] = CANONICAL_RESULT_KEYS | SHARED_KEYS

@@ -153,6 +153,16 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     spod.save_results("spod.hdf5")
     spod_path = tmp_path / "spod.hdf5"
     _assert_canonical_keys(spod_path, {"modes", "eigenvalues", "freq", "st"})
+    # Inspect the raw datasets BEFORE reading. x_coords/y_coords/z_coords are
+    # LEGACY_ALIASES now, so a reintroduced duplicate would make read_results
+    # emit a DeprecationWarning — an error under this suite's filters — and the
+    # check would never be reached. Done here, it pins the writer on its own.
+    with h5py.File(spod_path, "r") as handle:
+        raw_keys = set(handle.keys())
+    assert not (raw_keys & {"x_coords", "y_coords", "z_coords"}), (
+        f"{spod_path}: SPOD still writes duplicate coordinate datasets "
+        f"{raw_keys & {'x_coords', 'y_coords', 'z_coords'}}"
+    )
     spod_res = read_results(spod_path)
     assert spod_res.freq is not None and spod_res.st is not None
     assert spod_res.W is not None  # SPOD used to write Weights
@@ -167,18 +177,6 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
         _assert_roundtrip(spod_res.FFTBlocks, spod.qhat, "SPOD.FFTBlocks")
     _assert_roundtrip(spod_res.x, spod.data["x"], "SPOD.x")
     _assert_roundtrip(spod_res.y, spod.data["y"], "SPOD.y")
-    # read_results routes x_coords/y_coords into .extra (not named fields)
-    _assert_roundtrip(
-        spod_res.extra["x_coords"],
-        spod.data["x_coords"] if "x_coords" in spod.data else spod.data["x"],
-        "SPOD.x_coords",
-    )
-    _assert_roundtrip(
-        spod_res.extra["y_coords"],
-        spod.data["y_coords"] if "y_coords" in spod.data else spod.data["y"],
-        "SPOD.y_coords",
-    )
-
     # BSMDAnalyzer — modes1 and modes2 compared separately so a swap fails
     bsmd = BSMDAnalyzer(
         file_path="bsmd_contract",
@@ -305,6 +303,33 @@ def test_read_results_legacy_layout_emits_deprecation(tmp_path: Path) -> None:
     assert res.time_coefficients is not None
     assert res.freq is not None and res.st is not None
     assert res.W is not None and res.W.shape == (nsp,)
+
+
+def test_read_results_legacy_coords_spellings_map_to_canonical(tmp_path: Path) -> None:
+    """Older SPOD files that carried only x_coords/y_coords still read as x/y."""
+    legacy = tmp_path / "legacy_coords.hdf5"
+    x = np.linspace(0.0, 1.0, 4)
+    y = np.linspace(0.0, 1.0, 2)
+    with h5py.File(legacy, "w") as handle:
+        handle.create_dataset("modes", data=np.zeros((8, 2)))
+        handle.create_dataset("eigenvalues", data=np.ones(2))
+        handle.create_dataset("x_coords", data=x)
+        handle.create_dataset("y_coords", data=y)
+
+    # Match the text common to every legacy warning, not just x_coords: this
+    # file reads with filterwarnings=error, and pytest re-emits warnings that
+    # the match misses, so a narrower pattern turns the y_coords warning into
+    # an error. The specific key is asserted below instead.
+    with pytest.warns(DeprecationWarning, match="legacy name") as caught:
+        res = read_results(legacy)
+
+    assert res.x is not None
+    assert res.y is not None
+    np.testing.assert_array_equal(res.x, x)
+    np.testing.assert_array_equal(res.y, y)
+    assert "x_coords" not in res.extra
+    assert "y_coords" not in res.extra
+    assert any("x_coords" in str(w.message) for w in caught)
 
 
 def test_spod_load_results_rejects_a_file_without_modes(tmp_path: Path) -> None:

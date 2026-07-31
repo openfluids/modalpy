@@ -372,18 +372,6 @@ class SPODAnalyzer(BaseAnalyzer):
             datasets["FFTBlocks"] = self.qhat
         if self.W is not None and getattr(self.W, "size", 0) > 0:
             datasets["W"] = self.W
-        if "x_coords" in self.data:
-            datasets["x_coords"] = self.data["x_coords"]
-        elif self.data.get("x") is not None:
-            datasets["x_coords"] = self.data["x"]
-        if "y_coords" in self.data:
-            datasets["y_coords"] = self.data["y_coords"]
-        elif self.data.get("y") is not None:
-            datasets["y_coords"] = self.data["y"]
-        if "z_coords" in self.data:
-            datasets["z_coords"] = self.data["z_coords"]
-        elif self.data.get("z") is not None:
-            datasets["z_coords"] = self.data["z"]
         if self.data.get("x") is not None:
             datasets["x"] = self.data["x"]
         if self.data.get("y") is not None:
@@ -447,9 +435,6 @@ class SPODAnalyzer(BaseAnalyzer):
                 self.data[coord_key] = value
             elif coord_key in res.extra:
                 self.data[coord_key] = res.extra[coord_key]
-        for coord_key in ("x_coords", "y_coords", "z_coords"):
-            if coord_key in res.extra:
-                self.data[coord_key.replace("_coords", "")] = res.extra[coord_key]
         for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
             if attr_key in res.attrs:
                 self.data[attr_key] = res.attrs[attr_key]

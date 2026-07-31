@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- SPOD result files write the spatial grid once, as `x`/`y`/`z` (matching the
+  other producers). The previous duplicate datasets `x_coords`/`y_coords`/
+  `z_coords` are no longer written. Files that still carry only the old
+  `_coords` spelling continue to load: `read_results` maps them onto the
+  canonical `x`/`y`/`z` fields and emits a `DeprecationWarning` naming the
+  legacy key. Note that files written by earlier versions carry *both*
+  spellings, so reading one now emits that warning where it previously did
+  not. The canonical `x`/`y`/`z` still win, so values are unchanged — but code
+  that turns warnings into errors will need to filter it.
+
 ### Fixed
 - The SVD route of `weighted_second_order` now drops singular values at or
   below `n_kernel · ε · σ_max` (same relative scale as the eigh floor, applied
