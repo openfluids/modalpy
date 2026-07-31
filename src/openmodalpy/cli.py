@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from openmodalpy.commands import (
+    METHOD_REGISTRY,
     analyze_from_config,
     discover_examples,
     get_example_info,
@@ -48,10 +49,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    analyze = subparsers.add_parser("analyze", help="Run one analysis family from a case config.")
-    analyze.add_argument(
-        "analysis_method", help="Method to run (pod, mpod, psd-pod, dmd, hodmd, tls-hodmd, spod, bsmd, stpod)."
+    # Method list is derived from METHOD_REGISTRY so top-level help and the
+    # analysis_method arg stay in lockstep with the registry (no hardcoded names).
+    method_names = ", ".join(info.cli_name for info in METHOD_REGISTRY.values())
+    analyze = subparsers.add_parser(
+        "analyze",
+        help=f"Run one analysis family from a case config ({method_names}).",
     )
+    analyze.add_argument("analysis_method", help=f"Method to run ({method_names}).")
     analyze.add_argument("--config", type=Path, required=True, help="Path to the case JSONC config file.")
     analyze.add_argument("--run-id", type=str, default=None, help="Custom run id for outputs.")
     analyze.add_argument("--dry-run", action="store_true", help="Print the resolved analysis without executing it.")

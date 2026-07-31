@@ -23,6 +23,9 @@ jobs:
       - name: Format
         run: uv run --group lint ruff format --check .
 
+      - name: Type check
+        run: uv run --group lint mypy src/openmodalpy
+
       - name: Lockfile
         run: uv lock --check
 

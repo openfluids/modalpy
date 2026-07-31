@@ -89,6 +89,7 @@ test = [
 ]
 lint = [
     "ruff>=0.1",
+    "mypy>=1.18",
 ]
 dev = [
     { include-group = "test" },
@@ -123,11 +124,17 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/openmodalpy"]
 include = [
+    "src/openmodalpy/py.typed",
     "src/openmodalpy/examples/cylinder_wake.jsonc",
     "src/openmodalpy/examples/double_gyre.jsonc",
     "src/openmodalpy/examples/run_benchmarks.jsonc",
     "src/openmodalpy/examples/taylor_green.jsonc",
 ]
+
+[tool.mypy]
+python_version = "3.11"
+exclude = ["tests/", "examples/"]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 120

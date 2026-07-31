@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -148,7 +149,7 @@ def generate_cylinder_wake(
     }
 
 
-GENERATORS = {
+GENERATORS: dict[str, Callable[..., dict[str, Any]]] = {
     "double_gyre": generate_double_gyre,
     "taylor_green": generate_taylor_green,
     "cylinder_wake": generate_cylinder_wake,

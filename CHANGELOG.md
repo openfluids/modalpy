@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- PEP 561 marker `src/openmodalpy/py.typed` so type checkers treat the package
+  as typed when installed from the wheel.
+- Public exports `MethodInfo` (returned by `list_methods` and `get_method_spec`),
+  `ExampleInfo` (returned by `discover_examples`) and `RunCollectionSpec`, so
+  callers can annotate these results without importing from a private module.
+- The `analyze` help text now lists the method names from the method registry
+  instead of a hand-maintained string that could fall out of date.
 - Analytic reference fixtures under `tests/fixtures/reference/` (POD energy
   fractions and DMD |λ|/phase for `double_gyre`, `taylor_green`,
   `cylinder_wake`) plus `scripts/regen_reference_fixtures.py` and

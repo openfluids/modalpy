@@ -168,8 +168,10 @@ def _significant_eigenvalue_mask(
     lam_max = float(np.max(real))
     if not np.isfinite(lam_max) or lam_max <= 0.0:
         return np.zeros(real.shape, dtype=bool)
-    work = real.dtype if real.dtype.kind == "f" else np.dtype(float)
-    eps = float(np.finfo(work).eps)
+    if real.dtype.kind == "f":
+        eps = float(np.finfo(real.dtype).eps)
+    else:
+        eps = float(np.finfo(np.float64).eps)
     cutoff = float(n_kernel) * eps * lam_max
     return real > cutoff
 

@@ -18,7 +18,15 @@ from openmodalpy.dmd import DMDAnalyzer
 from openmodalpy.mpod import MPODAnalyzer
 from openmodalpy.pod import PODAnalyzer
 from openmodalpy.psd_pod import PSDPODAnalyzer
-from openmodalpy.specs import AnalyzeSpec, CaseSpec, DataSourceSpec, RunOutcome
+from openmodalpy.specs import (
+    AnalyzeSpec,
+    CaseSpec,
+    DataSourceSpec,
+    ExampleInfo,
+    MethodInfo,
+    RunCollectionSpec,
+    RunOutcome,
+)
 from openmodalpy.spod import SPODAnalyzer
 from openmodalpy.stpod import STPODAnalyzer
 
@@ -40,6 +48,9 @@ __all__ = [
     "AnalyzeSpec",
     "CaseSpec",
     "DataSourceSpec",
+    "ExampleInfo",
+    "MethodInfo",
+    "RunCollectionSpec",
     "RunOutcome",
     "analyze_from_spec",
     "analyze_from_config",

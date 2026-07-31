@@ -24,7 +24,7 @@ Reference:
 
 import os
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import h5py
 import matplotlib
@@ -114,7 +114,8 @@ class STPODAnalyzer(BaseAnalyzer):
         self.modes = np.array([])
         self.eigenvalues = np.array([])
         self.time_coefficients = np.array([])
-        self.temporal_mean = np.array([])
+        # Any: np.mean(..., axis=0, dtype=float64) is typed as scalar | ndarray.
+        self.temporal_mean: Any = np.array([])
 
         self.analysis_type = "stpod"
 
@@ -436,6 +437,7 @@ class STPODAnalyzer(BaseAnalyzer):
             mode_spatial = self.extract_spatial_mode(k, delay_idx)
             mode_2d = mode_spatial.reshape((Nx, Ny))
 
+            mode_plot: Any
             if show_cylinder:
                 dist = np.sqrt(x_mesh**2 + y_mesh**2)
                 mask = dist <= 0.5
@@ -590,6 +592,7 @@ class STPODAnalyzer(BaseAnalyzer):
             mode_spatial = self.extract_spatial_mode(mode_idx, delay_idx)
             mode_2d = mode_spatial.reshape((Nx, Ny))
 
+            mode_plot: Any
             if show_cylinder:
                 dist = np.sqrt(x_mesh**2 + y_mesh**2)
                 mask = dist <= 0.5
@@ -714,7 +717,7 @@ class STPODAnalyzer(BaseAnalyzer):
         ax.plot(mode_indices, cumulative, "o-", linewidth=2, markersize=6)
 
         for idx, (x, y) in enumerate(zip(mode_indices, cumulative)):
-            ax.text(x, y, f" {idx + 1}", fontsize=7, va="bottom")
+            ax.text(float(x), float(y), f" {idx + 1}", fontsize=7, va="bottom")
 
         ax.set_xlabel("Number of Modes")
         ax.set_ylabel("Cumulative Energy (%)")

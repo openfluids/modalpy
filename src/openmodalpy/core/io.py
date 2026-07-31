@@ -407,7 +407,7 @@ class MATDataLoader(DataLoader):
     def supports_format(self, file_path: str) -> bool:
         return file_path.lower().endswith(".mat")
 
-    def load(self, file_path: str, preview_ns: int = None, **kwargs) -> Dict[str, Any]:
+    def load(self, file_path: str, preview_ns: int | None = None, **kwargs) -> Dict[str, Any]:
         """Load data from .mat file with flexible variable detection."""
         del kwargs
 
@@ -637,8 +637,8 @@ class DNamiDataLoader(DataLoader):
         for idx, path in enumerate(files, 1):
             logger.info("%s. %s (%s)", idx, os.path.basename(path), format_file_size(path))
 
-        q_blocks = []
-        time_blocks = []
+        q_blocks: list[np.ndarray] = []
+        time_blocks: list[np.ndarray] = []
         x = y = z = None
         available_fields = None
         preview_remaining = preview_ns
@@ -650,6 +650,8 @@ class DNamiDataLoader(DataLoader):
         y_stride = _validated_stride(reduction_cfg.get("y_stride", 1), "y")
         z_stride = _validated_stride(reduction_cfg.get("z_stride", 1), "z")
         time_offset = 0
+        nx = ny = nz = 0
+        actual_field: str | None = None
 
         for path in files:
             with np.load(path, allow_pickle=True) as npz:
@@ -675,9 +677,9 @@ class DNamiDataLoader(DataLoader):
                     raise KeyError(f"Time key '{time_key}' not found in {path}.")
                 times_raw = np.asarray(npz[time_key]).reshape(-1)
 
-                arr = np.asarray(arr)
-                arr, times, _ = _slice_block_in_time(
-                    arr,
+                arr_block = np.asarray(arr)
+                arr_sliced, times_sliced, _ = _slice_block_in_time(
+                    arr_block,
                     offset=time_offset,
                     time_start=time_start,
                     time_stop=time_stop,
@@ -685,8 +687,10 @@ class DNamiDataLoader(DataLoader):
                     times=times_raw,
                 )
                 time_offset += times_raw.shape[0]
-                if arr.shape[0] == 0:
+                if arr_sliced is None or times_sliced is None or arr_sliced.shape[0] == 0:
                     continue
+                arr = arr_sliced
+                times = times_sliced
 
                 if preview_remaining is not None:
                     if preview_remaining <= 0:
@@ -706,6 +710,11 @@ class DNamiDataLoader(DataLoader):
 
                 if preview_remaining == 0:
                     break
+
+        if x is None or y is None:
+            raise ValueError(f"No coordinate arrays resolved under {file_path}.")
+        if not q_blocks:
+            raise ValueError(f"No snapshot blocks resolved under {file_path}.")
 
         q = np.concatenate(q_blocks, axis=0)
         times = np.concatenate(time_blocks)
@@ -818,7 +827,7 @@ class DNamiDataLoader(DataLoader):
                 else:
                     times = None
 
-                arr, times, _ = _slice_block_in_time(
+                arr_sliced, times_sliced, _ = _slice_block_in_time(
                     np.asarray(arr),
                     offset=time_offset,
                     time_start=time_start,
@@ -827,8 +836,10 @@ class DNamiDataLoader(DataLoader):
                     times=times,
                 )
                 time_offset += original_block_len
-                if arr.shape[0] == 0:
+                if arr_sliced is None or arr_sliced.shape[0] == 0:
                     continue
+                arr = arr_sliced
+                times = times_sliced
 
                 if preview_remaining is not None:
                     if preview_remaining <= 0:
@@ -859,7 +870,7 @@ class DNamiDataLoader(DataLoader):
             )
 
         track_values = None
-        track_time_blocks = []
+        track_time_blocks: list[np.ndarray] = []
         if track_paths:
             track_offset = 0
             track_key = crop_cfg.get("x_start_key") or (track_cfg.get("x_start_key") if track_cfg else None)
@@ -882,7 +893,12 @@ class DNamiDataLoader(DataLoader):
                     else:
                         track_arr = None
 
-                    track_block_len = len(track_times) if track_times is not None else len(track_arr)
+                    if track_times is not None:
+                        track_block_len = len(track_times)
+                    elif track_arr is not None:
+                        track_block_len = len(track_arr)
+                    else:
+                        raise ValueError(f"Track file {path} has neither time key nor track field.")
                     _, track_times_sliced, track_arr_sliced = _slice_block_in_time(
                         None,
                         offset=track_offset,
@@ -1033,7 +1049,7 @@ class DataInterfaceManager:
             raise FileNotFoundError(f"Data file not found: {file_path}")
 
         if loader_type:
-            loader_map = {
+            loader_map: dict[str, type[MATDataLoader] | type[DNamiDataLoader]] = {
                 "mat": MATDataLoader,
                 "dnami": DNamiDataLoader,
                 "dnami_npz": DNamiDataLoader,

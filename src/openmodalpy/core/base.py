@@ -202,7 +202,9 @@ def _qhat_content_digest(q: np.ndarray) -> str:
     different arrays colliding.
     """
     arr = np.ascontiguousarray(q)
-    h = hashlib.blake2b(memoryview(arr).cast("B"), digest_size=16)
+    # ``arr.data`` is a memoryview onto the array's own buffer, so hashing it copies
+    # nothing. ``tobytes()`` would duplicate the whole snapshot matrix just to hash it.
+    h = hashlib.blake2b(arr.data.cast("B"), digest_size=16)
     h.update(str(arr.shape).encode())
     h.update(arr.dtype.str.encode())
     return h.hexdigest()
@@ -1320,6 +1322,8 @@ class BaseAnalyzer:
         """
         dt = self.data.get("dt") if self.data else None
         try:
+            if dt is None:
+                raise TypeError("dt is None")
             dt_f = float(dt)
         except (TypeError, ValueError):
             # Absent, None, or not a scalar (e.g. an array) — all the same failure
@@ -1379,7 +1383,10 @@ class BaseAnalyzer:
                 return np.asarray(t_arr[:n], dtype=float), "Time [s]"
 
         dt = data.get("dt")
+        dt_f: float | None
         try:
+            if dt is None:
+                raise TypeError("dt is None")
             dt_f = float(dt)
         except (TypeError, ValueError):
             dt_f = None
