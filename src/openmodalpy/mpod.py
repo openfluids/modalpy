@@ -199,4 +199,8 @@ class MPODAnalyzer(PODAnalyzer):
         self.mode_band_indices = band_ids[order][:keep]
         self.band_mode_counts = np.asarray(band_mode_counts, dtype=int)
 
+    def _perform_decomposition(self):
+        """mPOD one-call path: do not inherit POD's perform_pod dispatch."""
+        self.perform_mpod()
+
     # Reuse POD save/load/plot methods.

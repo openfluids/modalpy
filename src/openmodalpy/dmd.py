@@ -8,6 +8,7 @@ with Euclidean least squares. It does not currently apply the spatial metric
 """
 
 # Standard library imports
+import logging
 import os
 
 import h5py
@@ -19,6 +20,8 @@ import warnings
 from typing import Optional
 
 import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
 
 # Suppress contour warnings when no levels can be plotted
 warnings.filterwarnings("ignore", message="No contour levels were found within the data range.")
@@ -414,6 +417,13 @@ class DMDAnalyzer(BaseAnalyzer):
             datasets["z"] = self.data["z"]
         write_results(path, datasets, attrs=self._get_metadata())
         print(f"DMD results saved to {path}")
+
+    def run_analysis(self) -> None:
+        """One-call entry: load, compute DMD, save. No default plots."""
+        logger.info("Starting DMD analysis for %s", os.path.basename(self.file_path))
+        self.load_and_preprocess()
+        self.perform_dmd()
+        self.save_results()
 
     def load_results(self, filename=None):
         """Load DMD results from an HDF5 file."""

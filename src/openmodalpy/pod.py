@@ -1281,6 +1281,10 @@ class PODAnalyzer(BaseAnalyzer):
         print(f"Saving figure {plot_filename}")
         return is_pseudo_orthogonal
 
+    def _perform_decomposition(self):
+        """Run this analyzer's decomposition. Subclasses override (e.g. mPOD)."""
+        self.perform_pod()
+
     def run_analysis(
         self,
         plot_n_modes_spatial=4,
@@ -1301,8 +1305,8 @@ class PODAnalyzer(BaseAnalyzer):
         # compute_fft=False because POD is time-domain.
         super().run(compute_fft=False)
 
-        # Perform POD
-        self.perform_pod()
+        # Subclasses override _perform_decomposition (mPOD → perform_mpod).
+        self._perform_decomposition()
 
         # Identify correlated mode pairs only when plotting
 

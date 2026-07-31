@@ -166,6 +166,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so an isolated zero there means that cell contributes nothing.
 
 ### Fixed
+- mPOD's one-call path (`MPODAnalyzer.run_analysis`) used to run plain POD and
+  write those results into a file still named `..._mpod.hdf5`. The orchestrator
+  now dispatches through an overridable `_perform_decomposition` hook
+  (`perform_pod` for POD, `perform_mpod` for mPOD), and a test requires every
+  `PODAnalyzer` subclass to override it, so the next subclass cannot inherit the
+  parent's decomposition unnoticed. The CLI was unaffected: `commands.py`
+  already called `perform_mpod` by name. DMD also gains a minimal `run_analysis`
+  (load, compute, save; no plots).
 - BSMD with no FFT blocks loaded now says so — "no frequency bins are loaded" —
   instead of quoting a bound of `|p| <= -1`, and `perform_bsmd` raises
   `ValueError` on an empty `qhat` rather than printing a note and continuing
