@@ -15,8 +15,6 @@ from typing import Any, Union
 
 import h5py
 import numpy as np
-from fftkit import get_fft_func
-from scipy.signal import get_window
 from scipy.sparse.linalg import svds
 
 from openmodalpy.core.config import (
@@ -28,10 +26,11 @@ from openmodalpy.core.io import load_data as di_load_data
 from openmodalpy.core.io import load_jetles_data as di_load_jetles_data
 from openmodalpy.core.io import load_mat_data as di_load_mat_data
 
-# Welch helpers live in welch.py (single definition; no heavy deps) so base
+# Welch block FFT and helpers live in welch.py (single implementation) so base
 # remains importable when the parallel stack fails to load.
 from openmodalpy.core.threads import apply_blas_limit
-from openmodalpy.core.welch import _validate_welch_blocks, welch_nblocks
+from openmodalpy.core.welch import sine_window as sine_window  # re-export; body in welch.py
+from openmodalpy.core.welch import welch_nblocks, windowed_block_fft
 
 try:
     from openmodalpy.core.parallel import (
@@ -1018,11 +1017,6 @@ def calculate_uniform_weights(x, y, z=None):
     return np.ones((Nx * Ny * Nz, 1))
 
 
-def sine_window(n):
-    """Return a sine window of length n."""
-    return np.sin(np.pi * (np.arange(n) + 0.5) / n)
-
-
 def blocksfft(
     q,
     nfft,
@@ -1064,7 +1058,8 @@ def blocksfft(
     ---
     IMPORTANT:
     - This function assumes the FFT backend (numpy, scipy, pyfftw, etc.) does NOT normalize the FFT by default (which is true for standard backends).
-    - If you use a backend or option that applies normalization (e.g., norm='ortho'), REMOVE the division by nfft below to avoid double normalization.
+    - If you use a backend or option that applies normalization (e.g., norm='ortho'), REMOVE the
+      division by nfft in ``welch.windowed_block_fft`` to avoid double normalization.
     - SPOD callers pass ``dst`` into ``spod_function`` as a spectral weight. In this
       codebase ``dst`` is the Strouhal step (``St[1] - St[0] = df * L / U``), not
       the raw frequency resolution ``df = fs / nfft``. Reported SPOD eigenvalues
@@ -1074,8 +1069,6 @@ def blocksfft(
       ``ValueError`` rather than re-using trailing samples.
     ---
     """
-    _validate_welch_blocks(q.shape[0], nfft, nblocks, novlap)
-
     if use_parallel and PARALLEL_AVAILABLE:
         return blocksfft_optimized(
             q,
@@ -1088,52 +1081,16 @@ def blocksfft(
             window_type=window_type,
         )
 
-    # Select window function
-    if window_type == "sine":
-        window = sine_window(nfft)
-    else:
-        window = get_window(window_type, nfft, fftbins=True)
-
-    # Normalize window
-    if window_norm == "amplitude":
-        cw = 1.0 / window.mean()
-    else:  # 'power' normalization (default)
-        cw = 1.0 / np.sqrt(np.mean(window**2))
-
-    nmesh = q.shape[1]  # Number of spatial points (Nx * Ny)
-    n_freq_out = nfft // 2 + 1  # Number of frequency bins for one-sided spectrum
-    q_hat = np.zeros((n_freq_out, nmesh, nblocks), dtype=complex)
-    q_mean = np.mean(q, axis=0)
-    window_broadcast = window[:, np.newaxis]
-
-    # FFT blocks are processed sequentially to avoid oversubscribing the math libs.
-    fft_func = get_fft_func()
-    hop = nfft - novlap
-    for iblk in range(nblocks):
-        ts = iblk * hop
-        tf = np.arange(ts, ts + nfft)
-        block = q[tf, :]
-
-        # Subtract mean
-        if blockwise_mean:
-            block_mean = np.mean(block, axis=0)
-        else:
-            block_mean = q_mean
-        block_centered = block - block_mean
-
-        # Normalize variance if requested
-        if normvar:
-            block_var = np.var(block_centered, axis=0, ddof=1)
-            block_var[block_var < 4 * np.finfo(float).eps] = 1.0
-            block_centered = block_centered / block_var
-
-        # Apply window and FFT
-        full_fft_result = fft_func(block_centered * window_broadcast, axis=0)
-
-        # Store one-sided spectrum
-        q_hat[:, :, iblk] = (cw / nfft) * full_fft_result[:n_freq_out, :]
-
-    return q_hat
+    return windowed_block_fft(
+        q,
+        nfft,
+        nblocks,
+        novlap,
+        blockwise_mean=blockwise_mean,
+        normvar=normvar,
+        window_norm=window_norm,
+        window_type=window_type,
+    )
 
 
 def auto_detect_weight_type(file_path):

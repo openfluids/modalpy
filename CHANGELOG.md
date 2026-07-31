@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead.
 
 ### Changed
+- One windowed-block Welch FFT: `blocksfft` and `blocksfft_optimized` both
+  call `core/welch.py::windowed_block_fft`. Same numbers (the two copies were
+  already bit-identical); the loop, `get_window`, and `(cw / nfft)` scaling
+  live in one place. Analytical checks in `tests/test_welch_analytical.py`
+  pin power-norm Parseval, amplitude recovery, and a scipy.signal.welch
+  cross-check. Public signatures and the `use_parallel` branch are unchanged.
 - POD, mPOD and PSD-POD share one relative eigenvalue cutoff
   (`λ ≤ n_kernel·ε·λ_max`) on the correlation matrix, so rank-deficient input
   returns only honest unit-norm modes and the count is scale-invariant across

@@ -13,10 +13,9 @@ import logging
 import multiprocessing
 
 import numpy as np
-from scipy.signal import get_window
 from threadpoolctl import threadpool_info
 
-from openmodalpy.core.welch import _validate_welch_blocks
+from openmodalpy.core.welch import windowed_block_fft
 
 logger = logging.getLogger(__name__)
 
@@ -145,63 +144,19 @@ def blocksfft_optimized(
     Block starts are ``iblk * (nfft - novlap)`` with no end-of-record clamp.
     Callers must pass an ``nblocks`` that fits; oversize requests raise
     ``ValueError`` rather than re-using trailing samples.
+
+    Implementation is the shared loop in :func:`openmodalpy.core.welch.windowed_block_fft`.
     """
-    _validate_welch_blocks(q.shape[0], nfft, nblocks, novlap)
-
-    # Import FFT backend
-    from fftkit import get_fft_func
-
-    # Select window function — PERIODIC convention (get_window fftbins=True)
-    # so both FFT paths agree with Welch spectral estimation practice.
-    if window_type == "sine":
-        window = np.sin(np.pi * (np.arange(nfft) + 0.5) / nfft)
-    else:
-        window = get_window(window_type, nfft, fftbins=True)
-
-    # Normalize window
-    if window_norm == "amplitude":
-        cw = 1.0 / window.mean()
-    else:  # 'power' normalization (default)
-        cw = 1.0 / np.sqrt(np.mean(window**2))
-
-    nmesh = q.shape[1]  # Number of spatial points (Nx * Ny)
-    n_freq_out = nfft // 2 + 1  # Number of frequency bins for one-sided spectrum
-    q_hat = np.zeros((n_freq_out, nmesh, nblocks), dtype=complex)
-    q_mean = np.mean(q, axis=0)  # Temporal mean (long-time mean)
-    window_broadcast = window[:, np.newaxis]  # Reshape window for broadcasting
-
-    # Process each block with optimized memory access
-    fft_func = get_fft_func()
-    hop = nfft - novlap
-
-    for iblk in range(nblocks):
-        ts = iblk * hop  # no end-clamp: validated above that every block fits
-        tf = np.arange(ts, ts + nfft)  # Time indices for the block
-        block = q[tf, :]
-
-        # Subtract mean
-        if blockwise_mean:
-            block_mean = np.mean(block, axis=0)
-        else:
-            block_mean = q_mean
-        block_centered = block - block_mean
-
-        # Normalize variance if requested
-        if normvar:
-            block_var = np.var(block_centered, axis=0, ddof=1)
-            block_var[block_var < 4 * np.finfo(float).eps] = 1.0  # Avoid division by zero
-            block_centered = block_centered / block_var
-
-        # Apply window and FFT
-        windowed_block = block_centered * window_broadcast
-
-        # Compute full FFT (uses optimized BLAS/LAPACK routines)
-        full_fft_result = fft_func(windowed_block, axis=0)
-
-        # Store only the one-sided spectrum (first n_freq_out points)
-        q_hat[:, :, iblk] = (cw / nfft) * full_fft_result[:n_freq_out, :]
-
-    return q_hat
+    return windowed_block_fft(
+        q,
+        nfft,
+        nblocks,
+        novlap,
+        blockwise_mean=blockwise_mean,
+        normvar=normvar,
+        window_norm=window_norm,
+        window_type=window_type,
+    )
 
 
 def spod_single_frequency_optimized(qhat, w, nblocks, dst, num_modes=None, return_psi=False):
