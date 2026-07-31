@@ -9,6 +9,7 @@ contract regardless of archive layout.
 from __future__ import annotations
 
 import glob
+import logging
 import os
 import re
 from abc import ABC, abstractmethod
@@ -18,6 +19,8 @@ from typing import Any, Dict, Optional
 
 import h5py
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DNAMI_SCHEMA: dict[str, Any] = {
     "layout": "consolidated_npz",
@@ -409,7 +412,7 @@ class MATDataLoader(DataLoader):
         del kwargs
 
         file_size = format_file_size(file_path)
-        print(f"📂 Loading .mat data from {file_path} ({file_size})")
+        logger.info("Loading .mat data from %s (%s)", file_path, file_size)
 
         with h5py.File(file_path, "r") as fread:
             var_name = None
@@ -448,7 +451,7 @@ class MATDataLoader(DataLoader):
                             q = dataset[tuple(index)]
                     else:
                         q = dataset[:]
-                    print(f"   Found data variable: '{var}'")
+                    logger.info("Found data variable: '%s'", var)
                     break
             else:
                 q = None
@@ -466,7 +469,7 @@ class MATDataLoader(DataLoader):
                 # Leave absent so BaseAnalyzer._require_dt() raises rather than
                 # silently rescaling every growth rate / band edge.
                 dt = None
-                print(f"   Warning: No 'dt' found in {file_path!r}; dt left unset")
+                logger.warning("No 'dt' found in %r; dt left unset", file_path)
 
         if q.ndim == 2 and expected_nspace > 1:
             nx = len(x_vec) if x_vec is not None else q.shape[1]
@@ -520,7 +523,14 @@ class MATDataLoader(DataLoader):
 
         ns = q_reshaped.shape[0]
 
-        print(f"   Processed shape: q={q_reshaped.shape}, Nx={nx}, Ny={ny}, Nz={nz}, Ns={ns}")
+        logger.info(
+            "Processed shape: q=%s, Nx=%s, Ny=%s, Nz=%s, Ns=%s",
+            q_reshaped.shape,
+            nx,
+            ny,
+            nz,
+            ns,
+        )
         return {
             "q": q_reshaped,
             "x": x_vec,
@@ -623,9 +633,9 @@ class DNamiDataLoader(DataLoader):
         coords_cfg = schema["coordinates"]
         snapshot_cfg = schema["snapshot"]
 
-        print("📂 Loading dNami consolidated npz files:")
+        logger.info("Loading dNami consolidated npz files:")
         for idx, path in enumerate(files, 1):
-            print(f"   {idx}. {os.path.basename(path)} ({format_file_size(path)})")
+            logger.info("%s. %s (%s)", idx, os.path.basename(path), format_file_size(path))
 
         q_blocks = []
         time_blocks = []
@@ -702,7 +712,16 @@ class DNamiDataLoader(DataLoader):
         ns = q.shape[0]
         dt = _infer_dt_from_times(times)
 
-        print(f"   Processed shape: q={q.shape}, Nx={nx}, Ny={ny}, Nz={nz}, Ns={ns}, dt={dt}, field={actual_field}")
+        logger.info(
+            "Processed shape: q=%s, Nx=%s, Ny=%s, Nz=%s, Ns=%s, dt=%s, field=%s",
+            q.shape,
+            nx,
+            ny,
+            nz,
+            ns,
+            dt,
+            actual_field,
+        )
         return {
             "q": q,
             "x": _coerce_coordinate(x[::x_stride], nx, "x", files[0]),
@@ -988,9 +1007,16 @@ class DNamiDataLoader(DataLoader):
                 )
             data[name] = np.asarray(value).squeeze().item() if np.asarray(value).size == 1 else np.asarray(value)
 
-        print(
-            f"📂 Loading dNami split dataset from {dataset_root}: "
-            f"q={q.shape}, Nx={nx}, Ny={ny}, Nz={nz}, Ns={ns}, dt={dt}, field={actual_field}"
+        logger.info(
+            "Loading dNami split dataset from %s: q=%s, Nx=%s, Ny=%s, Nz=%s, Ns=%s, dt=%s, field=%s",
+            dataset_root,
+            q.shape,
+            nx,
+            ny,
+            nz,
+            ns,
+            dt,
+            actual_field,
         )
         return data
 

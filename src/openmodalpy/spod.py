@@ -285,6 +285,10 @@ class SPODAnalyzer(BaseAnalyzer):
 
         The actual computation is delegated to the `spod_function` imported from `utils.py`.
 
+        Raises:
+            RuntimeError: If FFT blocks have not been computed yet. Call
+                ``compute_fft_blocks()`` or ``run(compute_fft=True)`` first.
+
         Attributes set:
             eigenvalues (np.ndarray): SPOD eigenvalues.
             modes (np.ndarray): SPOD spatial modes.
@@ -292,8 +296,9 @@ class SPODAnalyzer(BaseAnalyzer):
         """
         # Make sure qhat has been computed
         if self.qhat is None or self.qhat.size == 0:
-            print("Error: qhat not computed. Call super().run(compute_fft=True) first.")
-            return
+            raise RuntimeError(
+                "qhat not computed. Call compute_fft_blocks() or run(compute_fft=True) first."
+            )
 
         start_time = time.time()
 

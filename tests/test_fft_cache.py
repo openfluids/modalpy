@@ -9,6 +9,8 @@ from a different dataset. Each test below documents (in its docstring) the
 failure mode it would have hit against the pre-fix code.
 """
 
+import logging
+
 import h5py
 import numpy as np
 
@@ -101,7 +103,7 @@ def test_different_q_arrays_do_not_share_cache(tmp_path):
     assert not np.allclose(analyzer2.qhat, analyzer1.qhat)
 
 
-def test_stamp_mismatch_recomputes_without_raising(tmp_path, capsys):
+def test_stamp_mismatch_recomputes_without_raising(tmp_path, caplog):
     """A cache file whose stamped parameters disagree with the current
     analyzer must be rejected (recomputed), never raise, and never silently
     serve the mismatched blocks.
@@ -121,11 +123,15 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, capsys):
     with h5py.File(cache_file, "a") as f:
         f.attrs["_fftcache_window_type"] = "hann"
 
-    analyzer2 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
-    captured = capsys.readouterr()
+    # The mismatch notice moved from stdout to the module logger; assert on the
+    # record so the check keeps its strength (message AND level), not just its text.
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        analyzer2 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
 
     assert not analyzer2.qhat_cached
-    assert "FFT cache stamp mismatch" in captured.out
+    mismatch = [r for r in caplog.records if "FFT cache stamp mismatch" in r.getMessage()]
+    assert mismatch, f"no stamp-mismatch warning logged; saw {[r.getMessage() for r in caplog.records]}"
+    assert mismatch[0].levelno == logging.WARNING
 
     # The recomputed result must be correct (hamming), not the corrupted stamp's hann.
     novlap = 0

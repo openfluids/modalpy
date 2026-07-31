@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AnalysisResults.provenance` exposes it with the prefix stripped.
 
 ### Breaking
+- `perform_spod()` now raises `RuntimeError` when FFT blocks (`qhat`) have not
+  been computed. It previously printed one error line and returned `None`, so
+  callers could continue as if an analysis had run. Call `compute_fft_blocks()`
+  or `run(compute_fft=True)` first.
 - Removed the unused `n_threads` parameter from `BaseAnalyzer`, `SPODAnalyzer`,
   and `blocksfft`. It never affected FFT or BLAS work; use the BLAS thread
   policy above for pool control.

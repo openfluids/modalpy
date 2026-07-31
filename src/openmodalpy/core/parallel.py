@@ -9,6 +9,7 @@ functions run on any standard Python installation.
 Author: Modal Decomposition Team
 """
 
+import logging
 import multiprocessing
 
 import numpy as np
@@ -16,6 +17,8 @@ from scipy.signal import get_window
 from threadpoolctl import threadpool_info
 
 from openmodalpy.core.welch import _validate_welch_blocks
+
+logger = logging.getLogger(__name__)
 
 # OpenMP support was removed. All routines rely on NumPy vectorization and the
 # underlying BLAS implementation.
@@ -262,16 +265,16 @@ def get_threadpool_summary():
 
 
 def print_optimization_status():
-    """Print current optimization status."""
+    """Log current optimization status."""
     info = get_optimization_info()
 
-    print("🔧 Optimization Status:")
-    print(f"   Parallel Available: {info['parallel_available']}")
-    print(f"   CPU Cores: {info['cpu_count']}")
-    print(f"   NumPy BLAS: {info['numpy_blas']}")
-    print(f"   Thread pools: {get_threadpool_summary()}")
+    logger.info("Optimization Status:")
+    logger.info("Parallel Available: %s", info["parallel_available"])
+    logger.info("CPU Cores: %s", info["cpu_count"])
+    logger.info("NumPy BLAS: %s", info["numpy_blas"])
+    logger.info("Thread pools: %s", get_threadpool_summary())
 
     if info["parallel_available"]:
-        print("   ⚡ High performance mode (vectorized)")
+        logger.info("High performance mode (vectorized)")
     else:
-        print("   📊 Standard performance mode")
+        logger.info("Standard performance mode")

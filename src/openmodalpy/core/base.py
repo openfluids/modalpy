@@ -7,6 +7,7 @@ All imports are centralized here to keep the code clean and consistent.
 
 import glob
 import hashlib
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -42,6 +43,8 @@ try:
     )
 except ImportError:
     PARALLEL_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 def compute_reduced_svd(X: np.ndarray, rank: int, v0_seed: int = 0):
@@ -247,7 +250,7 @@ def _verify_qhat_stamp(h5file, analyzer, q: np.ndarray) -> bool:
     for key, exp_value in expected.items():
         attr_name = f"{_QHAT_STAMP_ATTR_PREFIX}{key}"
         if attr_name not in h5file.attrs:
-            print(f"FFT cache stamp missing '{key}' (older cache file) — recomputing FFT blocks.")
+            logger.warning("FFT cache stamp missing '%s' (older cache file) — recomputing FFT blocks.", key)
             return False
         actual = h5file.attrs[attr_name]
         if isinstance(exp_value, bool):
@@ -259,8 +262,11 @@ def _verify_qhat_stamp(h5file, analyzer, q: np.ndarray) -> bool:
         else:
             actual = str(actual)
         if actual != exp_value:
-            print(
-                f"FFT cache stamp mismatch on '{key}': cached={actual!r} != current={exp_value!r} — recomputing FFT blocks."
+            logger.warning(
+                "FFT cache stamp mismatch on '%s': cached=%r != current=%r — recomputing FFT blocks.",
+                key,
+                actual,
+                exp_value,
             )
             return False
     return True
@@ -290,10 +296,10 @@ def _hdf5_write_mode(path: str) -> str:
 
 
 def print_summary(analysis: str, results_dir: str, figures_dir: str) -> None:
-    """Print a short summary of where results and figures were saved."""
-    print(f"✅ {analysis} analysis finished!")
-    print(f"📁 Results: {results_dir}")
-    print(f"📊 Figures: {figures_dir}")
+    """Log a short summary of where results and figures were saved."""
+    logger.info("%s analysis finished", analysis)
+    logger.info("Results: %s", results_dir)
+    logger.info("Figures: %s", figures_dir)
 
 
 def compute_aspect_ratio(x_coords, y_coords):
@@ -671,7 +677,7 @@ def plot_orthogonal_slices_3d(
 
     plotter.screenshot(output_path)
     plotter.close()
-    print(f"Saving figure {output_path}")
+    logger.info("Saving figure %s", output_path)
 
 
 def plot_isometric_slices_3d(
@@ -807,7 +813,7 @@ def plot_isometric_slices_3d(
     plotter.camera.clipping_range = (1e-3, 50.0 * max_span)
     plotter.screenshot(output_path)
     plotter.close()
-    print(f"Saving figure {output_path}")
+    logger.info("Saving figure %s", output_path)
 
 
 def plot_modes_3d(
@@ -1312,10 +1318,10 @@ class BaseAnalyzer:
         # Calculate spatial weights
         if self.spatial_weight_type == "polar":
             self.W = calculate_polar_weights(self.data["x"], self.data["y"], use_parallel=self.use_parallel)
-            print("Using polar (cylindrical) spatial weights.")
+            logger.info("Using polar (cylindrical) spatial weights.")
         else:
             self.W = calculate_uniform_weights(self.data["x"], self.data["y"], self.data.get("z"))
-            print("Using uniform spatial weights (rectangular grid).")
+            logger.info("Using uniform spatial weights (rectangular grid).")
 
         # Welch floor partitioning (scipy.signal.welch): drop the remainder so
         # every block is an independent ensemble member. Ceil + end-clamp re-uses
@@ -1334,10 +1340,19 @@ class BaseAnalyzer:
         # just checked. self.data["dt"] is deliberately left as the loader set it.
         self.fs = 1 / self._require_dt()
 
-        print(f"Data loaded: {self.data['Ns']} snapshots, {self.data['Nx']}×{self.data['Ny']} spatial points")
+        logger.info(
+            "Data loaded: %s snapshots, %s×%s spatial points",
+            self.data["Ns"],
+            self.data["Nx"],
+            self.data["Ny"],
+        )
         if self.nfft > 1:
-            print(
-                f"FFT parameters: {self.nfft} points, {self.overlap * 100}% overlap, {self.nblocks} blocks [backend: {FFT_BACKEND}]"
+            logger.info(
+                "FFT parameters: %s points, %s%% overlap, %s blocks [backend: %s]",
+                self.nfft,
+                self.overlap * 100,
+                self.nblocks,
+                FFT_BACKEND,
             )
 
     def _require_dt(self) -> float:
@@ -1422,7 +1437,12 @@ class BaseAnalyzer:
             raise ValueError("Data not loaded. Call load_and_preprocess() first.")
 
         pools = get_threadpool_summary()
-        print(f"Computing FFT with {self.nblocks} blocks on {FFT_BACKEND} backend [pools: {pools}]")
+        logger.info(
+            "Computing FFT with %s blocks on %s backend [pools: %s]",
+            self.nblocks,
+            FFT_BACKEND,
+            pools,
+        )
         self.qhat = blocksfft(
             self.data["q"],
             self.nfft,
@@ -1434,7 +1454,7 @@ class BaseAnalyzer:
             window_type=getattr(self, "window_type", "hamming"),
             use_parallel=self.use_parallel,
         )
-        print("FFT computation complete.")
+        logger.info("FFT computation complete.")
 
     def save_results(self, filename: str | None = None) -> None:
         """Save results to HDF5 file with harmonized filename and format.
@@ -1454,7 +1474,7 @@ class BaseAnalyzer:
                 getattr(self, "analysis_type", "spod"),
             )
         save_path = os.path.join(self.results_dir, filename)
-        print(f"Saving results to {save_path}")
+        logger.info("Saving results to %s", save_path)
         # Placeholder — subclasses write their full payload through write_results.
         write_results(
             save_path,
@@ -1483,7 +1503,7 @@ class BaseAnalyzer:
             self.compute_fft_blocks()
 
         end_time = time.time()
-        print(f"Completed in {end_time - start_time:.2f} seconds.")
+        logger.info("Completed in %.2f seconds.", end_time - start_time)
 
         return self
 

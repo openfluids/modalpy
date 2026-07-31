@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,25 @@ from openmodalpy.commands import (
     print_results_summary,
     run_from_config,
 )
+
+
+def _configure_cli_logging() -> None:
+    """Install a single INFO handler so library log lines reach the terminal.
+
+    The library itself never configures logging; only this CLI entry point does.
+    Message-only format keeps CLI output free of level/name decoration.
+
+    The handler goes on the ``openmodalpy`` logger, not the root logger, so the
+    CLI shows this package's own progress lines and does not start relaying INFO
+    records from matplotlib, h5py or any other dependency.
+    """
+    pkg_logger = logging.getLogger("openmodalpy")
+    if pkg_logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    pkg_logger.addHandler(handler)
+    pkg_logger.setLevel(logging.INFO)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -156,6 +176,7 @@ def _print_examples_list() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point used by both the console script and ``python -m openmodalpy``."""
+    _configure_cli_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
 
