@@ -20,9 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # Shared helpers live next to the comparison test (one definition for both).
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from tests.reference_helpers import compute_reference_spectra  # noqa: E402
-
 from openmodalpy.example_data import GENERATORS  # noqa: E402
+from tests.reference_helpers import compute_reference_spectra  # noqa: E402
 
 OUT_DIR = ROOT / "tests" / "fixtures" / "reference"
 
@@ -35,10 +34,30 @@ GENERATOR_PARAMS: dict[str, dict[str, Any]] = {
     "cylinder_wake": {"Nx": 32, "Ny": 16, "Nt": 80, "seed": 42},
 }
 
-N_MODES = 10
-# Measured in-process run-to-run relative spread on this machine: 0.0 for all
-# three generators (single-thread BLAS default). rtol=1e-6 is a large margin
-# above that and still far below the 1 % gate-step-4 probe.
+# Rank is per generator, set by conditioning rather than by taste.
+#
+# Exact DMD forms Atilde = (u^H X2 v) / s, so it DIVIDES by the kept singular
+# values. Keeping a mode with s_r/s_0 = q amplifies machine round-off by 1/q,
+# giving an eigenvalue error of about eps/q. A fixture may only assert to rtol
+# if that amplified error stays below it:
+#
+#     eps / (s_r/s_0)  <  rtol          (eps = 2.2e-16)
+#
+# double_gyre decays fastest: s[9]/s[0] = 1.9e-12, so rank 10 implies an error
+# near 1e-4 -- a hundred times looser than rtol=1e-6. That is why the fixture
+# reproduced perfectly on the machine that wrote it and failed on every CI
+# platform: the arithmetic is not reproducible there at 1e-6, and the recorded
+# values were partly round-off. Rank 8 keeps s[7]/s[0] = 4.2e-9, implying 5.2e-8
+# and leaving rtol=1e-6 honest.
+#
+# The other two generators decay slowly enough that rank 10 already satisfies
+# the same inequality, so they are unchanged.
+N_MODES_BY_GENERATOR: dict[str, int] = {
+    "double_gyre": 8,
+    "taylor_green": 10,
+    "cylinder_wake": 10,
+}
+N_MODES = 10  # default for a generator not listed above
 RTOL = 1e-6
 ATOL = 1e-12
 
@@ -80,7 +99,7 @@ def main() -> int:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, params in GENERATOR_PARAMS.items():
-        doc = compute_reference(name, params, n_modes=N_MODES)
+        doc = compute_reference(name, params, n_modes=N_MODES_BY_GENERATOR.get(name, N_MODES))
         out = OUT_DIR / f"{name}.json"
         write_fixture(doc, out)
         print(f"wrote {out.relative_to(ROOT)}")
