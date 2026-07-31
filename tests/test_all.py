@@ -198,17 +198,29 @@ def test_dmd(tmp_path):
     with pytest.warns(RuntimeWarning, match="effective rank"):
         analyzer.perform_dmd()
 
-    # Should have eigenvalue near unit circle
-    eigvals = analyzer.eigenvalues
-    magnitudes = np.abs(eigvals)
-    unit_circle = np.any(np.abs(magnitudes - 1.0) < 0.1)
-    assert unit_circle, f"Oscillation on unit circle: magnitudes={magnitudes[:3]}"
+    # Pick the dominant mode by modal amplitude, explicitly. DMD returns modes
+    # ordered by |lambda| descending (dmd.py sets mode_ranking
+    # "abs_lambda_desc"), i.e. least-damped first — NOT by amplitude. Here
+    # several modes sit at |lambda| ~ 1, so index 0 would be a tie-break rather
+    # than a statement about which mode carries the signal.
+    dom = int(np.argmax(analyzer.amplitudes))
 
-    # Check frequency recovery
-    angles = np.angle(eigvals)
-    recovered_freq = np.abs(angles) / (2 * np.pi * dt)
-    freq_match = np.any(np.abs(recovered_freq - 1.0) < 0.2)  # 1 Hz
-    assert freq_match, f"Oscillation frequency recovery: frequencies={recovered_freq[:3]}"
+    # Pure undamped oscillation, so the dominant mode sits on the unit circle.
+    # Measured |lambda| - 1 is ~1e-15; the bound sits far above that (room for
+    # BLAS variation) and far below the 5% radial push used to test it.
+    dom_mag = abs(analyzer.eigenvalues[dom])
+    mag_err = abs(dom_mag - 1.0)
+    assert mag_err < 1e-6, f"Oscillation on unit circle: |λ|={dom_mag:.9f}, error={mag_err:.3e}"
+
+    # Dominant-mode frequency recovery. Resolution df = 1/(Ns*dt) = 0.1 Hz;
+    # allow 0.5*df so a 0.05 rad eigenvalue rotation (~0.08 Hz) is caught.
+    df_osc = 1.0 / (Ns_osc * dt)
+    dom_freq = abs(np.angle(analyzer.eigenvalues[dom])) / (2 * np.pi * dt)
+    freq_err = abs(dom_freq - 1.0)
+    assert freq_err < 0.5 * df_osc, (
+        f"Oscillation frequency recovery: expected=1.0 Hz, got={dom_freq:.4f} Hz, "
+        f"error={freq_err:.4f} Hz (0.5*df={0.5 * df_osc:.4f} Hz)"
+    )
 
     # --- Test 3: Decaying oscillation ---
     # q(t) = e^{-αt} * cos(ωt)
@@ -417,12 +429,17 @@ def test_spod(tmp_path):
     spod_psd = analyzer.eigenvalues[:, 0]
     spod_freqs = analyzer.freq
 
-    # Check that SPOD finds the primary tone (f1=5Hz is dominant)
+    # Dominant tone is f1=5 Hz (source amplitude 1.0 vs 0.5 at f2=15 Hz).
+    # Frequency resolution is the SPOD bin spacing of analyzer.freq.
     peak_idx = np.argmax(spod_psd)
-    peak_freq = spod_freqs[peak_idx]
-    # Should find one of the tones (5Hz or 15Hz)
-    found_tone = abs(peak_freq - f1) < 2.0 or abs(peak_freq - f2) < 2.0
-    assert found_tone, f"SPOD finds tonal peak: expected ~{f1}Hz or ~{f2}Hz, got {peak_freq:.1f}Hz"
+    peak_freq = float(spod_freqs[peak_idx])
+    df_spod = float(np.median(np.diff(np.asarray(spod_freqs, dtype=float))))
+    # Allow 1*df (~0.195 Hz); measured peak sits ~0.4*df from f1.
+    tonal_err = abs(peak_freq - f1)
+    assert tonal_err < 1.0 * df_spod, (
+        f"SPOD finds tonal peak: expected ~{f1} Hz (dominant), got {peak_freq:.4f} Hz, "
+        f"error={tonal_err:.4f} Hz (df={df_spod:.4f} Hz)"
+    )
 
 
 # =============================================================================
@@ -595,7 +612,8 @@ def test_heavy(tmp_path):
 
     # First 2-4 modes should capture >90% energy (vortex shedding is coherent)
     cumulative_energy = np.cumsum(pod.eigenvalues) / np.sum(pod.eigenvalues)
-    energy_4modes = cumulative_energy[3] if len(cumulative_energy) > 3 else cumulative_energy[-1]
+    assert len(cumulative_energy) > 3, f"Cylinder POD: need ≥4 modes for energy check, got {len(cumulative_energy)}"
+    energy_4modes = cumulative_energy[3]
     assert energy_4modes > 0.80, f"Cylinder POD: 4 modes >80% energy, got {energy_4modes * 100:.1f}%"
 
     # DMD test - should find shedding frequency
@@ -604,13 +622,36 @@ def test_heavy(tmp_path):
     dmd.load_and_preprocess()
     dmd.perform_dmd()
 
-    # Check if DMD finds the shedding frequency
-    angles = np.angle(dmd.eigenvalues)
-    dmd_freqs = np.abs(angles) / (2 * np.pi * dt)
-    freq_error = np.min(np.abs(dmd_freqs - f_shed))
-    closest_freq = dmd_freqs[np.argmin(np.abs(dmd_freqs - f_shed))]
-    assert freq_error < 0.1, (
-        f"Cylinder DMD: finds shedding freq, St={St}, f_shed={f_shed:.3f}, closest DMD freq={closest_freq:.3f}"
+    # Dominant nonzero-frequency mode, chosen by modal amplitude. DMD orders
+    # modes by |lambda| descending, not by amplitude (dmd.py mode_ranking
+    # "abs_lambda_desc"), and the fundamental and its harmonic both sit at
+    # |lambda| ~ 1 here — so pick the tone that actually carries the energy
+    # rather than whichever near-unit-circle mode happens to sort first.
+    # Exclude the zero-frequency mean/drift mode explicitly — it is not a tone.
+    #
+    # Expect the tone the field ACTUALLY contains, which is not f_shed. The
+    # vortices above are written as sin(k_x * (X - U_conv * t)) with
+    # k_x = 2*pi*St, so their temporal frequency is St*U_conv, not St*U/D: the
+    # pattern is convected at U_conv = 0.8*U. Asserting against f_shed instead
+    # would build a 0.0334 Hz (2.7 bin) physics error into the expected value
+    # and force a bound loose enough to hide it.
+    #
+    # Resolution df = 1/(Ns*dt) = 0.0125 Hz. Measured error against the
+    # convected tone is < 1e-4 Hz (DMD returns 0.13360 vs 0.13360 exactly), so
+    # half a bin is a genuine accuracy bar and still catches a 0.05 rad
+    # eigenvalue rotation (a 0.08 Hz shift, ~6 bins).
+    df_cyl = 1.0 / (Ns * dt)
+    f_tone = St * U_conv  # convected shedding tone present in the data
+    dmd_freqs = np.abs(np.angle(dmd.eigenvalues)) / (2 * np.pi * dt)
+    nonzero = np.where(dmd_freqs > df_cyl)[0]
+    assert len(nonzero) > 0, "Cylinder DMD: no nonzero-frequency modes"
+    dom_nz_idx = int(nonzero[np.argmax(dmd.amplitudes[nonzero])])
+    dom_freq = float(dmd_freqs[dom_nz_idx])
+    freq_error = abs(dom_freq - f_tone)
+    assert freq_error < 0.5 * df_cyl, (
+        f"Cylinder DMD: finds shedding freq, St={St}, f_shed={f_shed:.3f}, "
+        f"convected tone={f_tone:.4f}, dominant nonzero DMD freq={dom_freq:.4f}, "
+        f"error={freq_error:.5f} Hz (0.5*df={0.5 * df_cyl:.5f} Hz)"
     )
 
     # --- Test 2: Ginzburg-Landau Equation ---
