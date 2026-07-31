@@ -48,6 +48,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead.
 
 ### Changed
+- Analytic reference fixtures under `tests/fixtures/reference/` now use the
+  grids from the packaged example configs (`src/openmodalpy/examples/*.jsonc`):
+  double_gyre 80×40/Nt=200, taylor_green 64×64/Nt=100, cylinder_wake
+  100×50/Nt=500 (was 24×12/40, 24×24/40, 32×16/80). Spectrum values move with
+  the grids; ranks and tolerances are unchanged. The regen script and drift
+  test both read those grids via `openmodalpy.config_io.load_jsonc` (single
+  source; the full generation contract including `seed` is pinned). A set-
+  equality test requires every generator to have a fixture.
+
 - One windowed-block Welch FFT: `blocksfft` and `blocksfft_optimized` both
   call `core/welch.py::windowed_block_fft`. Same numbers (the two copies were
   already bit-identical); the loop, `get_window`, and `(cw / nfft)` scaling

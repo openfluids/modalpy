@@ -4,16 +4,16 @@
     1.0
   ],
   "dmd_abs_lambda": [
-    0.9259610786423156
+    0.9701515036966305
   ],
   "dmd_phase": [
     0.0
   ],
   "energy_captured_fraction": 1.0,
   "generator_params": {
-    "Nx": 24,
-    "Ny": 24,
-    "Nt": 40
+    "Nx": 64,
+    "Ny": 64,
+    "Nt": 100
   },
   "n_modes": 10,
   "rtol": 1e-06,

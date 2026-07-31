@@ -1,8 +1,8 @@
 """Recompute analytic generator spectra and compare to committed fixtures.
 
 Each fixture under ``tests/fixtures/reference/`` records POD energy fractions
-and DMD |λ|/phase for a fixed small grid, with ``rtol``/``atol`` stored in the
-file. Tolerances are never hard-coded in this test.
+and DMD |λ|/phase on the packaged example grids, with ``rtol``/``atol`` stored
+in the file. Tolerances are never hard-coded in this test.
 
 Shared spectrum definition: ``tests/reference_helpers.py`` (also used by regen).
 """
@@ -15,12 +15,22 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from openmodalpy.config_io import load_jsonc
+from openmodalpy.example_data import GENERATORS
 from tests.reference_helpers import (
     canonicalize_dmd_eigenvalues,
     compute_reference_spectra,
 )
 
 FIX_DIR = Path(__file__).resolve().parent / "fixtures" / "reference"
+# Packaged configs ship in the wheel; they are the source of truth for grids.
+PACKAGED_EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "src" / "openmodalpy" / "examples"
+
+# Non-config extras that fixtures record. seed is the cylinder_wake generator
+# default; the packaged config has no seed field.
+_FIXTURE_EXTRAS: dict[str, dict] = {
+    "cylinder_wake": {"seed": 42},
+}
 
 
 def _fixture_paths() -> list[Path]:
@@ -160,4 +170,50 @@ def test_taylor_green_dmd_abs_lambda_matches_closed_form_dmd_eigenvalue():
         rtol=rtol,
         atol=atol,
         err_msg="fixture dmd_abs_lambda[0] vs metadata dmd_eigenvalue",
+    )
+
+
+def _expected_generator_params(generator: str) -> dict:
+    """Full generation contract: packaged data.params plus fixture extras (seed)."""
+    path = PACKAGED_EXAMPLES_DIR / f"{generator}.jsonc"
+    if not path.is_file():
+        raise FileNotFoundError(f"no packaged config at {path}")
+    doc = load_jsonc(path)
+    case = doc.get("case", doc)
+    params = dict(case.get("data", {}).get("params", {}))
+    params.update(_FIXTURE_EXTRAS.get(generator, {}))
+    return params
+
+
+def test_fixture_set_equals_generator_set():
+    """Every built-in generator must have a fixture; deleting one must fail."""
+    fixtures = {p.stem for p in FIX_DIR.glob("*.json")}
+    assert fixtures == set(GENERATORS), f"fixture set {sorted(fixtures)} != generator set {sorted(GENERATORS)}"
+
+
+@pytest.mark.parametrize("path", _fixture_paths(), ids=lambda p: p.stem)
+def test_fixture_generator_params_match_packaged_example_config(path: Path):
+    """Fixture generation contract must match packaged configs (+ seed extras).
+
+    Pins how the DATA is generated — Nx/Ny/Nt and seed — so the fixture and the
+    shipped example cannot describe different fields. If either side moves
+    alone, this test fails.
+
+    It does not pin how the data is ANALYSED. The packaged configs set
+    ``rank: 10`` while ``double_gyre``'s fixture uses ``n_modes: 8``, because
+    rank 10 is not honest at ``rtol=1e-6`` under the conditioning bound in
+    ``scripts/regen_reference_fixtures.py``. So a shipped-config run and this
+    fixture agree on the input and can still differ in the DMD spectrum length.
+    """
+    with path.open(encoding="utf-8") as fh:
+        doc = json.load(fh)
+    name = doc["generator"]
+    assert name == path.stem, f"{path.name}: generator field {name!r} != stem"
+
+    got = doc["generator_params"]
+    want = _expected_generator_params(name)
+    assert got == want, (
+        f"{path.name}: fixture generator_params {got} does not match "
+        f"packaged generation contract {want} under "
+        f"src/openmodalpy/examples/{name}.jsonc"
     )

@@ -2,7 +2,8 @@
 """Regenerate committed analytic reference fixtures under tests/fixtures/reference/.
 
 No CLI flags (project convention). Writes one JSON file per built-in generator
-with the POD energy-fraction spectrum and DMD |λ|/phase on a small fixed grid.
+with the POD energy-fraction spectrum and DMD |λ|/phase on the grid the packaged
+example config for that generator runs.
 Byte-identical on a clean checkout for a fixed environment (single-thread BLAS).
 
 Not shipped in the wheel — developers only:
@@ -20,19 +21,38 @@ ROOT = Path(__file__).resolve().parents[1]
 # Shared helpers live next to the comparison test (one definition for both).
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from openmodalpy.config_io import load_jsonc  # noqa: E402
 from openmodalpy.example_data import GENERATORS  # noqa: E402
 from tests.reference_helpers import compute_reference_spectra  # noqa: E402
 
 OUT_DIR = ROOT / "tests" / "fixtures" / "reference"
+PACKAGED_EXAMPLES_DIR = ROOT / "src" / "openmodalpy" / "examples"
 
-# Small grids: fast, stable, enough structure for a meaningful spectrum.
-# Seed for cylinder_wake is the generator default (42); fixed here so the
-# fixture records the full generation contract.
-GENERATOR_PARAMS: dict[str, dict[str, Any]] = {
-    "double_gyre": {"Nx": 24, "Ny": 12, "Nt": 40},
-    "taylor_green": {"Nx": 24, "Ny": 24, "Nt": 40},
-    "cylinder_wake": {"Nx": 32, "Ny": 16, "Nt": 80, "seed": 42},
+# Names which generators have fixtures. Non-config extras (seed) live here;
+# grids (Nx/Ny/Nt) are read from the packaged example configs — single source.
+# The packaged cylinder_wake.jsonc has no explicit seed field; 42 is the
+# generator default, fixed so the fixture records the full generation contract.
+_GENERATOR_EXTRAS: dict[str, dict[str, Any]] = {
+    "double_gyre": {},
+    "taylor_green": {},
+    "cylinder_wake": {"seed": 42},
 }
+
+
+def _params_from_packaged(generator: str) -> dict[str, Any]:
+    """Build generator_params: packaged data.params plus any non-config extras."""
+    path = PACKAGED_EXAMPLES_DIR / f"{generator}.jsonc"
+    if not path.is_file():
+        raise FileNotFoundError(f"no packaged config at {path}")
+    doc = load_jsonc(path)
+    case = doc.get("case", doc)
+    params = dict(case.get("data", {}).get("params", {}))
+    params.update(_GENERATOR_EXTRAS.get(generator, {}))
+    return params
+
+
+# Populated at import from the packaged configs (gate and regen both read this).
+GENERATOR_PARAMS: dict[str, dict[str, Any]] = {name: _params_from_packaged(name) for name in _GENERATOR_EXTRAS}
 
 # Rank is per generator, set by conditioning rather than by taste.
 #
