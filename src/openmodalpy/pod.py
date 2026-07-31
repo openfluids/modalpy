@@ -15,7 +15,7 @@ Reference codes:
 # Standard library imports
 import os
 import time
-from typing import Optional
+from typing import Literal, Optional
 
 import h5py
 import matplotlib
@@ -134,18 +134,28 @@ class PODAnalyzer(BaseAnalyzer):
         # Update the analysis type for filenames
         self.analysis_type = "pod"
 
-    def perform_pod(self):
+    def perform_pod(self, *, solver: Literal["eigh", "svd"] = "eigh"):
         """Perform POD analysis on the loaded and preprocessed data.
+
+        Parameters
+        ----------
+        solver
+            Second-order route: ``"eigh"`` (default) factors the correlation /
+            Gram kernel; ``"svd"`` factors the weighted snapshot matrix. See
+            DOC.md for when the SVD route is worth selecting. Unknown names
+            raise ``ValueError``.
 
         This method computes the POD modes, eigenvalues, and time coefficients.
         The steps involved are:
         1. Ensure data is loaded (expects `self.data['q']` to be [time, space]).
         2. Subtract the temporal mean (`self.temporal_mean`) from the data matrix.
         3. Apply spatial weights (`self.W`) to the mean-subtracted data.
-        4. Compute the covariance matrix (snapshot POD approach: C = X^T * W * X).
-        5. Solve the eigenvalue problem for the covariance matrix to get eigenvalues
-           and eigenvectors (which relate to time coefficients).
-        6. Reconstruct spatial modes by projecting the data onto the eigenvectors.
+        4. On the ``"eigh"`` route, form the correlation matrix (snapshot POD
+           approach: C = X^T * W * X) and solve its eigenvalue problem. On the
+           ``"svd"`` route, factor the weighted snapshot matrix directly, which
+           never squares the data and so keeps far more dynamic range.
+        5. Recover eigenvalues and the vectors that relate to time coefficients.
+        6. Reconstruct spatial modes by projecting the data onto those vectors.
         7. Sort modes and eigenvalues by energy (descending eigenvalues).
         8. Truncate to `self.n_modes_save`.
 
@@ -155,6 +165,8 @@ class PODAnalyzer(BaseAnalyzer):
             time_coefficients (np.ndarray): Sorted temporal coefficients.
             temporal_mean (np.ndarray): Calculated temporal mean of the data.
         """
+        if solver not in ("eigh", "svd"):
+            raise ValueError(f"solver must be 'eigh' or 'svd', got {solver!r}")
         if "q" not in self.data:
             raise ValueError("Data not loaded. Call load_and_preprocess() first.")
 
@@ -211,7 +223,7 @@ class PODAnalyzer(BaseAnalyzer):
         self.modes, self.eigenvalues, self.time_coefficients = decomposition.weighted_second_order(
             lifted,
             metric,
-            method="eigh",
+            method=solver,
             drop_nonpositive=False,
             n_keep=None,
         )

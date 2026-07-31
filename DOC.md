@@ -205,9 +205,33 @@ snapshot data.** Measured: a mode at singular-value ratio \(10^{-8}\)
 (eigenvalue ratio \(10^{-16}\)) is recovered exactly by the SVD route
 (correlation 1.000000, `matrix_rank` 3) while its Gram eigenvalue is
 indistinguishable from the noise floor. The snapshot / Gram route cannot
-resolve below \(\lambda / \lambda_{\max} \sim n\,\varepsilon\); users who need
-that resolution must use `method="svd"` (ST-POD’s path). Do not read the
+resolve below \(\lambda / \lambda_{\max} \sim n\,\varepsilon\). Do not read the
 number of returned eigenvalues as the rank of the snapshot matrix itself.
+
+**Choosing the solver route.** POD defaults to `solver="eigh"`: it factors
+the correlation / Gram kernel. Pass `solver="svd"` (or, from a config,
+`params: {solver: "svd"}`) to factor the weighted snapshot matrix instead.
+ST-POD already uses the SVD route internally and has no user knob.
+
+A singular-value ratio \(r\) is an energy ratio \(r^{2}\). The gap between the
+routes therefore starts to matter around energy \(\sim 10^{-14}\) on ordinary
+velocity POD (where \(r \sim 10^{-7}\)). Reach for `svd` when that matters:
+
+- delay-embedded / Hankel data (ST-POD’s case; already on this path)
+- strongly anisotropic or stretched spatial weights, where the weighted
+  condition number is large even when the raw field looks fine
+- nearly redundant snapshots from oversampled slow dynamics
+- mid-spectrum eigenvector quality, which degrades from squaring before the
+  hard \(n\,\varepsilon\) floor is hit
+
+Both routes are \(O(n_{s}^{2}\,n_{x})\). Only the constant differs; `eigh` is
+cheaper when \(n_{\mathrm{samples}} \ll n_{\mathrm{space}}\). On well-separated
+modes both return the same leading subspace.
+
+```python
+pod.perform_pod()                 # default: correlation / Gram (eigh)
+pod.perform_pod(solver="svd")     # weighted snapshot SVD
+```
 
 ### 2. mPOD — Multiscale POD
 

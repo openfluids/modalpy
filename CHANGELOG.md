@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller and may return fewer trailing noise modes on rank-deficient input.
 
 ### Added
+- POD `solver` route: `perform_pod(solver="eigh"|"svd")` and config
+  `params: {solver: "svd"}` select the correlation-matrix (`eigh`, default)
+  or weighted-snapshot-SVD path. Documented in DOC.md under non-positive
+  eigenvalues / rank-deficient input. CLI help comes from
+  `METHOD_REGISTRY["pod"].parameter_help`.
 - PEP 561 marker `src/openmodalpy/py.typed` so type checkers treat the package
   as typed when installed from the wheel.
 - Public exports `MethodInfo` (returned by `list_methods` and `get_method_spec`),

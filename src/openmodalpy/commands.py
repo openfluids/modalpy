@@ -51,7 +51,12 @@ METHOD_REGISTRY: dict[str, MethodInfo] = {
         cli_name="pod",
         display_name="POD",
         description="Proper orthogonal decomposition on the snapshot ensemble.",
-        parameter_help={},
+        parameter_help={
+            "solver": (
+                "Second-order route: eigh (default, correlation/Gram kernel) or "
+                "svd (weighted snapshot matrix; better dynamic range on weak modes)."
+            ),
+        },
     ),
     "mpod": MethodInfo(
         method_id="mpod",
@@ -687,6 +692,7 @@ def _run_pod_like(
     *,
     dry_run: bool,
     extra_kwargs: dict[str, Any] | None = None,
+    compute_kwargs: dict[str, Any] | None = None,
 ) -> RunOutcome:
     file_path, data_loader, results_dir, figures_dir = _prepare_common_run(spec, dry_run=dry_run)
     if dry_run:
@@ -704,7 +710,7 @@ def _run_pod_like(
 
     analyzer.load_and_preprocess()
     _apply_snapshot_limit(analyzer, spec)
-    getattr(analyzer, compute_fn)()
+    getattr(analyzer, compute_fn)(**(compute_kwargs or {}))
     analyzer.save_results()
 
     if spec.case.generate_plots:
@@ -891,6 +897,7 @@ def analyze_from_spec(spec: AnalyzeSpec, *, dry_run: bool = False) -> RunOutcome
             "perform_pod",
             dry_run=dry_run,
             extra_kwargs={"n_modes_save": spec.case.n_modes_save},
+            compute_kwargs={"solver": str(spec.params.get("solver", "eigh"))},
         ),
         "mpod": lambda: _run_pod_like(
             spec,
