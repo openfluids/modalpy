@@ -296,9 +296,7 @@ class SPODAnalyzer(BaseAnalyzer):
         """
         # Make sure qhat has been computed
         if self.qhat is None or self.qhat.size == 0:
-            raise RuntimeError(
-                "qhat not computed. Call compute_fft_blocks() or run(compute_fft=True) first."
-            )
+            raise RuntimeError("qhat not computed. Call compute_fft_blocks() or run(compute_fft=True) first.")
 
         start_time = time.time()
 

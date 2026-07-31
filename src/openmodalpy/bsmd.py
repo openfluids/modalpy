@@ -487,9 +487,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         Ensures data is loaded and preprocessed (STFT computed) before proceeding.
         """
         if self.qhat.size == 0 and not self._qhat_on_disk:
-            raise ValueError(
-                "STFT data (qhat) not found. Call load_and_preprocess() first."
-            )
+            raise ValueError("STFT data (qhat) not found. Call load_and_preprocess() first.")
         start_time = time.time()
         print("Starting BSMD analysis...")
 
@@ -674,8 +672,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                     bound_note = "no frequency bins are loaded"
                 else:
                     bound_note = (
-                        f"|p| must be <= {max_bin} "
-                        f"(nfft//2 = {nfft_limit}, loaded bins allow |p| <= {loaded_limit})"
+                        f"|p| must be <= {max_bin} (nfft//2 = {nfft_limit}, loaded bins allow |p| <= {loaded_limit})"
                     )
                 dropped_str = ", ".join(repr(t) for t in dropped)
                 warnings.warn(

@@ -337,9 +337,7 @@ def _solve_eigh_complex(
     order = np.argsort(eigenvalues.real)[::-1]
     eigenvalues = eigenvalues[order]
     eigenvectors = eigenvectors[:, order]
-    eigenvalues = np.sum(
-        np.conj(eigenvectors) * (kernel @ eigenvectors), axis=0
-    ).real
+    eigenvalues = np.sum(np.conj(eigenvectors) * (kernel @ eigenvectors), axis=0).real
 
     keep = _significant_eigenvalue_mask(eigenvalues, n_kernel)
     eigenvalues = eigenvalues[keep]

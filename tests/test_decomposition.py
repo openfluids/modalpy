@@ -325,9 +325,7 @@ def test_svd_nonuniform_metric_matches_weighted_singular_values():
     u, sigma, _vt = np.linalg.svd(xw.T, full_matrices=False)
     ref_eigs = (sigma[:n_keep] ** 2) / n_samples
 
-    modes, eigs, coeffs = weighted_second_order(
-        data, w, method="svd", n_keep=n_keep
-    )
+    modes, eigs, coeffs = weighted_second_order(data, w, method="svd", n_keep=n_keep)
     assert modes.shape == (n_space, n_keep)
     assert coeffs.shape == (n_samples, n_keep)
     np.testing.assert_allclose(eigs, ref_eigs, rtol=1e-10, atol=1e-12)

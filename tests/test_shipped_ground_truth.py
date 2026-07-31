@@ -157,8 +157,7 @@ def test_taylor_green_pod_leading_eigenvalue_matches_trace(tmp_path):
     # Residual modes are numerical noise relative to the leading energy.
     if analyzer.eigenvalues.size > 1:
         assert analyzer.eigenvalues[1] / max(leading, 1e-30) < 1e-10, (
-            f"Taylor-Green POD should be rank-1; λ1/λ0="
-            f"{analyzer.eigenvalues[1] / leading:.3e}"
+            f"Taylor-Green POD should be rank-1; λ1/λ0={analyzer.eigenvalues[1] / leading:.3e}"
         )
     _assert_pod_spectrum_matches_trace(analyzer)
 

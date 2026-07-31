@@ -101,9 +101,7 @@ def pod_fractions_over_pretruncation_total(
         # Guard: no captured energy — fall back to the kept sum only.
         total = kept
     if total <= 0.0:
-        raise RuntimeError(
-            f"POD energy total non-positive (kept={kept}, energy_captured_fraction={ecf})"
-        )
+        raise RuntimeError(f"POD energy total non-positive (kept={kept}, energy_captured_fraction={ecf})")
     return lam / total
 
 

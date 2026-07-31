@@ -92,12 +92,8 @@ def test_spod_single_frequency_optimized_rejects_invalid_metric():
     qhat = rng.standard_normal((n_space, nblocks)) + 1j * rng.standard_normal((n_space, nblocks))
 
     with pytest.raises(ValueError, match="negative weight"):
-        spod_single_frequency_optimized(
-            qhat, np.array([1.0, -0.5, 2.0, 1.0, 1.0, 1.0]).reshape(-1, 1), nblocks, 0.1
-        )
+        spod_single_frequency_optimized(qhat, np.array([1.0, -0.5, 2.0, 1.0, 1.0, 1.0]).reshape(-1, 1), nblocks, 0.1)
     with pytest.raises(ValueError, match="zero total measure"):
         spod_single_frequency_optimized(qhat, np.zeros((n_space, 1)), nblocks, 0.1)
     with pytest.raises(ValueError, match="non-finite"):
-        spod_single_frequency_optimized(
-            qhat, np.array([1.0, np.nan, 2.0, 1.0, 1.0, 1.0]).reshape(-1, 1), nblocks, 0.1
-        )
+        spod_single_frequency_optimized(qhat, np.array([1.0, np.nan, 2.0, 1.0, 1.0, 1.0]).reshape(-1, 1), nblocks, 0.1)

@@ -87,9 +87,7 @@ def test_reference_fixture_matches_recompute(path: Path):
     name = doc["generator"]
     assert name == path.stem, f"{path.name}: generator field {name!r} != stem"
 
-    spectra = compute_reference_spectra(
-        name, doc["generator_params"], n_modes=n_modes, rtol=rtol
-    )
+    spectra = compute_reference_spectra(name, doc["generator_params"], n_modes=n_modes, rtol=rtol)
 
     pod_exp = np.asarray(doc["pod_energy_fractions"], dtype=np.float64)
     abs_exp = np.asarray(doc["dmd_abs_lambda"], dtype=np.float64)
