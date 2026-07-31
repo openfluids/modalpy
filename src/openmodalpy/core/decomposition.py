@@ -11,8 +11,18 @@ to different lifts of the raw snapshot data. This module names those pieces:
   operator routes go through;
 - **``spod_single_frequency``**, the single-frequency SPOD eigenproblem.
 
-Every eigh route drops eigenvalues at or below the relative cutoff
-``n_kernel * eps * lambda_max`` (numerical rank of the correlation matrix).
+Both solver routes drop modes at or below a relative cutoff built from the
+same scale ``n_kernel * eps``:
+
+- **eigh** — eigenvalue domain: drop ``lambda <= n_kernel * eps * lambda_max``
+  (numerical rank of the correlation matrix that was factored; its
+  conditioning is already squared).
+- **svd** — singular-value domain: drop
+  ``sigma <= n_kernel * eps * sigma_max`` (equivalently
+  ``lambda <= (n_kernel * eps)**2 * lambda_max``). Applying the eigh floor
+  to ``lambda`` here would discard genuine weak modes the SVD route exists
+  to recover.
+
 ``n_keep`` still truncates the leading end after that filter.
 """
 
@@ -151,16 +161,40 @@ def _as_weight_vector(metric: SpatialMetric | np.ndarray, n_space: int) -> np.nd
     return _coerce_spatial_weights(metric, n_space)
 
 
+def _working_eps(dtype: np.dtype | type) -> float:
+    """Machine epsilon of a real working dtype (float64 fallback)."""
+    dt = np.dtype(dtype)
+    if dt.kind == "f":
+        return float(np.finfo(dt).eps)
+    return float(np.finfo(np.float64).eps)
+
+
+def _relative_floor(peak: float, n_kernel: int, dtype: np.dtype | type) -> float:
+    """Shared relative floor scale: ``n_kernel * eps * peak``.
+
+    Both route masks use this quantity. The eigh route applies it to
+    eigenvalues; the SVD route applies it to singular values (see the
+    two mask helpers). Never paste a second constant at a call site.
+    """
+    return float(n_kernel) * _working_eps(dtype) * float(peak)
+
+
 def _significant_eigenvalue_mask(
     eigenvalues: np.ndarray,
     n_kernel: int,
 ) -> np.ndarray:
     """Keep eigenvalues above ``n_kernel * eps * lambda_max``.
 
-    This is the numerical rank of the correlation (Gram) matrix that was
-    factored, not of the snapshot data. ``n_kernel`` is the dimension of that
-    matrix (``n_samples`` on the temporal branch, ``n_space`` on the spatial
+    **Eigenvalue-domain** floor for the eigh route. This is the numerical
+    rank of the correlation (Gram) matrix that was factored, not of the
+    snapshot data. ``n_kernel`` is the dimension of that matrix
+    (``n_samples`` on the temporal branch, ``n_space`` on the spatial
     branch). ``eps`` is machine epsilon of the working real dtype.
+
+    The Gram matrix already has squared conditioning, so this floor lives
+    in the eigenvalue domain. The SVD route must not reuse it on
+    ``lambda = sigma**2 / n_samples`` — use
+    :func:`_significant_singular_value_mask` instead.
     """
     real = np.asarray(np.real(eigenvalues))
     if real.size == 0:
@@ -168,12 +202,37 @@ def _significant_eigenvalue_mask(
     lam_max = float(np.max(real))
     if not np.isfinite(lam_max) or lam_max <= 0.0:
         return np.zeros(real.shape, dtype=bool)
-    if real.dtype.kind == "f":
-        eps = float(np.finfo(real.dtype).eps)
-    else:
-        eps = float(np.finfo(np.float64).eps)
-    cutoff = float(n_kernel) * eps * lam_max
+    cutoff = _relative_floor(lam_max, n_kernel, real.dtype)
     return real > cutoff
+
+
+def _significant_singular_value_mask(
+    singular_values: np.ndarray,
+    n_kernel: int,
+) -> np.ndarray:
+    """Keep singular values above ``n_kernel * eps * sigma_max``.
+
+    **Singular-value-domain** floor for the SVD route. ``n_kernel`` has the
+    same meaning as on the eigh path (dimension of the Gram matrix that
+    *would* have been factored: ``min(n_samples, n_space)``). The relative
+    scale ``n_kernel * eps`` is shared with
+    :func:`_significant_eigenvalue_mask` via :func:`_relative_floor`; only
+    the domain differs.
+
+    Equivalently for ``lambda = sigma**2 / n_samples`` the floor is
+    ``(n_kernel * eps)**2 * lambda_max``. A mode at singular-value ratio
+    ``1e-10`` sits at eigenvalue ratio ``1e-20``: below the eigh floor
+    (``n_kernel * eps``) but far above this squared one, so the SVD route
+    keeps it.
+    """
+    sigma = np.asarray(np.real(singular_values))
+    if sigma.size == 0:
+        return np.zeros(0, dtype=bool)
+    sig_max = float(np.max(sigma))
+    if not np.isfinite(sig_max) or sig_max <= 0.0:
+        return np.zeros(sigma.shape, dtype=bool)
+    cutoff = _relative_floor(sig_max, n_kernel, sigma.dtype)
+    return sigma > cutoff
 
 
 def weighted_second_order(
@@ -199,9 +258,9 @@ def weighted_second_order(
         PSD-POD). ``"svd"`` — weighted SVD of the data matrix (ST-POD); use
         this rather than squaring a Hankel matrix.
     drop_nonpositive
-        Retained for call-site compatibility. The eigh routes always drop
-        eigenvalues at or below the relative cutoff
-        ``n_kernel * eps * lambda_max``; this flag no longer selects an
+        Retained for call-site compatibility. Both routes always drop modes
+        at or below their relative cutoff (eigenvalue domain on eigh,
+        singular-value domain on svd); this flag no longer selects an
         absolute floor or a keep-all policy.
     n_keep
         If set, keep only the leading ``n_keep`` modes inside the solver
@@ -213,7 +272,7 @@ def weighted_second_order(
         ``modes`` has shape ``(n_space, r)``, ``eigenvalues`` shape ``(r,)``,
         ``time_coefficients`` shape ``(n_samples, r)``. Rank-deficient input
         returns fewer than ``n_keep`` / ``n_modes_save`` modes — the honest
-        count of eigenvalues above the relative cutoff.
+        count above the route's relative cutoff.
     """
     data = np.asarray(data)
     if data.ndim != 2:
@@ -376,7 +435,10 @@ def _solve_svd(
     sqrt_weights = np.sqrt(np.maximum(weights, 1e-12))
     data_weighted = data * sqrt_weights
 
-    n_min = min(data_weighted.shape)
+    # Same meaning as the eigh path: dimension of the Gram matrix that would
+    # have been factored (temporal if n_samples < n_space, else spatial).
+    n_kernel = min(n_samples, n_space)
+    n_min = n_kernel
     if n_keep is None:
         k = max(n_min - 1, 0)
     else:
@@ -393,6 +455,18 @@ def _solve_svd(
     sigma = sigma_full[:k]
     u = u_full[:, :k]
     vt = vt_full[:k, :]
+
+    # Singular-value-domain relative floor (not the eigh eigenvalue floor).
+    keep = _significant_singular_value_mask(sigma, n_kernel)
+    sigma = sigma[keep]
+    u = u[:, keep]
+    vt = vt[keep, :]
+    if sigma.size == 0:
+        return (
+            np.empty((n_space, 0)),
+            np.empty((0,)),
+            np.empty((n_samples, 0)),
+        )
 
     eigenvalues = (sigma**2) / n_samples
     modes = u / sqrt_weights[:, np.newaxis]

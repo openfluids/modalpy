@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The SVD route of `weighted_second_order` now drops singular values at or
+  below `n_kernel · ε · σ_max` (same relative scale as the eigh floor, applied
+  in the singular-value domain). On exactly rank-3 data both routes return 3
+  modes; a planted mode at singular-value ratio `1e-10` is still recovered.
+  The previous SVD path kept the full numerical null-space tail (eigenvalues
+  ~1e-29 against a top eigenvalue of hundreds). ST-POD is the existing SVD
+  caller and may return fewer trailing noise modes on rank-deficient input.
+
 ### Added
 - PEP 561 marker `src/openmodalpy/py.typed` so type checkers treat the package
   as typed when installed from the wheel.
