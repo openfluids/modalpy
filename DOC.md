@@ -361,8 +361,8 @@ dmd.save_results()
 | `rank` | Criterion |
 |--------|-----------|
 | `int` | Explicit rank, floored by the relative cut `s_j > rcond * s[0]` (`rcond = max(shape) * eps`, as in `numpy.linalg.pinv`). Never exceeds what the data supports. |
-| `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = λ(β) · median(s)` with `β = min(shape)/max(shape)`. |
-| `"energy"` | Smallest `r` with cumulative `s²` fraction ≥ `energy_fraction` (default `0.999`). |
+| `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = λ(β) · median(s)` with `β = min(shape)/max(shape)`. On data with no coherent signal (flat singular spectrum) this can return `effective_rank == 0`: empty eigenvalues and modes, plus a `RuntimeWarning`, because `τ` then exceeds `σ₁`. That is the honest outcome, not a crash. |
+| `"energy"` | Smallest `r` with cumulative `s²` fraction ≥ `energy_fraction` (config key `energy_fraction`, analyzer default `0.999`; `None` in config leaves that default alone). |
 
 **Why there is no default rank:** On the shipped cylinder wake
 (`Nx=40, Ny=24, Nt=400`, so `X1` is 960×399) the singular spectrum decays
@@ -468,6 +468,7 @@ implemented and raises `NotImplementedError`.
     "spatial_weight_type": "uniform",  // "uniform", "polar", or "auto"
     "n_modes_save": 10,
     "rank": 10,                    // DMD only (required): positive int | "svht" | "energy"
+    "energy_fraction": 0.999,      // DMD only: cumulative s² target when rank is "energy" (analyzer default 0.999)
     "nfft": 128,                   // FFT block size (SPOD/BSMD/PSD-POD)
     "overlap": 0.5,                // block overlap fraction
     "embedding_dim": 10,           // delay depth (ST-POD/HODMD)

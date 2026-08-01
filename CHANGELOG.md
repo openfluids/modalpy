@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller and may return fewer trailing noise modes on rank-deficient input.
 
 ### Added
+- Case config key `energy_fraction` for DMD `rank="energy"` (float in `(0, 1]`;
+  omit to keep the analyzer default `0.999`).
 - POD `solver` route: `perform_pod(solver="eigh"|"svd")` and config
   `params: {solver: "svd"}` select the correlation-matrix (`eigh`, default)
   or weighted-snapshot-SVD path. Documented in DOC.md under non-positive

@@ -854,3 +854,49 @@ def test_energy_rank_criterion():
     assert cum[r - 1] >= 0.99, f"rank {r} retains only {cum[r - 1]:.6f} of the energy, below the 0.99 asked for"
     if r > 1:
         assert cum[r - 2] < 0.99, f"rank {r} is not minimal: {r - 1} modes already retain {cum[r - 2]:.6f}"
+
+
+def test_svht_flat_spectrum_returns_zero_effective_rank():
+    """On a flat singular spectrum, SVHT returns effective_rank 0 with empty modes.
+
+    Documented outcome when τ = λ(β)·median(s) exceeds σ₁ (see DOC.md, "svht"
+    row): warn, leave eigenvalues and modes empty, do not invent a mode.
+
+    The fixture is a flat spectrum, not a draw of i.i.d. noise, and that is
+    deliberate. A flat spectrum makes median(s) == σ₁, so τ = λ(β)·σ₁ > σ₁ holds
+    for every β and every size — measured τ/σ₁ ≈ 2.1–2.3 at 20×20, 40×30 and
+    64×64. An i.i.d. noise draw only lands on rank 0 by luck at this size
+    (τ/σ₁ has median 1.007 over 200 seeds, and rises above 1 for only about half
+    of them), and at 40×40 and larger the shipped threshold keeps 1–7 noise
+    modes. Pinning the documented behaviour on a coin flip would be a test that
+    reverses on a reseed.
+    """
+    rng = np.random.default_rng(0)
+    n_space, n_time = 20, 20
+    # Random orthogonal factors, unit singular values: white, no coherent signal.
+    u, _, vt = np.linalg.svd(rng.standard_normal((n_space, n_time)), full_matrices=False)
+    q = (u @ vt).T
+    data = {
+        "q": q,
+        "x": np.arange(n_space, dtype=float),
+        "y": np.array([0.0]),
+        "dt": 0.1,
+        "Nx": n_space,
+        "Ny": 1,
+        "Ns": n_time,
+    }
+    analyzer = DMDAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=5,
+        rank="svht",
+    )
+    analyzer.load_and_preprocess()
+    with pytest.warns(RuntimeWarning, match="effective rank"):
+        analyzer.perform_dmd()
+
+    assert analyzer.effective_rank == 0
+    assert analyzer.eigenvalues.size == 0
+    assert analyzer.modes.size == 0
+    assert analyzer.time_coefficients.size == 0

@@ -298,6 +298,107 @@ def test_config_without_rank_refuses_through_the_real_analyzer(tmp_path: Path) -
         analyze_from_config(config_path, method="dmd", overrides={"generate_plots": False})
 
 
+def test_config_energy_fraction_reaches_the_dmd_analyzer(tmp_path: Path, monkeypatch) -> None:
+    """A non-default energy_fraction in the config must arrive at DMDAnalyzer.
+
+    Presence on CaseSpec alone is not enough — that is how CaseSpec.rank shipped
+    unreachable. Pin the value the analyzer constructor actually receives.
+    """
+
+    def build(case_energy_fraction, overrides):
+        config_path = tmp_path / f"ef_{case_energy_fraction}_{len(overrides)}.jsonc"
+        case: dict[str, object] = {
+            "name": "toy_case",
+            "case_type": "analytical",
+            "data": {
+                "kind": "generator",
+                "name": "double_gyre",
+                "params": {"Nx": 8, "Ny": 4, "Nt": 12},
+            },
+            "spatial_weight_type": "uniform",
+            "rank": "energy",
+            "results_root": str(tmp_path / "results"),
+            "figures_root": str(tmp_path / "figures"),
+        }
+        if case_energy_fraction is not None:
+            case["energy_fraction"] = case_energy_fraction
+        _write_jsonc(
+            config_path,
+            {
+                "name": "Toy case",
+                "description": "Toy analytical case",
+                "case": case,
+                "runs": [],
+            },
+        )
+        captured: dict[str, object] = {}
+
+        class FakeDMDAnalyzer:
+            def __init__(self, **kwargs):
+                captured["init"] = kwargs
+
+            def load_and_preprocess(self):
+                pass
+
+            def perform_dmd(self, **kwargs):
+                pass
+
+            def save_results(self):
+                results_dir = Path(captured["init"]["results_dir"])
+                results_dir.mkdir(parents=True, exist_ok=True)
+                (results_dir / "fake.hdf5").write_text("fake")
+
+        monkeypatch.setattr("openmodalpy.commands.DMDAnalyzer", FakeDMDAnalyzer)
+        analyze_from_config(
+            config_path,
+            method="dmd",
+            overrides={"generate_plots": False, **overrides},
+        )
+        return captured["init"]
+
+    # From the case payload: the configured fraction reaches the constructor.
+    init = build(0.95, {})
+    assert init["rank"] == "energy"
+    assert init["energy_fraction"] == 0.95
+    # Omitted key: analyzer keeps its own default (constructor arg not passed).
+    init_default = build(None, {})
+    assert "energy_fraction" not in init_default
+    # A per-run override must win over the case value.
+    init_ov = build(0.95, {"energy_fraction": 0.8})
+    assert init_ov["energy_fraction"] == 0.8
+    # An override that does not mention energy_fraction must not drop the case value.
+    init_keep = build(0.92, {"delays": 1})
+    assert init_keep["energy_fraction"] == 0.92
+
+
+def test_energy_fraction_parse_rejects_out_of_range(tmp_path: Path) -> None:
+    """energy_fraction outside (0, 1] fails at parse time with one message."""
+    from openmodalpy.commands import load_case_spec
+
+    config_path = tmp_path / "bad_ef.jsonc"
+    _write_jsonc(
+        config_path,
+        {
+            "name": "Bad fraction",
+            "description": "energy_fraction out of range",
+            "case": {
+                "name": "toy_case",
+                "case_type": "analytical",
+                "data": {
+                    "kind": "generator",
+                    "name": "double_gyre",
+                    "params": {"Nx": 8, "Ny": 4, "Nt": 12},
+                },
+                "rank": "energy",
+                "energy_fraction": 1.5,
+            },
+            "runs": [],
+        },
+    )
+    with pytest.raises(ValueError, match=r"energy_fraction must be null or a float in \(0, 1\]"):
+        load_case_spec(config_path)
+
+
 def test_run_from_config_executes_runs_schema(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "suite.jsonc"
     _write_jsonc(

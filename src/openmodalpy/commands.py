@@ -217,6 +217,22 @@ def _coerce_rank(value: Any) -> int | str | None:
         raise ValueError(f"rank must be null, a positive int, 'svht', or 'energy'; got {value!r}") from None
 
 
+def _coerce_energy_fraction(value: Any) -> float | None:
+    """Read the energy-rank fraction from config: null, or a float in (0, 1].
+
+    null/None means "do not override" — DMDAnalyzer keeps its own 0.999 default.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        frac = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"energy_fraction must be null or a float in (0, 1]; got {value!r}") from None
+    if not (0.0 < frac <= 1.0):
+        raise ValueError(f"energy_fraction must be null or a float in (0, 1]; got {value!r}")
+    return frac
+
+
 def _load_case_spec_from_payload(payload: dict[str, Any], config_path: Path) -> CaseSpec:
     case_payload = payload.get("case")
     if not isinstance(case_payload, dict):
@@ -269,6 +285,7 @@ def _load_case_spec_from_payload(payload: dict[str, Any], config_path: Path) -> 
         spatial_weight_type=str(case_payload.get("spatial_weight_type", "uniform")),
         n_modes_save=int(case_payload.get("n_modes_save", 10)),
         rank=_coerce_rank(case_payload.get("rank")),
+        energy_fraction=_coerce_energy_fraction(case_payload.get("energy_fraction")),
         nfft=int(case_payload.get("nfft", 128)),
         overlap=float(case_payload.get("overlap", 0.5)),
         embedding_dim=int(case_payload.get("embedding_dim", 10)),
@@ -305,6 +322,11 @@ def _apply_case_overrides(case: CaseSpec, overrides: dict[str, Any]) -> CaseSpec
         n_modes_save=int(overrides.get("n_modes_save", case.n_modes_save)),
         # Rebuilt field-by-field, so an omitted rank would silently drop it.
         rank=_coerce_rank(overrides["rank"]) if "rank" in overrides else case.rank,
+        energy_fraction=(
+            _coerce_energy_fraction(overrides["energy_fraction"])
+            if "energy_fraction" in overrides
+            else case.energy_fraction
+        ),
         nfft=int(overrides.get("nfft", case.nfft)),
         overlap=float(overrides.get("overlap", case.overlap)),
         embedding_dim=int(overrides.get("embedding_dim", case.embedding_dim)),
@@ -751,16 +773,21 @@ def _run_dmd(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
     if dry_run:
         return _make_dry_run_outcome(spec, results_dir, figures_dir)
 
-    analyzer = DMDAnalyzer(
-        file_path=file_path,
-        results_dir=str(results_dir),
-        figures_dir=str(figures_dir),
-        data_loader=data_loader,
-        spatial_weight_type=spec.case.spatial_weight_type,
-        n_modes_save=int(spec.params.get("n_modes_save", spec.case.n_modes_save)),
-        rank=_coerce_rank(spec.params.get("rank", spec.case.rank)),
-        use_parallel=spec.case.use_parallel,
-    )
+    dmd_kwargs: dict[str, Any] = {
+        "file_path": file_path,
+        "results_dir": str(results_dir),
+        "figures_dir": str(figures_dir),
+        "data_loader": data_loader,
+        "spatial_weight_type": spec.case.spatial_weight_type,
+        "n_modes_save": int(spec.params.get("n_modes_save", spec.case.n_modes_save)),
+        "rank": _coerce_rank(spec.params.get("rank", spec.case.rank)),
+        "use_parallel": spec.case.use_parallel,
+    }
+    # None on the case means leave the analyzer default alone (one source of truth).
+    energy_fraction = _coerce_energy_fraction(spec.params.get("energy_fraction", spec.case.energy_fraction))
+    if energy_fraction is not None:
+        dmd_kwargs["energy_fraction"] = energy_fraction
+    analyzer = DMDAnalyzer(**dmd_kwargs)
     analyzer.load_and_preprocess()
     _apply_snapshot_limit(analyzer, spec)
 

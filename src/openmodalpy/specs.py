@@ -31,6 +31,9 @@ class CaseSpec:
     # None reaches DMDAnalyzer and raises). n_modes_save only bounds saved/plotted
     # output and never sets the operator rank.
     rank: int | str | None = None
+    # Cumulative energy target for rank="energy". None means leave the analyzer
+    # default (0.999) alone — one source of truth, not re-hardcoded here.
+    energy_fraction: float | None = None
     nfft: int = 128
     overlap: float = 0.5
     embedding_dim: int = 10
