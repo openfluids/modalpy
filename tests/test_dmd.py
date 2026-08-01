@@ -200,6 +200,24 @@ def _make_linear_snapshots(A, x0, n_steps):
     return np.array(snapshots)
 
 
+def _make_rank4_snapshots(n_steps=40):
+    """Trajectory of a 4-state, two-frequency linear system — genuinely rank 4."""
+
+    def _rot_scale(theta, radius):
+        c, s = np.cos(theta), np.sin(theta)
+        return radius * np.array([[c, -s], [s, c]])
+
+    A = np.block(
+        [
+            [_rot_scale(0.3, 0.98), np.zeros((2, 2))],
+            [np.zeros((2, 2)), _rot_scale(0.9, 0.9)],
+        ]
+    )
+    # Excite both 2-state blocks so the trajectory spans all four dimensions.
+    x0 = np.array([1.0, 0.0, 1.0, 0.0])
+    return _make_linear_snapshots(A, x0, n_steps)
+
+
 def _make_analyzer(q, n_modes_save=None, rank=None):
     """Shorthand to build a DMDAnalyzer from a snapshot array."""
     n_spatial = q.shape[1]
@@ -403,12 +421,11 @@ def test_invalid_delays_raises():
 
 def test_metadata_tls_delays(tmp_path):
     """Metadata should reflect TLS + delay embedding settings."""
-    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
-    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
+    q = _make_rank4_snapshots(30)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(RuntimeWarning, match="effective rank"):
-        analyzer.perform_dmd(method="tls", delays=3)
+    analyzer.perform_dmd(method="tls", delays=3)
+    assert analyzer.effective_rank == 4
 
     meta = analyzer._get_algorithm_metadata()
     assert meta["dmd_variant"] == "delay_embedded_tls_dmd"
@@ -419,13 +436,12 @@ def test_metadata_tls_delays(tmp_path):
 
 def test_load_results_restores_variant_metadata(tmp_path):
     """Saved DMD variant metadata should survive a load/save round-trip."""
-    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
-    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 30)
+    q = _make_rank4_snapshots(30)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
     analyzer.results_dir = tmp_path
-    with pytest.warns(RuntimeWarning, match="effective rank"):
-        analyzer.perform_dmd(method="tls", delays=3)
+    analyzer.perform_dmd(method="tls", delays=3)
+    assert analyzer.effective_rank == 4
     analyzer.save_results("dmd_variant_roundtrip.hdf5")
 
     reloaded = _make_analyzer(q, n_modes_save=4)
@@ -465,12 +481,11 @@ def test_dmd_save_load_roundtrip_arrays(tmp_path):
 
 def test_hodmd_named_variant_metadata():
     """perform_dmd with named_variant='hodmd' sets the correct metadata."""
-    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
-    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
+    q = _make_rank4_snapshots(40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(RuntimeWarning, match="effective rank"):
-        analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    assert analyzer.effective_rank == 4
 
     assert analyzer._dmd_named_variant == "hodmd"
     meta = analyzer._get_algorithm_metadata()
@@ -483,12 +498,11 @@ def test_hodmd_named_variant_metadata():
 
 def test_tls_hodmd_named_variant_metadata():
     """perform_dmd with named_variant='tls_hodmd' sets the correct metadata."""
-    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
-    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
+    q = _make_rank4_snapshots(40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
-    with pytest.warns(RuntimeWarning, match="effective rank"):
-        analyzer.perform_dmd(method="tls", delays=3, named_variant="tls_hodmd")
+    analyzer.perform_dmd(method="tls", delays=3, named_variant="tls_hodmd")
+    assert analyzer.effective_rank == 4
 
     assert analyzer._dmd_named_variant == "tls_hodmd"
     meta = analyzer._get_algorithm_metadata()
@@ -501,13 +515,12 @@ def test_tls_hodmd_named_variant_metadata():
 
 def test_hodmd_save_load_roundtrip(tmp_path):
     """HODMD named variant survives a save/load round-trip."""
-    A = np.array([[0.9, 0.1], [-0.1, 0.8]])
-    q = _make_linear_snapshots(A, np.array([1.0, 0.5]), 40)
+    q = _make_rank4_snapshots(40)
 
     analyzer = _make_analyzer(q, n_modes_save=4)
     analyzer.results_dir = tmp_path
-    with pytest.warns(RuntimeWarning, match="effective rank"):
-        analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    analyzer.perform_dmd(method="ls", delays=3, named_variant="hodmd")
+    assert analyzer.effective_rank == 4
     analyzer.save_results("hodmd_roundtrip.hdf5")
 
     reloaded = _make_analyzer(q, n_modes_save=4)
