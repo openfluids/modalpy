@@ -361,7 +361,7 @@ dmd.save_results()
 | `rank` | Criterion |
 |--------|-----------|
 | `int` | Explicit rank, floored by the relative cut `s_j > rcond * s[0]` (`rcond = max(shape) * eps`, as in `numpy.linalg.pinv`). Never exceeds what the data supports. |
-| `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = λ(β) · median(s)` with `β = min(shape)/max(shape)`. On data with no coherent signal (flat singular spectrum) this can return `effective_rank == 0`: empty eigenvalues and modes, plus a `RuntimeWarning`, because `τ` then exceeds `σ₁`. That is the honest outcome, not a crash. |
+| `"svht"` | Gavish & Donoho (2014) optimal hard threshold, unknown-noise variant: `τ = ω(β) · median(s)` with `ω(β) = λ(β)/√μ_β`, `μ_β` the Marchenko–Pastur median, and `β = min(shape)/max(shape)`. On data with no coherent signal (flat singular spectrum) this can return `effective_rank == 0`: empty eigenvalues and modes, plus a `RuntimeWarning`, because `τ` then exceeds `σ₁`. That is the honest outcome, not a crash. |
 | `"energy"` | Smallest `r` with cumulative `s²` fraction ≥ `energy_fraction` (config key `energy_fraction`, analyzer default `0.999`; `None` in config leaves that default alone). |
 
 **Why there is no default rank:** On the shipped cylinder wake

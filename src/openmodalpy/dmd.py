@@ -92,7 +92,14 @@ DMD_PINV_RCOND = _dmd_pinv_rcond
 
 
 def svht_lambda(beta):
-    """Gavish–Donoho (2014) optimal hard-threshold coefficient (unknown noise).
+    """Gavish–Donoho (2014) optimal hard-threshold coefficient (known noise).
+
+    For a *known* noise level ``sigma``, the hard threshold is
+    ``tau = svht_lambda(beta) * sigma * sqrt(max(shape))`` — the square-root
+    factor is part of the known-noise form and is easy to drop by mistake.
+    When ``sigma`` is unknown and
+    estimated by the median singular value, use :func:`svht_omega` instead —
+    that is the coefficient used by the ``rank="svht"`` path.
 
     Parameters
     ----------
@@ -104,7 +111,8 @@ def svht_lambda(beta):
     -------
     float
         ``lambda(beta)`` such that the hard threshold is
-        ``tau = lambda(beta) * median(singular values)``.
+        ``tau = lambda(beta) * sigma * sqrt(max(shape))`` for known noise
+        standard deviation ``sigma``.
 
     Notes
     -----
@@ -115,6 +123,88 @@ def svht_lambda(beta):
     if not (0.0 < beta <= 1.0):
         raise ValueError(f"svht_lambda requires 0 < beta <= 1, got {beta!r}")
     return float(np.sqrt(2.0 * (beta + 1.0) + 8.0 * beta / ((beta + 1.0) + np.sqrt(beta * beta + 14.0 * beta + 1.0))))
+
+
+def _mp_median(beta):
+    """Median of the Marchenko–Pastur law with aspect ratio ``beta`` in (0, 1].
+
+    Density ``sqrt((b-x)(x-a)) / (2*pi*beta*x)`` on ``[a, b]`` with
+    ``a = (1-sqrt(beta))**2``, ``b = (1+sqrt(beta))**2``.  The endpoint
+    square-root singularities are removed by the substitution
+    ``x = a + (b-a)*sin**2(phi)`` so ``scipy.integrate.quad`` stays quiet
+    under warnings-as-errors.
+    """
+    from scipy import integrate, optimize
+
+    beta = float(beta)
+    a = (1.0 - np.sqrt(beta)) ** 2
+    b_edge = (1.0 + np.sqrt(beta)) ** 2
+    if b_edge <= a:
+        return float(a)
+    span = b_edge - a
+
+    def phi_of(x):
+        # Map x in [a, b] to phi in [0, pi/2].
+        t = (x - a) / span
+        t = min(max(t, 0.0), 1.0)
+        return float(np.arcsin(np.sqrt(t)))
+
+    def integrand(phi):
+        # Transformed density: integrable form without endpoint singularities.
+        s2 = np.sin(phi) ** 2
+        c2 = np.cos(phi) ** 2
+        x = a + span * s2
+        # rho(x) dx = (span**2 * sin^2 phi * cos^2 phi) / (pi * beta * x) d phi
+        # (see Notes in Gavish–Donoho; factor matches the original density)
+        if x == 0.0:
+            # beta == 1 puts the lower edge at a = 0, so phi = 0 gives 0/0.
+            # The limit is span/(pi*beta); quad does not evaluate the endpoint
+            # today, but a stricter integrator would hit the NaN.
+            return span / (np.pi * beta)
+        return (span**2 * s2 * c2) / (np.pi * beta * x)
+
+    def cdf_minus_half(t):
+        if t <= a:
+            return -0.5
+        if t >= b_edge:
+            return 0.5
+        val, _ = integrate.quad(integrand, 0.0, phi_of(t), epsabs=1e-12)
+        return val - 0.5
+
+    lo = a + np.finfo(float).eps * span
+    hi = b_edge - np.finfo(float).eps * span
+    return float(optimize.brentq(cdf_minus_half, lo, hi))
+
+
+def svht_omega(beta):
+    """Gavish–Donoho (2014) optimal hard-threshold coefficient (unknown noise).
+
+    When the noise level is unknown, it is estimated by the median singular
+    value and the hard threshold is ``tau = svht_omega(beta) * median(s)``,
+    with ``omega(beta) = lambda(beta) / sqrt(mu_beta)`` and ``mu_beta`` the
+    median of the Marchenko–Pastur distribution at aspect ratio ``beta``.
+    This is the coefficient used by the ``rank="svht"`` path.
+
+    Parameters
+    ----------
+    beta : float
+        Aspect ratio ``min(shape) / max(shape)`` of the snapshot-pair matrix,
+        in ``(0, 1]``.
+
+    Returns
+    -------
+    float
+        ``omega(beta)`` such that ``tau = omega(beta) * median(singular values)``.
+
+    Notes
+    -----
+    ``omega(1) ≈ 2.858`` is the square-matrix value. As ``beta -> 0``,
+    ``omega -> sqrt(2)``.
+    """
+    beta = float(beta)
+    if not (0.0 < beta <= 1.0):
+        raise ValueError(f"svht_omega requires 0 < beta <= 1, got {beta!r}")
+    return float(svht_lambda(beta) / np.sqrt(_mp_median(beta)))
 
 
 class DMDAnalyzer(BaseAnalyzer):
@@ -210,7 +300,7 @@ class DMDAnalyzer(BaseAnalyzer):
 
         if rank == "svht":
             beta = min(shape) / max(shape)
-            tau = svht_lambda(beta) * float(np.median(s))
+            tau = svht_omega(beta) * float(np.median(s))
             r_svht = int(np.sum(s > tau))
             r = min(r_svht, r_numeric)
             return r, max(r_svht, 1) if r_svht > 0 else max_r

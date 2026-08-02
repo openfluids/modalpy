@@ -859,17 +859,18 @@ def test_energy_rank_criterion():
 def test_svht_flat_spectrum_returns_zero_effective_rank():
     """On a flat singular spectrum, SVHT returns effective_rank 0 with empty modes.
 
-    Documented outcome when τ = λ(β)·median(s) exceeds σ₁ (see DOC.md, "svht"
+    Documented outcome when τ = ω(β)·median(s) exceeds σ₁ (see DOC.md, "svht"
     row): warn, leave eigenvalues and modes empty, do not invent a mode.
 
     The fixture is a flat spectrum, not a draw of i.i.d. noise, and that is
-    deliberate. A flat spectrum makes median(s) == σ₁, so τ = λ(β)·σ₁ > σ₁ holds
-    for every β and every size — measured τ/σ₁ ≈ 2.1–2.3 at 20×20, 40×30 and
-    64×64. An i.i.d. noise draw only lands on rank 0 by luck at this size
-    (τ/σ₁ has median 1.007 over 200 seeds, and rises above 1 for only about half
-    of them), and at 40×40 and larger the shipped threshold keeps 1–7 noise
-    modes. Pinning the documented behaviour on a coin flip would be a test that
-    reverses on a reseed.
+    deliberate. A flat spectrum makes median(s) == σ₁, so τ = ω(β)·σ₁ > σ₁ holds
+    for every β and every size by construction — measured τ/σ₁ = 2.78, 2.47 and
+    2.83 at 20×20, 40×30 and 64×64. It held under the old λ(β) coefficient too
+    (2.28, 2.14, 2.30), which is why this fixture survived that fix unchanged:
+    it does not depend on where the coefficient sits, only on it exceeding 1.
+    A noise draw would pin the same outcome on a probability instead — see
+    test_svht_pure_noise_returns_zero_effective_rank for that property and the
+    sizes at which it is safe to assert.
     """
     rng = np.random.default_rng(0)
     n_space, n_time = 20, 20
@@ -900,3 +901,68 @@ def test_svht_flat_spectrum_returns_zero_effective_rank():
     assert analyzer.eigenvalues.size == 0
     assert analyzer.modes.size == 0
     assert analyzer.time_coefficients.size == 0
+
+
+def test_svht_omega_matches_published_approximation():
+    """svht_omega matches G&D's published cubic approximation within 1%."""
+    from openmodalpy.dmd import svht_omega
+
+    def approx(beta):
+        b = float(beta)
+        return 0.56 * b**3 - 0.95 * b**2 + 1.82 * b + 1.43
+
+    for beta in (0.05, 0.1, 0.25, 0.5, 0.75, 1.0):
+        got = float(svht_omega(beta))
+        want = approx(beta)
+        rel = abs(got - want) / want
+        assert rel < 0.01, f"svht_omega({beta}) = {got}, approx = {want}, rel = {rel:.3%}"
+
+    # Published square-matrix anchor: omega(1) ≈ 2.858
+    assert abs(svht_omega(1.0) - 2.858) / 2.858 < 0.005
+
+
+def test_svht_omega_limits_and_monotonic():
+    """svht_omega -> sqrt(2) as beta -> 0 and is strictly increasing on (0, 1]."""
+    from openmodalpy.dmd import svht_omega
+
+    assert abs(svht_omega(1e-12) - np.sqrt(2.0)) < 1e-6
+    betas = (0.001, 0.1, 0.5, 1.0)
+    vals = [float(svht_omega(b)) for b in betas]
+    assert vals[0] < vals[1] < vals[2] < vals[3]
+
+
+def test_svht_pure_noise_returns_zero_effective_rank():
+    """Pure i.i.d. Gaussian noise through rank='svht' yields effective_rank 0.
+
+    The unknown-noise coefficient omega(beta) sets tau above the bulk edge of
+    a pure-noise singular spectrum at realistic matrix sizes. With the known-
+    noise lambda used against median(s), the same draws keep 1–3 noise modes.
+
+    Sizes 40 and 100 only. Measured over 500 seeds: rank 0 comes out 100% of
+    the time at both, but only 98.8% of the time at 20×20, where the matrix is
+    small enough for edge fluctuations to push a single noise mode over tau.
+    A fixed seed would hide that, so the small size is left out rather than
+    pinned at a size where the claim is a probability instead of a property.
+    """
+    rng = np.random.default_rng(1)
+    for n in (40, 100):
+        q = rng.standard_normal((n, n))
+        analyzer = _make_analyzer(q, n_modes_save=5, rank="svht")
+        with pytest.warns(RuntimeWarning, match="effective rank"):
+            analyzer.perform_dmd()
+        assert analyzer.effective_rank == 0, f"pure noise {n}x{n}: effective_rank={analyzer.effective_rank}, want 0"
+
+
+def test_svht_planted_rank3_signal_kept():
+    """A rank-3 signal well above the noise floor is kept by rank='svht'."""
+    rng = np.random.default_rng(42)
+    n = 100
+    # 100 x 100 snapshot matrix: three planted singular values + unit noise.
+    u, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    vt, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    s_plant = np.zeros(n)
+    s_plant[:3] = [100.0, 80.0, 60.0]
+    q = (u @ np.diag(s_plant) @ vt.T + rng.standard_normal((n, n))).T
+    analyzer = _make_analyzer(q, n_modes_save=10, rank="svht")
+    analyzer.perform_dmd()
+    assert analyzer.effective_rank == 3

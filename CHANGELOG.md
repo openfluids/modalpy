@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that turns warnings into errors will need to filter it.
 
 ### Fixed
+- DMD `rank="svht"` now thresholds with the unknown-noise coefficient
+  `omega(beta) = lambda(beta)/sqrt(mu_beta)` (`mu_beta` = Marchenko–Pastur
+  median). The previous form used the known-noise `lambda(beta)` against
+  `median(s)`, so the threshold sat ~24% low at `beta = 1` and pure i.i.d.
+  noise kept spurious modes at realistic matrix sizes.
 - The SVD route of `weighted_second_order` now drops singular values at or
   below `n_kernel · ε · σ_max` (same relative scale as the eigh floor, applied
   in the singular-value domain). On exactly rank-3 data both routes return 3
