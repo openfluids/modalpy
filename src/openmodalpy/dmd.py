@@ -226,6 +226,7 @@ class DMDAnalyzer(BaseAnalyzer):
         rank=None,  # required: positive int | "svht" | "energy"
         energy_fraction=0.999,
         use_parallel=True,
+        spatial_weights=None,
     ):
         super().__init__(
             file_path=file_path,
@@ -236,6 +237,7 @@ class DMDAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
         self.n_modes_save = n_modes_save
         if rank is None:

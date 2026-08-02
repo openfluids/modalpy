@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import pytest
 from scipy import signal
 
 from openmodalpy import PODAnalyzer
@@ -108,19 +109,15 @@ def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
     analyzer = PODAnalyzer(
         file_path="dummy",
         data_loader=lambda _: data,
-        spatial_weight_type="uniform",
+        spatial_weights=weights,
         n_modes_save=2,
     )
     analyzer.load_and_preprocess()
-    # perform_pod overwrites W with ones when the type is "uniform" (pod.py:182),
-    # which is why the previous version of this test never exercised W = [1, 9] at
-    # all. "prescribed" is not a recognised weight type: base.py only branches on
-    # "auto"/"uniform"/"polar" and silently keeps anything else, so this reads as
-    # "W is already set, leave it alone". If weight types ever get validated this
-    # raises rather than silently reverting to uniform, which is the failure we want.
-    analyzer.spatial_weight_type = "prescribed"
-    analyzer.W = weights
+    # perform_pod resets W to ones only when the type is "uniform" (pod.py);
+    # a prescribed vector stays in analyzer.W and is used by the eigenproblem.
+    np.testing.assert_allclose(np.asarray(analyzer.W).ravel(), weights)
     analyzer.perform_pod()
+    np.testing.assert_allclose(np.asarray(analyzer.W).ravel(), weights)
 
     # Independent spatial-kernel POD: K = (Q_c √W)^T (Q_c √W) / N
     q_centered = q - np.mean(q, axis=0, keepdims=True)
@@ -434,3 +431,70 @@ def test_pod_energy_captured_fraction_two_truncation_levels(small_pod_field, tmp
     with h5py.File(tmp_path / "one" / "pod_energy.hdf5", "r") as handle:
         assert "energy_captured_fraction" in handle.attrs
         assert abs(float(handle.attrs["energy_captured_fraction"]) - expected_one) < 1e-10
+
+
+def test_unknown_spatial_weight_type_raises_at_construction():
+    """A typo is a construction error naming the accepted values, not silent keep."""
+    with pytest.raises(ValueError, match=r"uniform.*polar|auto.*prescribed|prescribed.*auto"):
+        PODAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: {},
+            spatial_weight_type="unifrom",
+        )
+
+
+def test_prescribed_without_array_raises_at_construction():
+    with pytest.raises(ValueError, match=r"spatial_weights"):
+        PODAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: {},
+            spatial_weight_type="prescribed",
+        )
+
+
+def test_conflicting_spatial_weight_type_and_array_raises():
+    with pytest.raises(ValueError, match=r"conflict"):
+        PODAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: {},
+            spatial_weight_type="uniform",
+            spatial_weights=np.array([1.0, 1.0]),
+        )
+
+
+def test_prescribed_wrong_length_raises_in_load_and_preprocess():
+    data = {
+        "q": np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+        "x": np.array([0.0, 1.0]),
+        "y": np.array([0.0]),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 1,
+        "Ns": 3,
+    }
+    analyzer = PODAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weights=np.array([1.0, 2.0, 3.0]),
+    )
+    with pytest.raises(ValueError, match=r"n_space|length"):
+        analyzer.load_and_preprocess()
+
+
+def test_prescribed_negative_weight_raises_in_load_and_preprocess():
+    data = {
+        "q": np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+        "x": np.array([0.0, 1.0]),
+        "y": np.array([0.0]),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 1,
+        "Ns": 3,
+    }
+    analyzer = PODAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weights=np.array([1.0, -0.5]),
+    )
+    with pytest.raises(ValueError, match=r"negative"):
+        analyzer.load_and_preprocess()

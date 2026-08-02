@@ -187,6 +187,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         static_triads=None,
         use_parallel=True,
         max_qhat_gb=4.0,
+        spatial_weights=None,
     ):
         """
         Initialize the BSMDAnalyzer.
@@ -204,9 +205,11 @@ class BSMDAnalyzer(BaseAnalyzer):
             data_loader (callable, optional): Custom function to load data from `file_path`.
                                               If None, `BaseAnalyzer` attempts to auto-detect.
                                               Defaults to None.
-            spatial_weight_type (str, optional): Type of spatial weights to apply ('auto', 'uniform', 'polar').
-                                                 'auto' attempts to detect from filename.
-                                                 Defaults to 'auto'.
+            spatial_weight_type (str, optional): Type of spatial weights to apply
+                ('auto', 'uniform', 'polar', 'prescribed'). 'auto' attempts to detect
+                from filename. Defaults to 'auto'.
+            spatial_weights: Optional array of spatial integration weights. When given,
+                the type becomes 'prescribed'.
             use_static_triads (bool, optional): If True, use the `static_triads` list.
                                                 If False, dynamic triad selection (not yet fully implemented)
                                                 would be attempted. Defaults to True.
@@ -229,6 +232,7 @@ class BSMDAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
         self.use_static_triads = use_static_triads
         # Provenance is fixed at construction: comparing the list to ALL_TRIADS

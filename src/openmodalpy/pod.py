@@ -90,6 +90,7 @@ class PODAnalyzer(BaseAnalyzer):
         spatial_weight_type="auto",
         n_modes_save=10,
         use_parallel=True,
+        spatial_weights=None,
     ):
         """
         Initialize the PODAnalyzer.
@@ -103,12 +104,15 @@ class PODAnalyzer(BaseAnalyzer):
             data_loader (callable, optional): Custom function to load data from `file_path`.
                                               If None, `BaseAnalyzer` attempts to auto-detect.
                                               Defaults to None.
-            spatial_weight_type (str, optional): Type of spatial weights to apply ('auto', 'uniform', 'polar').
-                                                 'auto' attempts to detect from filename.
-                                                 Defaults to 'auto'.
+            spatial_weight_type (str, optional): Type of spatial weights to apply
+                ('auto', 'uniform', 'polar', 'prescribed'). 'auto' attempts to detect
+                from filename. Defaults to 'auto'.
             n_modes_save (int, optional): Number of dominant POD modes to compute, save,
                                           and consider for plotting/reconstruction.
                                           Defaults to 10.
+            spatial_weights: Optional array of spatial integration weights. When given,
+                the type becomes 'prescribed' and the vector is checked against the grid
+                in load_and_preprocess.
         """
         # Call BaseAnalyzer's __init__.
         # nfft and overlap are not directly used by POD but are part of BaseAnalyzer.
@@ -121,6 +125,7 @@ class PODAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
 
         self.n_modes_save = n_modes_save

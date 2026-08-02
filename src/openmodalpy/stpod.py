@@ -85,6 +85,7 @@ class STPODAnalyzer(BaseAnalyzer):
         data_loader=None,
         spatial_weight_type: str = "auto",
         use_parallel: bool = True,
+        spatial_weights=None,
     ):
         """Initialize the STPODAnalyzer.
 
@@ -95,8 +96,11 @@ class STPODAnalyzer(BaseAnalyzer):
             results_dir: Directory to save results.
             figures_dir: Directory to save figures.
             data_loader: Custom function to load data.
-            spatial_weight_type: Type of spatial weights ('auto', 'uniform', 'polar').
+            spatial_weight_type: Type of spatial weights
+                ('auto', 'uniform', 'polar', 'prescribed').
             use_parallel: Whether to use parallel computation where available.
+            spatial_weights: Optional array of spatial integration weights. When given,
+                the type becomes 'prescribed'.
         """
         super().__init__(
             file_path=file_path,
@@ -107,6 +111,7 @@ class STPODAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
 
         self.embedding_dim = embedding_dim

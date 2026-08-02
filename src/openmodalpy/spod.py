@@ -94,6 +94,7 @@ class SPODAnalyzer(BaseAnalyzer):
         use_parallel=True,
         characteristic_length: float | None = None,
         characteristic_velocity: float | None = None,
+        spatial_weights=None,
     ):
         """
         Initializes the SPODAnalyzer instance.
@@ -124,9 +125,11 @@ class SPODAnalyzer(BaseAnalyzer):
             data_loader (callable, optional): Custom function to load data from `file_path`.
                                               If None, `BaseAnalyzer` attempts to auto-detect.
                                               Defaults to None.
-            spatial_weight_type (str, optional): Type of spatial weights to apply ('auto', 'uniform', 'polar').
-                                                 'auto' attempts to detect from filename.
-                                                 Defaults to 'auto'.
+            spatial_weight_type (str, optional): Type of spatial weights to apply
+                ('auto', 'uniform', 'polar', 'prescribed'). 'auto' attempts to detect
+                from filename. Defaults to 'auto'.
+            spatial_weights: Optional array of spatial integration weights. When given,
+                the type becomes 'prescribed'.
         """
         super().__init__(
             file_path=file_path,
@@ -137,6 +140,7 @@ class SPODAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
 
         self._validate_inputs()

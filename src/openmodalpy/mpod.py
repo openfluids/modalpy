@@ -46,6 +46,7 @@ class MPODAnalyzer(PODAnalyzer):
         band_scale: str = "hz",
         filter_kind: str = "rectangular",
         use_parallel=True,
+        spatial_weights=None,
     ):
         super().__init__(
             file_path=file_path,
@@ -55,6 +56,7 @@ class MPODAnalyzer(PODAnalyzer):
             spatial_weight_type=spatial_weight_type,
             n_modes_save=n_modes_save,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
         self.band_edges = list(band_edges) if band_edges is not None else None
         self.band_scale = band_scale

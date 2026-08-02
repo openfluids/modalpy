@@ -201,8 +201,11 @@ def _coerce_rank(value: Any) -> int | str | None:
 
     null/None is accepted here and passed through; DMDAnalyzer refuses None at
     construction so an omitted rank fails with one message, not two.
+    A JSON boolean is rejected rather than treated as missing.
     """
-    if value is None or isinstance(value, bool):
+    if isinstance(value, bool):
+        raise ValueError(f"rank must be null, a positive int, 'svht', or 'energy'; got {value!r}")
+    if value is None:
         return None
     if isinstance(value, int):
         return int(value)
@@ -221,8 +224,11 @@ def _coerce_energy_fraction(value: Any) -> float | None:
     """Read the energy-rank fraction from config: null, or a float in (0, 1].
 
     null/None means "do not override" — DMDAnalyzer keeps its own 0.999 default.
+    A JSON boolean is rejected rather than treated as missing.
     """
-    if value is None or isinstance(value, bool):
+    if isinstance(value, bool):
+        raise ValueError(f"energy_fraction must be null or a float in (0, 1]; got {value!r}")
+    if value is None:
         return None
     try:
         frac = float(value)

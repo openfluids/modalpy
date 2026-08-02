@@ -684,3 +684,23 @@ def test_psd_pod_uses_mean_subtraction_matches_blocksfft_modes(tmp_path: Path) -
             assert bool(handle.attrs["uses_mean_subtraction"]) is True
             assert bool(handle.attrs["blockwise_mean"]) is blockwise_mean
             assert handle.attrs["analysis_type"] == "psd_pod"
+
+
+def test_coerce_rank_rejects_boolean():
+    """A JSON boolean must not be silently treated as a missing rank."""
+    from openmodalpy.commands import _coerce_rank
+
+    with pytest.raises(ValueError, match=r"rank"):
+        _coerce_rank(True)
+    with pytest.raises(ValueError, match=r"rank"):
+        _coerce_rank(False)
+
+
+def test_coerce_energy_fraction_rejects_boolean():
+    """A JSON boolean must not be silently treated as a missing energy_fraction."""
+    from openmodalpy.commands import _coerce_energy_fraction
+
+    with pytest.raises(ValueError, match=r"energy_fraction"):
+        _coerce_energy_fraction(True)
+    with pytest.raises(ValueError, match=r"energy_fraction"):
+        _coerce_energy_fraction(False)

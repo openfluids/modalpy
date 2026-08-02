@@ -1215,6 +1215,7 @@ class BaseAnalyzer:
         data_loader=None,
         spatial_weight_type="auto",
         use_parallel=True,
+        spatial_weights=None,
     ):
         """Initialize the analyzer.
 
@@ -1225,7 +1226,11 @@ class BaseAnalyzer:
             results_dir (str): Directory to save results.
             figures_dir (str): Directory to save figures.
             data_loader (callable): Function to load data.
-            spatial_weight_type (str): Type of spatial weighting.
+            spatial_weight_type (str): Type of spatial weighting
+                (``"auto"``, ``"uniform"``, ``"polar"``, or ``"prescribed"``).
+            spatial_weights: Optional array of spatial integration weights.
+                When given, the weight type becomes ``"prescribed"`` and the
+                vector is checked against the grid in ``load_and_preprocess``.
         """
         self.file_path = file_path
         self.nfft = nfft
@@ -1237,11 +1242,30 @@ class BaseAnalyzer:
         self.data_loader = data_loader or load_data
         self.use_parallel = use_parallel
 
-        # Set default weight type
-        if spatial_weight_type == "auto":
-            self.spatial_weight_type = auto_detect_weight_type(file_path)
+        # Weight type / prescribed vector — one validation site for all analyzers.
+        accepted = ("auto", "uniform", "polar", "prescribed")
+        if spatial_weights is not None:
+            if spatial_weight_type not in ("auto", "prescribed"):
+                raise ValueError(
+                    f"spatial_weights was given, but spatial_weight_type={spatial_weight_type!r} "
+                    f"conflicts with it. Use spatial_weight_type='prescribed' (or omit / 'auto'), "
+                    f"or drop spatial_weights. Accepted types: {', '.join(accepted)}."
+                )
+            self.spatial_weight_type = "prescribed"
+            self._prescribed_spatial_weights = spatial_weights
         else:
-            self.spatial_weight_type = spatial_weight_type
+            if spatial_weight_type not in accepted:
+                raise ValueError(
+                    f"spatial_weight_type={spatial_weight_type!r} is not recognised. "
+                    f"Accepted values: {', '.join(accepted)}."
+                )
+            if spatial_weight_type == "prescribed":
+                raise ValueError("spatial_weight_type='prescribed' requires a spatial_weights array.")
+            if spatial_weight_type == "auto":
+                self.spatial_weight_type = auto_detect_weight_type(file_path)
+            else:
+                self.spatial_weight_type = spatial_weight_type
+            self._prescribed_spatial_weights = None
 
         # Calculated later
         self.novlap = int(overlap * nfft)
@@ -1275,7 +1299,13 @@ class BaseAnalyzer:
             self.data = self.data_loader(self.file_path)
 
         # Calculate spatial weights
-        if self.spatial_weight_type == "polar":
+        if self.spatial_weight_type == "prescribed":
+            # n_space from the snapshot matrix (time × space); helpers check
+            # length/shape and that the metric is an inner product.
+            n_space = int(np.asarray(self.data["q"]).shape[1])
+            self.W = _coerce_spatial_weights(self._prescribed_spatial_weights, n_space)
+            logger.info("Using prescribed spatial weights.")
+        elif self.spatial_weight_type == "polar":
             self.W = calculate_polar_weights(self.data["x"], self.data["y"], use_parallel=self.use_parallel)
             logger.info("Using polar (cylindrical) spatial weights.")
         else:

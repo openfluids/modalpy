@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- An unrecognised `spatial_weight_type` now raises at construction instead of
+  being kept as-is. This is a behaviour break: any string other than `"auto"`,
+  `"uniform"`, `"polar"` or `"prescribed"` used to fall through to the
+  grid-spacing weight path and skip POD's and ST-POD's reset to unit weights,
+  so a typo silently changed the metric. Code that relied on that fall-through
+  to hand an analyzer its own weight vector should now pass
+  `spatial_weights=` instead.
 - SPOD result files write the spatial grid once, as `x`/`y`/`z` (matching the
   other producers). The previous duplicate datasets `x_coords`/`y_coords`/
   `z_coords` are no longer written. Files that still carry only the old
@@ -19,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that turns warnings into errors will need to filter it.
 
 ### Fixed
+- Config booleans for `rank` and `energy_fraction` now raise at parse time instead
+  of being silently treated as missing (`null`).
 - DMD `rank="svht"` now thresholds with the unknown-noise coefficient
   `omega(beta) = lambda(beta)/sqrt(mu_beta)` (`mu_beta` = Marchenko–Pastur
   median). The previous form used the known-noise `lambda(beta)` against
@@ -33,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller and may return fewer trailing noise modes on rank-deficient input.
 
 ### Added
+- Analyzer argument `spatial_weights=` (type `"prescribed"`) and construction-time
+  validation of `spatial_weight_type` to `{"auto", "uniform", "polar", "prescribed"}`.
 - Case config key `energy_fraction` for DMD `rank="energy"` (float in `(0, 1]`;
   omit to keep the analyzer default `0.999`).
 - POD `solver` route: `perform_pod(solver="eigh"|"svd")` and config

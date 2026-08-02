@@ -54,6 +54,7 @@ class PSDPODAnalyzer(BaseAnalyzer):
         use_parallel: bool = True,
         characteristic_length: float | None = None,
         characteristic_velocity: float | None = None,
+        spatial_weights=None,
     ):
         super().__init__(
             file_path=file_path,
@@ -64,6 +65,7 @@ class PSDPODAnalyzer(BaseAnalyzer):
             data_loader=data_loader,
             spatial_weight_type=spatial_weight_type,
             use_parallel=use_parallel,
+            spatial_weights=spatial_weights,
         )
         if not (0 <= self.overlap < 1):
             raise ValueError("Overlap must be between 0 (inclusive) and 1 (exclusive).")
