@@ -7,39 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- An unrecognised `spatial_weight_type` now raises at construction instead of
-  being kept as-is. This is a behaviour break: any string other than `"auto"`,
-  `"uniform"`, `"polar"` or `"prescribed"` used to fall through to the
-  grid-spacing weight path and skip POD's and ST-POD's reset to unit weights,
-  so a typo silently changed the metric. Code that relied on that fall-through
-  to hand an analyzer its own weight vector should now pass
-  `spatial_weights=` instead.
-- SPOD result files write the spatial grid once, as `x`/`y`/`z` (matching the
-  other producers). The previous duplicate datasets `x_coords`/`y_coords`/
-  `z_coords` are no longer written. Files that still carry only the old
-  `_coords` spelling continue to load: `read_results` maps them onto the
-  canonical `x`/`y`/`z` fields and emits a `DeprecationWarning` naming the
-  legacy key. Note that files written by earlier versions carry *both*
-  spellings, so reading one now emits that warning where it previously did
-  not. The canonical `x`/`y`/`z` still win, so values are unchanged — but code
-  that turns warnings into errors will need to filter it.
-
-### Fixed
-- Config booleans for `rank` and `energy_fraction` now raise at parse time instead
-  of being silently treated as missing (`null`).
-- DMD `rank="svht"` now thresholds with the unknown-noise coefficient
-  `omega(beta) = lambda(beta)/sqrt(mu_beta)` (`mu_beta` = Marchenko–Pastur
-  median). The previous form used the known-noise `lambda(beta)` against
-  `median(s)`, so the threshold sat ~24% low at `beta = 1` and pure i.i.d.
-  noise kept spurious modes at realistic matrix sizes.
-- The SVD route of `weighted_second_order` now drops singular values at or
-  below `n_kernel · ε · σ_max` (same relative scale as the eigh floor, applied
-  in the singular-value domain). On exactly rank-3 data both routes return 3
-  modes; a planted mode at singular-value ratio `1e-10` is still recovered.
-  The previous SVD path kept the full numerical null-space tail (eigenvalues
-  ~1e-29 against a top eigenvalue of hundreds). ST-POD is the existing SVD
-  caller and may return fewer trailing noise modes on rank-deficient input.
+### Breaking
+- `perform_spod()` now raises `RuntimeError` when FFT blocks (`qhat`) have not
+  been computed. It previously printed one error line and returned `None`, so
+  callers could continue as if an analysis had run. Call `compute_fft_blocks()`
+  or `run(compute_fft=True)` first.
+- Removed the unused `n_threads` parameter from `BaseAnalyzer`, `SPODAnalyzer`,
+  and `blocksfft`. It never affected FFT or BLAS work; use the BLAS thread
+  policy above for pool control.
+- DMD `rank` is required (no silent default to `n_modes_save`). See the
+  Changed note below for migration (`rank=n_modes_save` is bit-identical
+  to the previous default).
+- Removed the undocumented per-module entry points
+  (`python -m openmodalpy.pod`, `python -m openmodalpy.spod`,
+  `python -m openmodalpy.dmd`, `python -m openmodalpy.bsmd`,
+  `python -m openmodalpy.stpod`). Use `openmodalpy` / `python -m openmodalpy`
+  instead.
 
 ### Added
 - Analyzer argument `spatial_weights=` (type `"prescribed"`) and construction-time
@@ -79,25 +62,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Result files record a `prov_*` provenance block (versions, FFT backend, BLAS
   threads, config hash, seed, git SHA, UTC timestamp) via `write_results`;
   `AnalysisResults.provenance` exposes it with the prefix stripped.
-
-### Breaking
-- `perform_spod()` now raises `RuntimeError` when FFT blocks (`qhat`) have not
-  been computed. It previously printed one error line and returned `None`, so
-  callers could continue as if an analysis had run. Call `compute_fft_blocks()`
-  or `run(compute_fft=True)` first.
-- Removed the unused `n_threads` parameter from `BaseAnalyzer`, `SPODAnalyzer`,
-  and `blocksfft`. It never affected FFT or BLAS work; use the BLAS thread
-  policy above for pool control.
-- DMD `rank` is required (no silent default to `n_modes_save`). See the
-  Changed note below for migration (`rank=n_modes_save` is bit-identical
-  to the previous default).
-- Removed the undocumented per-module entry points
-  (`python -m openmodalpy.pod`, `python -m openmodalpy.spod`,
-  `python -m openmodalpy.dmd`, `python -m openmodalpy.bsmd`,
-  `python -m openmodalpy.stpod`). Use `openmodalpy` / `python -m openmodalpy`
-  instead.
+- The three built-in synthetic generators are now checked against the closed-form
+  answers they already carry. `example_data.py` has always returned the double gyre's
+  forcing frequency, the Taylor-Green decay eigenvalue and the cylinder wake's Strouhal
+  number alongside the data, but nothing read them, and two of the three generators were
+  not exercised by any test. Each is now run through the analyzer that should recover its
+  quantity, comparing against the value read from the generator's own metadata rather
+  than a constant copied into the test, so the check follows the generator if its physics
+  changes. Tolerances are computed from the discretization: machine precision for
+  Taylor-Green, where the field is rank-1 in space times a pure exponential and DMD
+  recovers the multiplier exactly; a tenth of the Rayleigh frequency for DMD, which is
+  not bin-limited; half an FFT bin for SPOD, which is. A cross-analyzer check pins that
+  DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- An unrecognised `spatial_weight_type` now raises at construction instead of
+  being kept as-is. This is a behaviour break: any string other than `"auto"`,
+  `"uniform"`, `"polar"` or `"prescribed"` used to fall through to the
+  grid-spacing weight path and skip POD's and ST-POD's reset to unit weights,
+  so a typo silently changed the metric. Code that relied on that fall-through
+  to hand an analyzer its own weight vector should now pass
+  `spatial_weights=` instead.
+- SPOD result files write the spatial grid once, as `x`/`y`/`z` (matching the
+  other producers). The previous duplicate datasets `x_coords`/`y_coords`/
+  `z_coords` are no longer written. Files that still carry only the old
+  `_coords` spelling continue to load: `read_results` maps them onto the
+  canonical `x`/`y`/`z` fields and emits a `DeprecationWarning` naming the
+  legacy key. Note that files written by earlier versions carry *both*
+  spellings, so reading one now emits that warning where it previously did
+  not. The canonical `x`/`y`/`z` still win, so values are unchanged — but code
+  that turns warnings into errors will need to filter it.
 - Default DMD rank for the shipped `double_gyre` example moved from 10 to 8.
   On the packaged 80×40/Nt=200 grid, rank 10 keeps singular values with
   s9/s0 ~ 2e-12, so machine round-off in the DMD operator is amplified to
@@ -115,7 +109,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   test both read those grids via `openmodalpy.config_io.load_jsonc` (single
   source; the full generation contract including `seed` is pinned). A set-
   equality test requires every generator to have a fixture.
-
 - One windowed-block Welch FFT: `blocksfft` and `blocksfft_optimized` both
   call `core/welch.py::windowed_block_fft`. Same numbers (the two copies were
   already bit-identical); the loop, `get_window`, and `(cw / nfft)` scaling
@@ -149,7 +142,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `core/results.py::find_latest_result`; each caller still owns its not-found
   policy (mpod silent; the others print `[Auto-detect]` / `[ERROR]`). Net
   `src/` line delta: −13.
-
 - One HDF5 result contract for every analyzer. Dataset names are lowercase
   (`modes`, `eigenvalues`, `time_coefficients`, `freq`, `st`, `modes1`,
   `modes2`, …); SPOD no longer writes `Weights` (it writes `W` like the
@@ -162,7 +154,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its name (FFT cache key, not a downstream result field). SPOD result
   files are written in mode `"w"`; BSMD still appends when the destination
   is the open FFT-cache path so that cache is preserved.
-
 - One rule now turns a spatial weight into a vector, instead of three helpers
   that disagreed about which shapes they accepted (`core/base.py`,
   `core/decomposition.py`, `mpod.py`). Two consequences beyond the deduplication.
@@ -176,7 +167,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `_as_weight_vector`), rather than being cast to its real part under a
   `ComplexWarning`. Weight vectors of the usual shape — a length-`n_space`
   column of positive reals — are unaffected.
-
 - Mode sign and phase are now canonical: each mode is scaled so the pivot
   entry — the lowest index whose magnitude sits within a relative band
   (`CANONICAL_TIE_RTOL = 1e-12`) of the column maximum — is real and positive.
@@ -223,35 +213,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it through the shared seam, SPOD through `spod_function`, and BSMD checks once
   per analysis. SPOD and BSMD apply weights directly rather than flooring them,
   so an isolated zero there means that cell contributes nothing.
-
-### Fixed
-- mPOD's one-call path (`MPODAnalyzer.run_analysis`) used to run plain POD and
-  write those results into a file still named `..._mpod.hdf5`. The orchestrator
-  now dispatches through an overridable `_perform_decomposition` hook
-  (`perform_pod` for POD, `perform_mpod` for mPOD), and a test requires every
-  `PODAnalyzer` subclass to override it, so the next subclass cannot inherit the
-  parent's decomposition unnoticed. The CLI was unaffected: `commands.py`
-  already called `perform_mpod` by name. DMD also gains a minimal `run_analysis`
-  (load, compute, save; no plots).
-- BSMD with no FFT blocks loaded now says so — "no frequency bins are loaded" —
-  instead of quoting a bound of `|p| <= -1`, and `perform_bsmd` raises
-  `ValueError` on an empty `qhat` rather than printing a note and continuing
-  into the analysis.
-- A full disk (or other write failure) while BSMD saves or offloads its FFT
-  block cache is no longer reported as a cache-load failure; the write error
-  propagates instead of triggering a recompute that cannot save either. When a
-  cache read genuinely does fail, the message now names the file it could not
-  read.
-- PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
-  `blocksfft` (which always removes a mean — global by default, per-block when
-  `blockwise_mean` is set). The previous write stored `False`.
-- SPOD `load_and_preprocess` docstring no longer claims parent mean subtraction
-  or a `self.data_matrix` attribute that is never assigned.
-- DOC.md: `bsmd.py` filename, POD branch condition `Ns < Nspace` (no false
-  `<<` margin), dropped a stale hardcoded test count, and notes that DMD neither
-  centers nor applies the spatial metric.
-
-### Changed
 - Welch block partitioning now matches `scipy.signal.welch`: `nblocks` is
   computed with floor arithmetic and the remainder is dropped, rather than
   ceil plus a clamped final block that re-uses samples. Records that do not
@@ -266,31 +227,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recomputed `nblocks` with ceil and could request more blocks than fit
   (e.g. Ns=400, nfft=128, overlap=0.5 → floor 5 vs ceil 6). `novlap >= nfft`
   (hop ≤ 0) is rejected in both FFT paths instead of repeating block 0.
-
-### Fixed
-- BSMD default static triads no longer fail a small-`nfft` configuration.
-  `static_triads` defaults to `None` and resolves to a private copy of
-  `ALL_TRIADS`; when that default list is used, triads outside `|p| <= nfft//2`
-  (and the loaded-bin bound) are dropped with a warning that names them. A
-  user-supplied list still raises `ValueError`, and every out-of-range
-  component is named in one message.
-- BSMD static-triad validation bounds by both `nfft//2` and the loaded `qhat`
-  length, and no longer swallows out-of-range bin reads into a silent NaN
-  eigenvalue. The two bounds coincide for a freshly computed transform; when
-  they diverge, the triad is now rejected with a `ValueError` naming the real
-  bound instead of returning `NaN` with no diagnostic.
-- POD energy-captured report no longer always prints 100%: the fraction is
-  truncated eigenvalue sum over the pre-truncation total, stored as
-  `energy_captured_fraction` on the analyzer and in result metadata.
-- ARPACK-path SVD (`compute_reduced_svd` with `min_dim >= 256`) is bit-reproducible
-  via a deterministic local start vector. Of the synthetic generators, only the
-  cylinder wake accepts a `seed` and records it into result metadata as
-  `data_seed`; the JetLES-like dummy generator accepts a `seed` for its noise RNG
-  but does not surface it; `double_gyre` and `taylor_green` are deterministic and
-  take no seed. Tests reseed NumPy from `OMPY_TEST_RNG_JITTER` so collection
-  order cannot leak unseeded draws.
-
-### Changed
 - **Breaking — DMD `rank` is required.** `DMDAnalyzer` no longer defaults the
   operator truncation to `n_modes_save` (a plotting parameter). Omitting `rank`
   raises `ValueError` naming the alternatives: a positive `int`, `"svht"`, or
@@ -301,43 +237,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by setting `rank` to the value you previously relied on via `n_modes_save`
   (`rank=n_modes_save` is bit-identical to the old default). `n_modes_save` only
   bounds how many modes are kept after sorting.
-
-### Fixed
-- DMD no longer amplifies noise into modes when the snapshot pair is ill-conditioned.
-  The reduced operator and the mode recovery both divide by the singular values of the
-  first snapshot matrix, and the number kept was whatever you asked for rather than
-  whatever the data supports. A rank-deficient sequence alone is harmless — the small
-  singular values cancel — but as soon as the second snapshot matrix carries content the
-  first one cannot represent, which is what a transient, an arriving structure or a
-  truncated record produces, the division has nothing to cancel against. On a rank-3
-  sequence with a perturbation applied to the final snapshot this returned eigenvalues of
-  magnitude 6.7e9 and modes of magnitude 1.9e9, all finite, so nothing raised. Singular
-  values are now kept only above a threshold relative to the largest one, following the
-  `numpy.linalg.pinv` convention, which makes the cut invariant to the overall scale of
-  the data; both `pinv` calls pass that same conditioning explicitly instead of relying
-  on a default. Well-conditioned data is unaffected.
-- DMD reports the rank it actually used as `effective_rank`, and warns when that is below
-  the number of modes requested. Asking for more modes than the data supports is normal,
-  so this is a `RuntimeWarning` about the data rather than an error.
-- An all-zero or otherwise degenerate field returns empty results with that warning
-  instead of failing inside the eigensolver with `LinAlgError: Array must not contain
-  infs or NaNs`.
-
-### Added
-- The three built-in synthetic generators are now checked against the closed-form
-  answers they already carry. `example_data.py` has always returned the double gyre's
-  forcing frequency, the Taylor-Green decay eigenvalue and the cylinder wake's Strouhal
-  number alongside the data, but nothing read them, and two of the three generators were
-  not exercised by any test. Each is now run through the analyzer that should recover its
-  quantity, comparing against the value read from the generator's own metadata rather
-  than a constant copied into the test, so the check follows the generator if its physics
-  changes. Tolerances are computed from the discretization: machine precision for
-  Taylor-Green, where the field is rank-1 in space times a pure exponential and DMD
-  recovers the multiplier exactly; a tenth of the Rayleigh frequency for DMD, which is
-  not bin-limited; half an FFT bin for SPOD, which is. A cross-analyzer check pins that
-  DMD and SPOD agree on the shedding frequency without reference to the metadata.
-
-### Changed
 - Four simplifications the code made silently are now written down where a user would
   look for them. `spatial_weight_type="uniform"` returns ones rather than cell volumes,
   so reported POD/SPOD energy is a sum over mesh points, not a domain integral, and its
@@ -381,6 +280,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- Config booleans for `rank` and `energy_fraction` now raise at parse time instead
+  of being silently treated as missing (`null`).
+- DMD `rank="svht"` now thresholds with the unknown-noise coefficient
+  `omega(beta) = lambda(beta)/sqrt(mu_beta)` (`mu_beta` = Marchenko–Pastur
+  median). The previous form used the known-noise `lambda(beta)` against
+  `median(s)`, so the threshold sat ~24% low at `beta = 1` and pure i.i.d.
+  noise kept spurious modes at realistic matrix sizes.
+- The SVD route of `weighted_second_order` now drops singular values at or
+  below `n_kernel · ε · σ_max` (same relative scale as the eigh floor, applied
+  in the singular-value domain). On exactly rank-3 data both routes return 3
+  modes; a planted mode at singular-value ratio `1e-10` is still recovered.
+  The previous SVD path kept the full numerical null-space tail (eigenvalues
+  ~1e-29 against a top eigenvalue of hundreds). ST-POD is the existing SVD
+  caller and may return fewer trailing noise modes on rank-deficient input.
+- mPOD's one-call path (`MPODAnalyzer.run_analysis`) used to run plain POD and
+  write those results into a file still named `..._mpod.hdf5`. The orchestrator
+  now dispatches through an overridable `_perform_decomposition` hook
+  (`perform_pod` for POD, `perform_mpod` for mPOD), and a test requires every
+  `PODAnalyzer` subclass to override it, so the next subclass cannot inherit the
+  parent's decomposition unnoticed. The CLI was unaffected: `commands.py`
+  already called `perform_mpod` by name. DMD also gains a minimal `run_analysis`
+  (load, compute, save; no plots).
+- BSMD with no FFT blocks loaded now says so — "no frequency bins are loaded" —
+  instead of quoting a bound of `|p| <= -1`, and `perform_bsmd` raises
+  `ValueError` on an empty `qhat` rather than printing a note and continuing
+  into the analysis.
+- A full disk (or other write failure) while BSMD saves or offloads its FFT
+  block cache is no longer reported as a cache-load failure; the write error
+  propagates instead of triggering a recompute that cannot save either. When a
+  cache read genuinely does fail, the message now names the file it could not
+  read.
+- PSD-POD result metadata now records `uses_mean_subtraction=True`, matching
+  `blocksfft` (which always removes a mean — global by default, per-block when
+  `blockwise_mean` is set). The previous write stored `False`.
+- SPOD `load_and_preprocess` docstring no longer claims parent mean subtraction
+  or a `self.data_matrix` attribute that is never assigned.
+- DOC.md: `bsmd.py` filename, POD branch condition `Ns < Nspace` (no false
+  `<<` margin), dropped a stale hardcoded test count, and notes that DMD neither
+  centers nor applies the spatial metric.
+- BSMD default static triads no longer fail a small-`nfft` configuration.
+  `static_triads` defaults to `None` and resolves to a private copy of
+  `ALL_TRIADS`; when that default list is used, triads outside `|p| <= nfft//2`
+  (and the loaded-bin bound) are dropped with a warning that names them. A
+  user-supplied list still raises `ValueError`, and every out-of-range
+  component is named in one message.
+- BSMD static-triad validation bounds by both `nfft//2` and the loaded `qhat`
+  length, and no longer swallows out-of-range bin reads into a silent NaN
+  eigenvalue. The two bounds coincide for a freshly computed transform; when
+  they diverge, the triad is now rejected with a `ValueError` naming the real
+  bound instead of returning `NaN` with no diagnostic.
+- POD energy-captured report no longer always prints 100%: the fraction is
+  truncated eigenvalue sum over the pre-truncation total, stored as
+  `energy_captured_fraction` on the analyzer and in result metadata.
+- ARPACK-path SVD (`compute_reduced_svd` with `min_dim >= 256`) is bit-reproducible
+  via a deterministic local start vector. Of the synthetic generators, only the
+  cylinder wake accepts a `seed` and records it into result metadata as
+  `data_seed`; the JetLES-like dummy generator accepts a `seed` for its noise RNG
+  but does not surface it; `double_gyre` and `taylor_green` are deterministic and
+  take no seed. Tests reseed NumPy from `OMPY_TEST_RNG_JITTER` so collection
+  order cannot leak unseeded draws.
+- DMD no longer amplifies noise into modes when the snapshot pair is ill-conditioned.
+  The reduced operator and the mode recovery both divide by the singular values of the
+  first snapshot matrix, and the number kept was whatever you asked for rather than
+  whatever the data supports. A rank-deficient sequence alone is harmless — the small
+  singular values cancel — but as soon as the second snapshot matrix carries content the
+  first one cannot represent, which is what a transient, an arriving structure or a
+  truncated record produces, the division has nothing to cancel against. On a rank-3
+  sequence with a perturbation applied to the final snapshot this returned eigenvalues of
+  magnitude 6.7e9 and modes of magnitude 1.9e9, all finite, so nothing raised. Singular
+  values are now kept only above a threshold relative to the largest one, following the
+  `numpy.linalg.pinv` convention, which makes the cut invariant to the overall scale of
+  the data; both `pinv` calls pass that same conditioning explicitly instead of relying
+  on a default. Well-conditioned data is unaffected.
+- DMD reports the rank it actually used as `effective_rank`, and warns when that is below
+  the number of modes requested. Asking for more modes than the data supports is normal,
+  so this is a `RuntimeWarning` about the data rather than an error.
+- An all-zero or otherwise degenerate field returns empty results with that warning
+  instead of failing inside the eigensolver with `LinAlgError: Array must not contain
+  infs or NaNs`.
 - A corrupt or truncated FFT-block cache no longer aborts the analysis. Interrupted
   runs, full disks, and killed jobs can leave a half-written HDF5 cache that still
   exists on disk; opening it for append used to raise and stop SPOD or BSMD even though
