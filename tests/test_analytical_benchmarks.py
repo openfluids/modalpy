@@ -62,7 +62,6 @@ class TestPODAnalytical:
         - Energy in modes 1-2 should equal total energy
         - Absolute scale: sum_i λ_i = (1/N) sum(Q_c**2 * W) (snapshot-averaged Gram)
         """
-        np.random.seed(42)
         Ns, Nx = 100, 50
 
         # Construct rank-2 data: two orthogonal spatial patterns with time variation
@@ -126,7 +125,6 @@ class TestPODAnalytical:
         - Adding more modes can only reduce or maintain error, never increase
         - Absolute scale: retained sum(λ) = energy_captured_fraction × (1/N) sum(Q_c² W)
         """
-        np.random.seed(123)
         Ns, Nx = 50, 30
 
         # Create data with decaying mode amplitudes
@@ -181,11 +179,11 @@ class TestPODAnalytical:
         - This is a fundamental property of the decomposition
         - Absolute scale: sum_i λ_i = (1/N) sum(Q_c**2 * W) for the retained share
         """
-        np.random.seed(456)
+        rng = np.random.default_rng(456)
         Ns, Nx = 40, 25
 
         # Random data (to test general case, not just special structure)
-        data_matrix = np.random.randn(Ns, Nx)
+        data_matrix = rng.standard_normal((Ns, Nx))
 
         data = {
             "q": data_matrix,
@@ -229,10 +227,10 @@ class TestPODAnalytical:
         - POD convention: modes ordered by decreasing energy
         - Absolute scale: sum_i λ_i = energy_captured_fraction × (1/N) sum(Q_c² W)
         """
-        np.random.seed(789)
+        rng = np.random.default_rng(789)
         Ns, Nx = 60, 40
 
-        data_matrix = np.random.randn(Ns, Nx)
+        data_matrix = rng.standard_normal((Ns, Nx))
 
         data = {
             "q": data_matrix,
@@ -280,9 +278,9 @@ class TestPODAnalytical:
         energy shares and mode orthonormality are scale-invariant; this pins
         magnitude.
         """
-        np.random.seed(101)
+        rng = np.random.default_rng(101)
         Ns, Nx = 45, 28
-        data_matrix = np.random.randn(Ns, Nx)
+        data_matrix = rng.standard_normal((Ns, Nx))
         data = {
             "q": data_matrix,
             "x": np.linspace(0, 1, Nx),
@@ -630,7 +628,6 @@ class TestSTPODAnalytical:
         - Adding more SVD modes can only reduce or maintain approximation error
         - This is a fundamental property of SVD truncation
         """
-        np.random.seed(42)
         Ns, Nx = 50, 30
 
         # Multi-mode signal
@@ -691,10 +688,10 @@ class TestSTPODAnalytical:
         - ST-POD modes U satisfy: Uᵀ W_ext U = I
         - where W_ext is the spatial weight matrix extended to d copies
         """
-        np.random.seed(789)
+        rng = np.random.default_rng(789)
         Ns, Nx = 40, 20
 
-        data_matrix = np.random.randn(Ns, Nx)
+        data_matrix = rng.standard_normal((Ns, Nx))
 
         data = {
             "q": data_matrix,
@@ -736,10 +733,10 @@ class TestSTPODAnalytical:
         - Eigenvalues are squared singular values, hence non-negative
         - Convention: sorted in descending order by energy
         """
-        np.random.seed(101)
+        rng = np.random.default_rng(101)
         Ns, Nx = 50, 25
 
-        data_matrix = np.random.randn(Ns, Nx)
+        data_matrix = rng.standard_normal((Ns, Nx))
 
         data = {
             "q": data_matrix,

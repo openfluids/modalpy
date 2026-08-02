@@ -14,12 +14,12 @@ class TestSTPODBasic:
 
     def test_perform_stpod_simple(self):
         """Basic ST-POD execution on synthetic data."""
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
         Ns, Nx, Ny = 50, 10, 10
         Nspace = Nx * Ny
 
         data = {
-            "q": np.random.randn(Ns, Nspace),
+            "q": rng.standard_normal((Ns, Nspace)),
             "x": np.linspace(0, 1, Nx),
             "y": np.linspace(0, 1, Ny),
             "dt": 0.1,
@@ -79,12 +79,12 @@ class TestSTPODBasic:
 
     def test_extract_spatial_mode(self):
         """Test extraction of spatial modes from space-time modes."""
-        np.random.seed(123)
+        rng = np.random.default_rng(123)
         Ns, Nspace = 30, 20
         embedding_dim = 4
 
         data = {
-            "q": np.random.randn(Ns, Nspace),
+            "q": rng.standard_normal((Ns, Nspace)),
             "x": np.arange(Nspace),
             "y": np.array([0.0]),
             "dt": 0.1,
@@ -110,12 +110,12 @@ class TestSTPODBasic:
 
     def test_get_mode_as_movie(self):
         """Test getting mode as temporal sequence."""
-        np.random.seed(456)
+        rng = np.random.default_rng(456)
         Ns, Nspace = 40, 25
         embedding_dim = 6
 
         data = {
-            "q": np.random.randn(Ns, Nspace),
+            "q": rng.standard_normal((Ns, Nspace)),
             "x": np.arange(Nspace),
             "y": np.array([0.0]),
             "dt": 0.1,
@@ -149,13 +149,13 @@ class TestSTPODBasic:
         """
         from openmodalpy.core.base import canonicalize_modes
 
-        np.random.seed(7)
+        rng = np.random.default_rng(7)
         Ns, Nspace = 12, 3
         embedding_dim = 4
         n_modes = 3
 
         data = {
-            "q": np.random.randn(Ns, Nspace),
+            "q": rng.standard_normal((Ns, Nspace)),
             "x": np.arange(Nspace),
             "y": np.array([0.0]),
             "dt": 0.1,
@@ -205,7 +205,7 @@ class TestSTPODBasic:
         )
 
     def test_save_results_records_delay_embedded_contract(self, tmp_path):
-        np.random.seed(9)
+        rng = np.random.default_rng(9)
         Ns, Nspace = 10, 3
         analyzer = STPODAnalyzer(
             file_path="test_stpod_contract",
@@ -214,7 +214,7 @@ class TestSTPODBasic:
             results_dir=tmp_path,
             figures_dir=tmp_path,
             data_loader=lambda _: {
-                "q": np.random.randn(Ns, Nspace),
+                "q": rng.standard_normal((Ns, Nspace)),
                 "x": np.arange(Nspace),
                 "y": np.array([0.0]),
                 "dt": 0.1,
@@ -313,9 +313,9 @@ class TestSTPODValidation:
 
     def test_embedding_dim_too_small_raises(self):
         """embedding_dim < 2 should raise ValueError."""
-        np.random.seed(30)
+        rng = np.random.default_rng(30)
         data = {
-            "q": np.random.randn(20, 10),
+            "q": rng.standard_normal((20, 10)),
             "x": np.arange(10),
             "y": np.array([0.0]),
             "dt": 0.1,
@@ -337,10 +337,10 @@ class TestSTPODValidation:
 
     def test_embedding_dim_too_large_raises(self):
         """embedding_dim >= Ns should raise ValueError."""
-        np.random.seed(31)
+        rng = np.random.default_rng(31)
         Ns = 10
         data = {
-            "q": np.random.randn(Ns, 5),
+            "q": rng.standard_normal((Ns, 5)),
             "x": np.arange(5),
             "y": np.array([0.0]),
             "dt": 0.1,

@@ -5,9 +5,9 @@ from openmodalpy import SPODAnalyzer
 
 
 def test_plot_eigenvalues_v2(tmp_path):
-    np.random.seed(0)
+    rng = np.random.default_rng(0)
     data = {
-        "q": np.random.randn(8, 4),
+        "q": rng.standard_normal((8, 4)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 1.0,
@@ -33,9 +33,9 @@ def test_plot_eigenvalues_v2(tmp_path):
 
 
 def test_plot_modes_and_timecoeffs(tmp_path):
-    np.random.seed(1)
+    rng = np.random.default_rng(1)
     data = {
-        "q": np.random.randn(8, 4),
+        "q": rng.standard_normal((8, 4)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 1.0,
@@ -65,9 +65,9 @@ def test_plot_modes_and_timecoeffs(tmp_path):
 
 
 def test_plot_reconstruction_error(tmp_path):
-    np.random.seed(2)
+    rng = np.random.default_rng(2)
     data = {
-        "q": np.random.randn(8, 4),
+        "q": rng.standard_normal((8, 4)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 1.0,
@@ -94,9 +94,9 @@ def test_plot_reconstruction_error(tmp_path):
 
 
 def test_save_results_records_spod_contract(tmp_path):
-    np.random.seed(3)
+    rng = np.random.default_rng(3)
     data = {
-        "q": np.random.randn(8, 4),
+        "q": rng.standard_normal((8, 4)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 1.0,

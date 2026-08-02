@@ -61,7 +61,6 @@ def test_pod(tmp_path):
 
     # --- Test 1: Rank-k recovery ---
     # Create data that is exactly rank-3: sum of 3 spatial patterns with time coefficients
-    np.random.seed(42)
     Nx, Ny, Ns = 40, 40, 200  # Higher resolution: 1600 spatial DOF
 
     # 3 orthogonal spatial patterns
@@ -141,7 +140,7 @@ def test_dmd(tmp_path):
     """Test Dynamic Mode Decomposition."""
     from openmodalpy import DMDAnalyzer
 
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     Nx, Ny = 25, 25  # Higher resolution: 625 spatial DOF
     Nspace = Nx * Ny
     dt = 0.1
@@ -152,7 +151,7 @@ def test_dmd(tmp_path):
     # q(t) = e^{-αt} * spatial_pattern
     # DMD eigenvalue should be λ = e^{-α*dt}
     alpha = 0.5
-    spatial = np.random.randn(Nspace)
+    spatial = rng.standard_normal(Nspace)
     spatial /= np.linalg.norm(spatial)
     q_decay = np.outer(np.exp(-alpha * t), spatial)  # [time, space]
 
@@ -294,7 +293,7 @@ def test_spod(tmp_path):
     """Test Spectral Proper Orthogonal Decomposition."""
     from openmodalpy import SPODAnalyzer
 
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     Nx, Ny = 25, 25  # Higher resolution: 625 spatial DOF
     Nspace = Nx * Ny
     dt = 0.01
@@ -302,9 +301,9 @@ def test_spod(tmp_path):
     t = np.arange(Ns) * dt
 
     # --- Test 1: White noise - flat spectrum ---
-    spatial = np.random.randn(Nspace)
+    spatial = rng.standard_normal(Nspace)
     spatial /= np.linalg.norm(spatial)
-    noise = np.random.randn(Ns)
+    noise = rng.standard_normal(Ns)
     q_noise = np.outer(noise, spatial)
 
     nfft = 128
@@ -564,7 +563,7 @@ def test_heavy(tmp_path):
     # --- Test 1: Cylinder Wake Simulation (Re~100) ---
     # Von Karman vortex street: St ≈ 0.16-0.17 at Re=100
     # Reference: Noack et al., JFM 2003
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     Nx, Ny = 150, 75  # 11250 spatial DOF (higher resolution)
     Ns = 800  # More snapshots
     dt = 0.1
@@ -596,7 +595,7 @@ def test_heavy(tmp_path):
         q_wake[i] = vortex.flatten()
 
     # Add small noise (simulates turbulence/measurement noise)
-    q_wake += 0.05 * np.random.randn(Ns, Nspace)
+    q_wake += 0.05 * rng.standard_normal((Ns, Nspace))
 
     # POD test
     loader = make_test_loader(q_wake, Nx, Ny, dt, x=x, y=y)
@@ -720,12 +719,12 @@ def test_heavy(tmp_path):
 
     # Time signals at different frequencies
     f1, f2 = 2.0, 8.0  # Hz
-    np.random.seed(43)
-    a1 = np.sin(2 * np.pi * f1 * t_jet) + 0.3 * np.random.randn(Ns_jet)
-    a2 = 0.5 * np.sin(2 * np.pi * f2 * t_jet) + 0.2 * np.random.randn(Ns_jet)
+    rng = np.random.default_rng(43)
+    a1 = np.sin(2 * np.pi * f1 * t_jet) + 0.3 * rng.standard_normal(Ns_jet)
+    a2 = 0.5 * np.sin(2 * np.pi * f2 * t_jet) + 0.2 * rng.standard_normal(Ns_jet)
 
     q_jet = np.outer(a1, mode1.flatten()) + np.outer(a2, mode2.flatten())
-    q_jet += 0.1 * np.random.randn(Ns_jet, Nx_jet * Ny_jet)  # Background turbulence
+    q_jet += 0.1 * rng.standard_normal((Ns_jet, Nx_jet * Ny_jet))  # Background turbulence
 
     loader = make_test_loader(q_jet, Nx_jet, Ny_jet, dt_jet, x=x_jet, y=y_jet)
     spod_jet = SPODAnalyzer(

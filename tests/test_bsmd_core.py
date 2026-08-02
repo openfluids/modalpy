@@ -20,11 +20,11 @@ def _make_analyzer(
     file_path="dummy.h5",
 ):
     """Helper to build a BSMDAnalyzer with synthetic data."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
     data = {
-        "q": np.random.randn(Ns, Nspace),
+        "q": rng.standard_normal((Ns, Nspace)),
         "x": np.linspace(0, 1, Nx),
         "y": np.linspace(0, 1, Ny),
         "dt": 1.0,
@@ -103,10 +103,10 @@ def test_static_triads_default_is_none_and_resolves_to_copy(tmp_path):
 
 def test_default_triads_at_small_nfft_warn_and_filter(tmp_path):
     """Default ALL_TRIADS at nfft=8 keeps only in-range triads and warns."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     ns, nspace = 64, 4
     data = {
-        "q": np.random.randn(ns, nspace),
+        "q": rng.standard_normal((ns, nspace)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 0.1,
@@ -167,10 +167,10 @@ def test_default_filter_to_empty_raises(tmp_path, monkeypatch):
     import openmodalpy.bsmd as bsmd
 
     monkeypatch.setattr(bsmd, "ALL_TRIADS", [(8, -8, 0), (7, -7, 0), (8, -7, 1)])
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     ns, nspace = 64, 4
     data = {
-        "q": np.random.randn(ns, nspace),
+        "q": rng.standard_normal((ns, nspace)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 0.1,
@@ -200,10 +200,10 @@ def test_default_filter_to_empty_raises(tmp_path, monkeypatch):
 
 def test_replaced_static_triads_list_treated_as_user(tmp_path):
     """A static_triads_list assigned after construction is user-supplied and raises."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     ns, nspace = 64, 4
     data = {
-        "q": np.random.randn(ns, nspace),
+        "q": rng.standard_normal((ns, nspace)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 0.1,
@@ -231,10 +231,10 @@ def test_replaced_static_triads_list_treated_as_user(tmp_path):
 
 def test_default_triads_truncated_loaded_bins_warn_and_filter(tmp_path):
     """Default list against a truncated loaded-bin count warns and filters, not raises."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     ns, nspace = 600, 4
     data = {
-        "q": np.random.randn(ns, nspace),
+        "q": rng.standard_normal((ns, nspace)),
         "x": np.linspace(0, 1, 2),
         "y": np.linspace(0, 1, 2),
         "dt": 0.1,
@@ -330,10 +330,10 @@ def test_bsmd_accepts_isolated_zero_weight(tmp_path):
 
 def test_bsmd_polar_ny1_zero_measure_raises(tmp_path):
     """Polar weights on a single radial station at r=0 have zero total measure."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     ns, nx, ny = 24, 4, 1
     data = {
-        "q": np.random.randn(ns, nx * ny),
+        "q": rng.standard_normal((ns, nx * ny)),
         "x": np.linspace(0.0, 1.0, nx),
         "y": np.array([0.0]),
         "dt": 1.0,
@@ -645,11 +645,11 @@ def _make_analyzer_without_fft(
     use_static=True,
 ):
     """Build a BSMDAnalyzer with weights set but qhat still empty (no FFT blocks)."""
-    np.random.seed(20)
+    rng = np.random.default_rng(20)
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
     data = {
-        "q": np.random.randn(Ns, Nspace),
+        "q": rng.standard_normal((Ns, Nspace)),
         "x": np.linspace(0, 1, Nx),
         "y": np.linspace(0, 1, Ny),
         "dt": 1.0,

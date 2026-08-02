@@ -18,11 +18,11 @@ from openmodalpy.core.parallel import print_optimization_status
 
 
 def _synthetic_data(Ns: int = 32, Nspace: int = 4, dt: float = 1.0) -> dict:
-    np.random.seed(0)
+    rng = np.random.default_rng(0)
     Nx = int(np.sqrt(Nspace))
     Ny = Nspace // Nx
     return {
-        "q": np.random.randn(Ns, Nspace),
+        "q": rng.standard_normal((Ns, Nspace)),
         "x": np.linspace(0.0, 1.0, Nx),
         "y": np.linspace(0.0, 1.0, Ny),
         "dt": dt,

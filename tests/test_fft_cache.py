@@ -57,8 +57,8 @@ def test_window_type_change_produces_different_qhat(tmp_path):
     run silently returned the first run's hamming-windowed blocks and this
     assertion failed (qhat was bit-identical instead of different).
     """
-    np.random.seed(0)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(0)
+    q = rng.standard_normal((32, 4))
 
     analyzer_hamming = _make_spod(tmp_path, q, window_type="hamming")
     analyzer_hann = _make_spod(tmp_path, q, window_type="hann")
@@ -75,9 +75,9 @@ def test_different_q_arrays_do_not_share_cache(tmp_path):
     Ns, analysis_type) with no content check, so the second analyzer (over a
     completely different `q`) reused the first analyzer's cached blocks.
     """
-    np.random.seed(1)
-    q1 = np.random.randn(32, 4)
-    q2 = np.random.randn(32, 4) * 5.0 + 3.0  # clearly distinct content
+    rng = np.random.default_rng(1)
+    q1 = rng.standard_normal((32, 4))
+    q2 = rng.standard_normal((32, 4)) * 5.0 + 3.0  # clearly distinct content
 
     analyzer1 = _make_spod(tmp_path, q1, file_path="dummy.h5")
     assert not analyzer1.qhat_cached
@@ -111,8 +111,8 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, caplog):
     Pre-fix: there was no stamp at all, so this scenario could not even be
     expressed — any existing file with the right shape was accepted.
     """
-    np.random.seed(2)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(2)
+    q = rng.standard_normal((32, 4))
 
     _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
     fname = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
@@ -157,8 +157,8 @@ def test_matching_cache_hit_is_still_used(tmp_path, capsys):
     disables caching (e.g. always recompute) would pass all of them while
     destroying the feature.
     """
-    np.random.seed(3)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(3)
+    q = rng.standard_normal((32, 4))
 
     analyzer1 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
     assert not analyzer1.qhat_cached
@@ -177,8 +177,8 @@ def test_corrupt_truncated_spod_cache_recomputes_without_raising(tmp_path, capsy
     Exercises the unreadable-file path (h5py OSError on open), not the
     stamp-mismatch path covered by ``test_stamp_mismatch_recomputes_without_raising``.
     """
-    np.random.seed(4)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(4)
+    q = rng.standard_normal((32, 4))
 
     cold = _make_spod(tmp_path, q, file_path="dummy.h5")
     assert not cold.qhat_cached
@@ -223,8 +223,8 @@ def _make_bsmd(tmp_path, q, *, nfft=8, overlap=0.0, file_path="dummy.h5"):
 
 def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsys):
     """A truncated BSMD cache must recompute rather than raise on the read."""
-    np.random.seed(5)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(5)
+    q = rng.standard_normal((32, 4))
 
     cold = _make_bsmd(tmp_path, q, file_path="dummy.h5")
     assert not cold.qhat_cached
@@ -257,8 +257,8 @@ def test_corrupt_spod_cache_does_not_stop_bsmd(tmp_path, monkeypatch, capsys):
     """
     import openmodalpy.bsmd as bsmd_mod
 
-    np.random.seed(6)
-    q = np.random.randn(32, 4)
+    rng = np.random.default_rng(6)
+    q = rng.standard_normal((32, 4))
 
     spod_dir = tmp_path / "spod"
     spod_dir.mkdir()
