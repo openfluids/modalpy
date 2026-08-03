@@ -282,6 +282,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- The CLI's internal unhandled-command fallback now returns exit code 2 instead of
+  relying on an unreachable line after ``parser.error``.
 - Config booleans for `rank` and `energy_fraction` now raise at parse time instead
   of being silently treated as missing (`null`).
 - DMD `rank="svht"` now thresholds with the unknown-noise coefficient

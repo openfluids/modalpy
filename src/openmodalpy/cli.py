@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -180,7 +181,13 @@ def _print_examples_list() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point used by both the console script and ``python -m openmodalpy``."""
+    """CLI entry point used by both the console script and ``python -m openmodalpy``.
+
+    Returns 0 on success and a non-zero exit code on failure of the internal
+    unhandled-command fallback. Usage and argument errors still go through
+    argparse and raise ``SystemExit`` (typically with code 2); that channel is
+    separate from the integer return path.
+    """
     _configure_cli_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -226,7 +233,9 @@ def main(argv: list[str] | None = None) -> int:
         print_results_summary(inspect_results(args.path))
         return 0
 
-    parser.error(f"Unhandled command tree: {args}")
+    # Defensive fallback: required subparsers make this unreachable from argv.
+    parser.print_usage(sys.stderr)
+    sys.stderr.write(f"{parser.prog}: error: Unhandled command tree: {args}\n")
     return 2
 
 

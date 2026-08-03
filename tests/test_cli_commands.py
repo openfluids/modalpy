@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -532,6 +533,23 @@ def test_inspect_results_reads_hdf5_metadata(tmp_path: Path) -> None:
     assert summary["datasets"]["modes"]["shape"] == [1, 2]
     assert summary["attrs"]["analysis_type"] == "pod"
     assert summary["attrs"]["Ns"] == 5
+
+
+def test_unhandled_command_tree_returns_2(monkeypatch, capsys) -> None:
+    # Defensive branch unreachable from the command line: every subparser is
+    # required=True, so ordinary argv never lands here. Monkeypatch parse_args
+    # to hand back an unrecognised command and exercise the fallback.
+    def fake_parse_args(self, args=None, namespace=None):
+        return argparse.Namespace(command="not-a-real-command")
+
+    monkeypatch.setattr(argparse.ArgumentParser, "parse_args", fake_parse_args)
+
+    exit_code = main([])
+
+    assert exit_code == 2
+    err = capsys.readouterr().err
+    assert "Unhandled command tree" in err
+    assert "not-a-real-command" in err
 
 
 def test_cli_analyze_subcommand_routes_overrides(tmp_path: Path, monkeypatch, capsys) -> None:
