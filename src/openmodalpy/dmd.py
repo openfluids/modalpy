@@ -11,7 +11,6 @@ with Euclidean least squares. It does not currently apply the spatial metric
 import logging
 import os
 
-import h5py
 import matplotlib
 
 matplotlib.use("Agg")
@@ -519,6 +518,8 @@ class DMDAnalyzer(BaseAnalyzer):
 
     def load_results(self, filename=None):
         """Load DMD results from an HDF5 file."""
+        from openmodalpy.core.results import read_results
+
         if not filename:
             filename = make_result_filename(
                 self.data_root,
@@ -543,47 +544,54 @@ class DMDAnalyzer(BaseAnalyzer):
                 )
                 return  # Or: raise FileNotFoundError("No DMD results file found for plotting.")
 
-        with h5py.File(path, "r") as f:
-
-            def _decode_attr(name, default=None):
-                if name not in f.attrs:
-                    return default
-                value = f.attrs[name]
-                if isinstance(value, bytes):
-                    return value.decode("utf-8")
-                return value
-
-            self.eigenvalues = f["eigenvalues"][:]
-            self.modes = f["modes"][:]
-            self.time_coefficients = f["time_coefficients"][:]
-            # Load amplitudes if available (backward compatibility)
-            if "amplitudes" in f:
-                self.amplitudes = f["amplitudes"][:]
-            else:
-                self.amplitudes = np.abs(self.eigenvalues)
-            # Load continuous-time eigenvalues if available
-            if "omega" in f:
-                self.omega = f["omega"][:]
-            self._dmd_method = str(_decode_attr("dmd_method", "ls"))
-            self._dmd_delays = int(_decode_attr("dmd_delays", 1))
-            self._dmd_named_variant = str(_decode_attr("dmd_named_variant", "dmd"))
-            # Load spatial coordinates if they exist
-            if "x" in f:
-                self.data["x"] = f["x"][:]
-            if "y" in f:
-                self.data["y"] = f["y"][:]
-            if "z" in f:
-                self.data["z"] = f["z"][:]
-            if "dt" in f.attrs:
-                self.data["dt"] = f.attrs["dt"]
-            if "Ns" in f.attrs:
-                self.data["Ns"] = int(f.attrs["Ns"])
-            if "Nx" in f.attrs:
-                self.data["Nx"] = int(f.attrs["Nx"])
-            if "Ny" in f.attrs:
-                self.data["Ny"] = int(f.attrs["Ny"])
-            if "Nz" in f.attrs:
-                self.data["Nz"] = int(f.attrs["Nz"])
+        res = read_results(path)
+        # Before the unified reader this indexed modes/eigenvalues directly, so a
+        # file that was not a DMD result raised. Assigning only when present would
+        # turn that into empty arrays and a "results loaded" print, so keep it loud.
+        if res.modes is None or res.eigenvalues is None or res.time_coefficients is None:
+            missing = [
+                n
+                for n, v in (
+                    ("modes", res.modes),
+                    ("eigenvalues", res.eigenvalues),
+                    ("time_coefficients", res.time_coefficients),
+                )
+                if v is None
+            ]
+            raise KeyError(f"{path} is not a DMD result file: missing {', '.join(missing)}")
+        self.eigenvalues = res.eigenvalues
+        self.modes = res.modes
+        self.time_coefficients = res.time_coefficients
+        # Load amplitudes if available (backward compatibility)
+        if res.amplitudes is not None:
+            self.amplitudes = res.amplitudes
+        else:
+            self.amplitudes = np.abs(self.eigenvalues)
+        # Load continuous-time eigenvalues if available
+        if res.omega is not None:
+            self.omega = res.omega
+        # Reader already decodes attrs; keep the same defaults as the old helper.
+        self._dmd_method = str(res.attrs["dmd_method"] if "dmd_method" in res.attrs else "ls")
+        self._dmd_delays = int(res.attrs["dmd_delays"] if "dmd_delays" in res.attrs else 1)
+        self._dmd_named_variant = str(
+            res.attrs["dmd_named_variant"] if "dmd_named_variant" in res.attrs else "dmd"
+        )
+        for coord_key in ("x", "y", "z"):
+            value = getattr(res, coord_key, None)
+            if value is not None:
+                self.data[coord_key] = value
+            elif coord_key in res.extra:
+                self.data[coord_key] = res.extra[coord_key]
+        if "dt" in res.attrs:
+            self.data["dt"] = res.attrs["dt"]
+        if "Ns" in res.attrs:
+            self.data["Ns"] = int(res.attrs["Ns"])
+        if "Nx" in res.attrs:
+            self.data["Nx"] = int(res.attrs["Nx"])
+        if "Ny" in res.attrs:
+            self.data["Ny"] = int(res.attrs["Ny"])
+        if "Nz" in res.attrs:
+            self.data["Nz"] = int(res.attrs["Nz"])
         print(f"DMD results loaded from {path}")
 
     def _mode_freq(self, eigvals):

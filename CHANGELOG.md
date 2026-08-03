@@ -81,6 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- POD, ST-POD and DMD `load_results` now go through `read_results`, so
+  pre-unification files with capitalised dataset names (`Modes`, `Eigenvalues`,
+  `TimeCoefficients`) load and emit the reader's `DeprecationWarning`.
 - ST-POD percentages now mean share of total field energy (pre-truncation) and
   will read lower than before for any truncated spectrum.
 - An unrecognised `spatial_weight_type` now raises at construction instead of

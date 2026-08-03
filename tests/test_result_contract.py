@@ -346,3 +346,83 @@ def test_spod_load_results_rejects_a_file_without_modes(tmp_path: Path) -> None:
 
     with pytest.raises(KeyError, match="not a SPOD result file"):
         analyzer.load_results("not_spod.hdf5")
+
+
+def _legacy_capitalised_file(path: Path, modes: np.ndarray, eigenvalues: np.ndarray, coeffs: np.ndarray) -> None:
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("Modes", data=modes)
+        handle.create_dataset("Eigenvalues", data=eigenvalues)
+        handle.create_dataset("TimeCoefficients", data=coeffs)
+
+
+def test_legacy_capitalised_file_loads_through_pod(tmp_path: Path) -> None:
+    """A pre-unification POD file with capitalised keys loads via the reader."""
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    rng = np.random.default_rng(2)
+    modes = rng.standard_normal((12, 2))
+    eigenvalues = np.array([3.0, 1.5])
+    coeffs = rng.standard_normal((8, 2))
+    _legacy_capitalised_file(results_dir / "legacy_pod.hdf5", modes, eigenvalues, coeffs)
+
+    analyzer = PODAnalyzer.__new__(PODAnalyzer)
+    analyzer.results_dir = str(results_dir)
+    analyzer.data = {}
+
+    with pytest.warns(DeprecationWarning, match="legacy name"):
+        analyzer.load_results("legacy_pod.hdf5")
+
+    np.testing.assert_array_equal(analyzer.modes, modes)
+    np.testing.assert_array_equal(analyzer.eigenvalues, eigenvalues)
+    np.testing.assert_array_equal(analyzer.time_coefficients, coeffs)
+
+
+def test_legacy_capitalised_file_loads_through_stpod(tmp_path: Path) -> None:
+    """A pre-unification ST-POD file with capitalised keys loads via the reader."""
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    rng = np.random.default_rng(3)
+    modes = rng.standard_normal((18, 2))
+    eigenvalues = np.array([4.0, 2.0])
+    coeffs = rng.standard_normal((6, 2))
+    _legacy_capitalised_file(results_dir / "legacy_stpod.hdf5", modes, eigenvalues, coeffs)
+
+    analyzer = STPODAnalyzer.__new__(STPODAnalyzer)
+    analyzer.results_dir = str(results_dir)
+    analyzer.data = {}
+    analyzer.embedding_dim = 3
+
+    with pytest.warns(DeprecationWarning, match="legacy name"):
+        analyzer.load_results("legacy_stpod.hdf5")
+
+    np.testing.assert_array_equal(analyzer.modes, modes)
+    np.testing.assert_array_equal(analyzer.eigenvalues, eigenvalues)
+    np.testing.assert_array_equal(analyzer.time_coefficients, coeffs)
+    assert np.isnan(analyzer.total_energy)
+    assert np.isnan(analyzer.energy_captured_fraction)
+
+
+def test_legacy_capitalised_file_loads_through_dmd(tmp_path: Path) -> None:
+    """A pre-unification DMD file with capitalised keys loads via the reader."""
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    rng = np.random.default_rng(4)
+    modes = rng.standard_normal((12, 2)) + 1j * rng.standard_normal((12, 2))
+    eigenvalues = np.array([0.9 + 0.1j, 0.8 - 0.1j])
+    coeffs = rng.standard_normal((8, 2)) + 1j * rng.standard_normal((8, 2))
+    _legacy_capitalised_file(results_dir / "legacy_dmd.hdf5", modes, eigenvalues, coeffs)
+
+    analyzer = DMDAnalyzer.__new__(DMDAnalyzer)
+    analyzer.results_dir = str(results_dir)
+    analyzer.data = {}
+
+    with pytest.warns(DeprecationWarning, match="legacy name"):
+        analyzer.load_results("legacy_dmd.hdf5")
+
+    np.testing.assert_array_equal(analyzer.modes, modes)
+    np.testing.assert_array_equal(analyzer.eigenvalues, eigenvalues)
+    np.testing.assert_array_equal(analyzer.time_coefficients, coeffs)
+    np.testing.assert_array_equal(analyzer.amplitudes, np.abs(eigenvalues))
+    assert analyzer._dmd_method == "ls"
+    assert analyzer._dmd_delays == 1
+    assert analyzer._dmd_named_variant == "dmd"

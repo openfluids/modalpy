@@ -26,7 +26,6 @@ import os
 import time
 from typing import Any, Optional
 
-import h5py
 import matplotlib
 
 matplotlib.use("Agg")
@@ -337,6 +336,8 @@ class STPODAnalyzer(BaseAnalyzer):
 
     def load_results(self, filename: Optional[str] = None) -> None:
         """Load ST-POD results from HDF5 file."""
+        from openmodalpy.core.results import read_results
+
         if not filename:
             filename = (
                 f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_d{self.embedding_dim}_{self.analysis_type}.hdf5"
@@ -356,45 +357,58 @@ class STPODAnalyzer(BaseAnalyzer):
                 print(f"[ERROR] No results file found in {self.results_dir}")
                 return
 
-        with h5py.File(load_path, "r") as f:
-            if "x" in f:
-                self.data["x"] = f["x"][:]
-            if "y" in f:
-                self.data["y"] = f["y"][:]
-            if "z" in f:
-                self.data["z"] = f["z"][:]
-            if "W" in f:
-                self.W = f["W"][:]
-            if "temporal_mean" in f:
-                self.temporal_mean = f["temporal_mean"][:]
-
-            self.modes = f["modes"][:]
-            self.eigenvalues = f["eigenvalues"][:]
-            self.time_coefficients = f["time_coefficients"][:]
-
-            if "embedding_dim" in f.attrs:
-                self.embedding_dim = f.attrs["embedding_dim"]
-            if "dt" in f.attrs:
-                self.data["dt"] = f.attrs["dt"]
-            if "n_snapshots" in f.attrs:
-                self.data["Ns"] = f.attrs["n_snapshots"]
-            if "Nspace" in f.attrs:
-                self.data["Nspace"] = f.attrs["Nspace"]
-            if "Nx" in f.attrs:
-                self.data["Nx"] = int(f.attrs["Nx"])
-            if "Ny" in f.attrs:
-                self.data["Ny"] = int(f.attrs["Ny"])
-            if "Nz" in f.attrs:
-                self.data["Nz"] = int(f.attrs["Nz"])
-            # Reset first: a file without these attrs means "unknown", and a
-            # stale total from an earlier run on other data would otherwise be
-            # used as the denominator with no "retained modes only" label.
-            self.total_energy = float("nan")
-            self.energy_captured_fraction = float("nan")
-            if "total_energy" in f.attrs:
-                self.total_energy = float(f.attrs["total_energy"])
-            if "energy_captured_fraction" in f.attrs:
-                self.energy_captured_fraction = float(f.attrs["energy_captured_fraction"])
+        res = read_results(load_path)
+        # Before the unified reader this indexed modes/eigenvalues directly, so a
+        # file that was not an ST-POD result raised. Assigning only when present
+        # would turn that into empty arrays and a "results loaded" print, so keep
+        # it loud.
+        if res.modes is None or res.eigenvalues is None or res.time_coefficients is None:
+            missing = [
+                n
+                for n, v in (
+                    ("modes", res.modes),
+                    ("eigenvalues", res.eigenvalues),
+                    ("time_coefficients", res.time_coefficients),
+                )
+                if v is None
+            ]
+            raise KeyError(f"{load_path} is not an ST-POD result file: missing {', '.join(missing)}")
+        self.modes = res.modes
+        self.eigenvalues = res.eigenvalues
+        self.time_coefficients = res.time_coefficients
+        if res.W is not None:
+            self.W = res.W
+        if res.temporal_mean is not None:
+            self.temporal_mean = res.temporal_mean
+        for coord_key in ("x", "y", "z"):
+            value = getattr(res, coord_key, None)
+            if value is not None:
+                self.data[coord_key] = value
+            elif coord_key in res.extra:
+                self.data[coord_key] = res.extra[coord_key]
+        if "embedding_dim" in res.attrs:
+            self.embedding_dim = res.attrs["embedding_dim"]
+        if "dt" in res.attrs:
+            self.data["dt"] = res.attrs["dt"]
+        if "n_snapshots" in res.attrs:
+            self.data["Ns"] = res.attrs["n_snapshots"]
+        if "Nspace" in res.attrs:
+            self.data["Nspace"] = res.attrs["Nspace"]
+        if "Nx" in res.attrs:
+            self.data["Nx"] = int(res.attrs["Nx"])
+        if "Ny" in res.attrs:
+            self.data["Ny"] = int(res.attrs["Ny"])
+        if "Nz" in res.attrs:
+            self.data["Nz"] = int(res.attrs["Nz"])
+        # Reset first: a file without these attrs means "unknown", and a
+        # stale total from an earlier run on other data would otherwise be
+        # used as the denominator with no "retained modes only" label.
+        self.total_energy = float("nan")
+        self.energy_captured_fraction = float("nan")
+        if "total_energy" in res.attrs:
+            self.total_energy = float(res.attrs["total_energy"])
+        if "energy_captured_fraction" in res.attrs:
+            self.energy_captured_fraction = float(res.attrs["energy_captured_fraction"])
 
         print("ST-POD results loaded.")
 
