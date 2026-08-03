@@ -140,13 +140,37 @@ class BandFilteredLift:
 
 
 class SpatialMetric:
-    """Diagonal spatial inner-product weights (the POD/SPOD metric W)."""
+    """Diagonal spatial inner-product weights (the POD/SPOD metric W).
+
+    Holds a diagonal metric as a 1-D vector. A full square matrix or a 3-D
+    weight array is rejected rather than flattened — pass ``np.diag(W)`` when
+    the metric is diagonal, or hand the raw array to the analyzer weight path
+    (which reads the diagonal / stacks per-component diagonals).
+    """
 
     def __init__(self, weights: np.ndarray):
+        w = np.asarray(weights)
+        # Shape before metric checks: square and 3-D are ambiguous for a
+        # diagonal-only container. A complex square then reports the shape,
+        # not the complex entries — the caller cannot act on the latter until
+        # the shape is right.
+        if w.ndim == 3:
+            raise ValueError(
+                f"SpatialMetric holds a diagonal metric as a vector and cannot "
+                f"represent a 3-D weight array of shape {w.shape}. Stack "
+                f"np.diag of each component plane into a 1-D vector, or pass "
+                f"the raw array to the analyzer weight path which does that."
+            )
+        if w.ndim == 2 and w.shape[0] == w.shape[1] and w.shape[0] > 1:
+            raise ValueError(
+                f"SpatialMetric holds a diagonal metric as a vector and cannot "
+                f"represent a square matrix of shape {w.shape}. If the metric "
+                f"is diagonal, pass np.diag(W) instead."
+            )
         # Validate on the raw input before any real cast — complex would
         # otherwise truncate under ComplexWarning and store only the real part.
-        require_spatial_metric(weights)
-        self.weights = np.asarray(weights, dtype=float).reshape(-1)
+        require_spatial_metric(w)
+        self.weights = np.asarray(w, dtype=float).reshape(-1)
 
     def tile(self, d: int) -> np.ndarray:
         """Repeat the metric ``d`` times for a delay-embedded space (I_d ⊗ W)."""

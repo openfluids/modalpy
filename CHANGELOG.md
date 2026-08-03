@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- `SpatialMetric` now rejects square matrices and 3-D weight arrays with a
+  named `ValueError` (shape + `np.diag` fix) instead of flattening them and
+  later failing on length. It holds a diagonal metric as a vector; pass
+  `np.diag(W)` for a diagonal matrix, or the raw array to the analyzer weight
+  path. 1-D, `(n, 1)`, and non-square `(n, k)` inputs are unchanged.
 - `perform_spod()` now raises `RuntimeError` when FFT blocks (`qhat`) have not
   been computed. It previously printed one error line and returned `None`, so
   callers could continue as if an analysis had run. Call `compute_fft_blocks()`

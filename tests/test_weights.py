@@ -41,6 +41,72 @@ def test_complex_weights_are_rejected_not_truncated():
         assert not any(w.category is np.exceptions.ComplexWarning for w in rec)
 
 
+@pytest.mark.parametrize(
+    "W",
+    [
+        np.diag([0.5, 1.0, 2.0, 0.25]),
+        np.ones((2, 2)),
+        np.arange(1.0, 10.0).reshape(3, 3),
+        np.eye(5),
+    ],
+    ids=["diagonal-4x4", "smallest-square-2x2", "non-diagonal-3x3", "identity-5x5"],
+)
+def test_spatial_metric_rejects_a_square_matrix_by_name(W):
+    """Any square matrix is ambiguous for a diagonal-only container — refuse it.
+
+    Several shapes, and a non-diagonal one, so a guard that only recognised the
+    one fixture below would not pass this.
+    """
+    with pytest.raises(ValueError, match=r"np\.diag") as info:
+        SpatialMetric(W)
+    msg = str(info.value)
+    # Names the shape the caller actually passed, and points at the fix.
+    assert str(W.shape) in msg
+    # The old error reported the flattened length, which told the caller nothing.
+    assert f"length {W.size}" not in msg
+
+
+@pytest.mark.parametrize(
+    "w3",
+    [
+        np.stack([np.diag([1.0, 2.0, 3.0]), np.diag([4.0, 5.0, 6.0])], axis=2),
+        np.ones((1, 1, 1)),
+        np.ones((2, 2, 1)),
+        np.ones((2, 3, 4)),
+    ],
+    ids=["per-component-3x3x2", "unit-1x1x1", "single-component-2x2x1", "unequal-first-dims-2x3x4"],
+)
+def test_spatial_metric_rejects_3d_weights_by_name(w3):
+    """Any 3-D weight array is refused, whatever its dimensions."""
+    with pytest.raises(ValueError, match=r"np\.diag") as info:
+        SpatialMetric(w3)
+    msg = str(info.value)
+    # Requiring the shape string, not just the words "3-D", keeps this honest:
+    # the message must name what the caller actually passed.
+    assert str(w3.shape) in msg
+    assert f"length {w3.size}" not in msg
+
+
+def test_spatial_metric_still_accepts_the_shapes_that_already_agreed():
+    """1-D, column, row, 1x1 and non-square flatten the same way they always have.
+
+    These are the shapes on which the wrapped and raw paths already agreed, so
+    the rejection above must not have widened into them. 1x1 is deliberately
+    included: it is square, but there is nothing ambiguous about a single
+    weight, and the raw path treats it as a plain scalar too.
+    """
+    cases = (
+        (np.array([1.0, 2.0, 3.0]), 3, [1.0, 2.0, 3.0]),
+        (np.array([[1.0], [2.0], [3.0]]), 3, [1.0, 2.0, 3.0]),
+        (np.array([[1.0, 2.0, 3.0]]), 3, [1.0, 2.0, 3.0]),
+        (np.array([[7.0]]), 1, [7.0]),
+        (np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]), 6, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+    )
+    for w, n, expect in cases:
+        got = _as_weight_vector(SpatialMetric(w), n)
+        np.testing.assert_array_equal(got, np.asarray(expect, dtype=float))
+
+
 def test_three_d_weights_with_equal_space_and_components():
     """Per-component 3-D weights must not fall through into a second diagonal.
 
