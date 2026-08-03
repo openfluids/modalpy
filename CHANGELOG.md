@@ -290,6 +290,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- `read_results` now loads 0-d (scalar) HDF5 datasets into `extra` instead of
+  raising on a scalar dataspace; normal datasets in the same file are unchanged.
 - SPOD and BSMD modes no longer flip sign or phase between runs.
 - The CLI's internal unhandled-command fallback now returns exit code 2 instead of
   relying on an unreachable line after ``parser.error``.

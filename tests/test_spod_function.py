@@ -1,7 +1,15 @@
+import h5py
 import numpy as np
 import pytest
 
-from openmodalpy.core.base import PARALLEL_AVAILABLE, spod_function
+from openmodalpy import SPODAnalyzer
+from openmodalpy.core.base import (
+    _QHAT_STAMP_ATTR_PREFIX,
+    PARALLEL_AVAILABLE,
+    _qhat_cache_stamp,
+    make_result_filename,
+    spod_function,
+)
 from openmodalpy.core.decomposition import spod_single_frequency
 from openmodalpy.core.parallel import spod_single_frequency_optimized
 
@@ -164,3 +172,60 @@ def test_spod_single_frequency_optimized_rejects_invalid_metric():
         spod_single_frequency_optimized(qhat, np.zeros((n_space, 1)), nblocks, 0.1)
     with pytest.raises(ValueError, match="non-finite"):
         spod_single_frequency_optimized(qhat, np.array([1.0, np.nan, 2.0, 1.0, 1.0, 1.0]).reshape(-1, 1), nblocks, 0.1)
+
+
+def test_spod_save_reapplies_the_fft_cache_stamp(tmp_path):
+    """save_results rewrites the file then re-stamps the FFT-cache attrs.
+
+    A full mode-"w" write clears the stamp that compute_fft_blocks left; the
+    re-apply after write_results is what lets the next run reuse FFTBlocks.
+    Without it the stamp is missing and the next run recomputes.
+    """
+    rng = np.random.default_rng(7)
+    data = {
+        "q": rng.standard_normal((8, 4)),
+        "x": np.linspace(0, 1, 2),
+        "y": np.linspace(0, 1, 2),
+        "dt": 1.0,
+        "Nx": 2,
+        "Ny": 2,
+        "Ns": 8,
+    }
+    analyzer = SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=4,
+        overlap=0.0,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+    )
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    analyzer.perform_spod()
+    analyzer.save_results()
+
+    save_path = tmp_path / make_result_filename("dummy", 4, 0.0, 8, "spod")
+    expected = _qhat_cache_stamp(analyzer, analyzer.data["q"])
+    # Without this the loop below would assert nothing if the stamp ever
+    # became empty, and the test would pass while checking nothing.
+    assert expected, "the stamp is empty, so this test would verify nothing"
+    with h5py.File(save_path, "r") as handle:
+        # The stamp survives a full rewrite only because it is re-applied
+        # afterwards. Assert the rewrite actually happened, so a save that did
+        # nothing at all could not satisfy the stamp checks below by leaving
+        # the compute-time stamp untouched.
+        assert "modes" in handle and "eigenvalues" in handle
+        for key, want in expected.items():
+            attr = f"{_QHAT_STAMP_ATTR_PREFIX}{key}"
+            assert attr in handle.attrs, f"missing stamp attr {attr}"
+            got = handle.attrs[attr]
+            if isinstance(want, bool):
+                got = bool(got)
+            elif isinstance(want, int):
+                got = int(got)
+            elif isinstance(want, float):
+                got = float(got)
+            else:
+                got = str(got)
+            assert got == want

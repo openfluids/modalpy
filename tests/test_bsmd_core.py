@@ -794,3 +794,29 @@ def test_compute_single_triad_nan_in_qhat_returns_nan(tmp_path):
     eig, mode1, mode2 = analyzer._compute_single_triad(1, 1, 2)
     assert np.isnan(eig)
     assert mode1 is None and mode2 is None
+
+
+def test_bsmd_save_preserves_fftblocks_on_the_cache_file(tmp_path):
+    """save_results onto the open FFT cache must keep FFTBlocks intact.
+
+    BSMD writes the FFT cache under the same auto-name as the result file.
+    When save_results targets that path it appends, so FFTBlocks survives.
+    Overwriting the file (mode "w") would drop them.
+    """
+    analyzer = _make_analyzer(tmp_path, triads=[(0, 0, 0)], nfft=4, Ns=10)
+    assert analyzer._qhat_cache_path is not None
+    cache_path = analyzer._qhat_cache_path
+    with h5py.File(cache_path, "r") as handle:
+        assert "FFTBlocks" in handle
+        qhat_before = handle["FFTBlocks"][:]
+
+    analyzer._perform_static_bsmd_core()
+    # Default filename is the cache path itself — the append edge under test.
+    analyzer.save_results()
+
+    with h5py.File(cache_path, "r") as handle:
+        assert "FFTBlocks" in handle
+        np.testing.assert_array_equal(handle["FFTBlocks"][:], qhat_before)
+        assert "triads" in handle
+        assert "eigenvalues" in handle
+        assert "modes1" in handle

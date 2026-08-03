@@ -117,6 +117,17 @@ def _decode_attr(value: Any) -> Any:
     return value
 
 
+def _read_dataset(dset: h5py.Dataset) -> np.ndarray:
+    """Load one HDF5 dataset, including 0-d (scalar) ones.
+
+    Slicing ``dset[:]`` raises on a scalar dataspace; those are read with
+    ``dset[()]`` and returned as a 0-d array so callers see a NumPy value.
+    """
+    if dset.ndim == 0:
+        return np.asarray(dset[()])
+    return dset[:]
+
+
 def write_results(
     path: str | Path,
     datasets: Mapping[str, Any],
@@ -179,7 +190,7 @@ def read_results(path: str | Path) -> AnalysisResults:
         for key in handle.keys():
             if key in LEGACY_ALIASES:
                 continue
-            fields[key] = handle[key][:]
+            fields[key] = _read_dataset(handle[key])
         for key in handle.keys():
             if key not in LEGACY_ALIASES:
                 continue
@@ -190,7 +201,7 @@ def read_results(path: str | Path) -> AnalysisResults:
                 stacklevel=2,
             )
             if canon not in fields:
-                fields[canon] = handle[key][:]
+                fields[canon] = _read_dataset(handle[key])
 
     result = AnalysisResults(path=path_str, attrs=attrs)
     for key, value in fields.items():

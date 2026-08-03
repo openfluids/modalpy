@@ -10,6 +10,7 @@ file for every producer name.
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -279,6 +280,67 @@ def test_result_contract_all_producers(tmp_path: Path) -> None:
     config_psd_path = Path(outcome.results_path)
     _assert_canonical_keys(config_psd_path, {"modes", "eigenvalues", "time_coefficients", "freq", "st"})
     assert read_results(config_psd_path).attrs.get("analysis_type") == "psd_pod"
+
+
+def test_read_results_handles_a_zero_dimensional_dataset(tmp_path: Path) -> None:
+    """A 0-d (scalar) dataset lands in extra; normal datasets stay intact.
+
+    No writer emits a 0-d dataset today; the reader must still survive one
+    instead of raising on ``handle[key][:]`` against a scalar dataspace.
+    """
+    path = tmp_path / "zerod.hdf5"
+    modes = np.arange(6.0).reshape(3, 2)
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("modes", data=modes)
+        handle.create_dataset("scalar_thing", data=np.float64(2.5))
+
+    res = read_results(path)
+
+    assert "scalar_thing" in res.extra
+    # Shape, not just the value: a reader that turned the scalar into shape (1,)
+    # would satisfy a value-only check while not handling 0-d at all.
+    assert np.asarray(res.extra["scalar_thing"]).shape == ()
+    assert float(np.asarray(res.extra["scalar_thing"])) == 2.5
+    assert res.modes is not None
+    np.testing.assert_array_equal(res.modes, modes)
+
+
+def test_mixed_legacy_bsmd_file_resolves_every_key(tmp_path: Path) -> None:
+    """Pre-unification BSMD mix: Modes1/Modes2 + lowercase triads/eigenvalues.
+
+    Capitalised mode keys resolve and warn; already-canonical keys pass
+    through without a deprecation notice.
+    """
+    path = tmp_path / "mixed_legacy_bsmd.hdf5"
+    modes1 = np.ones((4, 2))
+    modes2 = 2.0 * np.ones((4, 2))
+    triads = np.arange(6.0).reshape(2, 3)
+    eigenvalues = np.array([1.0, 0.5])
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("Modes1", data=modes1)
+        handle.create_dataset("Modes2", data=modes2)
+        handle.create_dataset("triads", data=triads)
+        handle.create_dataset("eigenvalues", data=eigenvalues)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        res = read_results(path)
+
+    assert res.modes1 is not None
+    assert res.modes2 is not None
+    np.testing.assert_array_equal(res.modes1, modes1)
+    np.testing.assert_array_equal(res.modes2, modes2)
+    assert res.triads is not None
+    assert res.eigenvalues is not None
+    np.testing.assert_array_equal(res.triads, triads)
+    np.testing.assert_array_equal(res.eigenvalues, eigenvalues)
+
+    dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    messages = [str(w.message) for w in dep]
+    assert any("Modes1" in m for m in messages)
+    assert any("Modes2" in m for m in messages)
+    assert not any("'triads'" in m for m in messages)
+    assert not any("'eigenvalues'" in m for m in messages)
 
 
 def test_read_results_legacy_layout_emits_deprecation(tmp_path: Path) -> None:
