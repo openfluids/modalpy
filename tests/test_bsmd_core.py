@@ -554,7 +554,7 @@ def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
     for correctness (manufactured phase-locked/control triads) lives in
     tests/test_bsmd_manufactured.py.
     """
-    from openmodalpy.core.base import canonicalize_modes
+    from tests.reference_helpers import canonicalize_reference
 
     analyzer = _make_analyzer(tmp_path, triads=[(1, 2, 3)], nfft=8, Ns=24, Nspace=2)
     analyzer.W = np.ones((2, 1), dtype=complex)
@@ -571,7 +571,7 @@ def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
     c_matrix = (np.conj(q3).T @ (analyzer.W * prod)) / q1.shape[1]
     eigvals, eigvecs = np.linalg.eig(c_matrix)
     dom = np.argmax(np.abs(eigvals))
-    coeffs_col, _ = canonicalize_modes(eigvecs[:, dom].reshape(-1, 1))
+    coeffs_col, _ = canonicalize_reference(eigvecs[:, dom].reshape(-1, 1))
     coeffs = coeffs_col[:, 0]
 
     np.testing.assert_allclose(eigval, eigvals[dom], rtol=1e-12, atol=1e-12)
@@ -590,7 +590,7 @@ def test_bsmd_modes_canonical_and_relative_phase_preserved(tmp_path, monkeypatch
     problem, so the free phase is injected through a unit factor on the
     eigenvectors; without the canonicalize call the modes keep that factor.
     """
-    from openmodalpy.core.base import canonicalize_modes
+    from tests.reference_helpers import canonicalize_reference
 
     analyzer = _make_analyzer(tmp_path, triads=[(1, 2, 3)], nfft=8, Ns=32, Nspace=4)
     analyzer.W = np.ones((4, 1), dtype=complex)
@@ -624,7 +624,7 @@ def test_bsmd_modes_canonical_and_relative_phase_preserved(tmp_path, monkeypatch
     eigvals, eigvecs = np.linalg.eig(c_matrix)
     dom = np.argmax(np.abs(eigvals))
     a_phased = eigvecs[:, dom]
-    a_can, _ = canonicalize_modes(a_phased.reshape(-1, 1))
+    a_can, _ = canonicalize_reference(a_phased.reshape(-1, 1))
     a_can = a_can[:, 0]
     assert not np.allclose(a_phased, a_can, rtol=0, atol=1e-10)
 
@@ -642,8 +642,8 @@ def test_bsmd_modes_canonical_and_relative_phase_preserved(tmp_path, monkeypatch
     np.testing.assert_allclose(relative_out, relative_phased, rtol=0, atol=1e-12)
 
     # Separate per-mode canonicalization would change that relative product.
-    m1_sep, _ = canonicalize_modes(mode1_phased.reshape(-1, 1))
-    m2_sep, _ = canonicalize_modes(mode2_phased.reshape(-1, 1))
+    m1_sep, _ = canonicalize_reference(mode1_phased.reshape(-1, 1))
+    m2_sep, _ = canonicalize_reference(mode2_phased.reshape(-1, 1))
     relative_sep = np.conj(m1_sep[:, 0]) * m2_sep[:, 0]
     assert not np.allclose(relative_sep, relative_phased, rtol=0, atol=1e-10)
 

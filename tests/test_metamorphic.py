@@ -174,7 +174,7 @@ def test_stpod_d2_matches_independent_hankel_pod():
     Modes are sign-canonicalized at the seam; the independent SVD is brought
     to the same convention before comparison.
     """
-    from openmodalpy.core.base import canonicalize_modes
+    from tests.reference_helpers import canonicalize_reference
 
     rng = np.random.default_rng(2)
     q = rng.standard_normal((24, 5))
@@ -198,7 +198,7 @@ def test_stpod_d2_matches_independent_hankel_pod():
     m_cols = hankel.shape[1]
     u, sigma, _vt = np.linalg.svd(hankel, full_matrices=False)
     ref_eigs = (sigma[:n_modes] ** 2) / m_cols
-    ref_modes, _ = canonicalize_modes(u[:, :n_modes])
+    ref_modes, _ = canonicalize_reference(u[:, :n_modes])
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)
     np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_RTOL_EXACT, atol=_ATOL_EXACT)

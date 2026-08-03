@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 
 from openmodalpy import MPODAnalyzer, PODAnalyzer
-from openmodalpy.core.base import canonicalize_modes
+from tests.reference_helpers import canonicalize_reference
 
 # Measured max |oracle − analyzer| on eigenvalues and |modes| was 0.0 for the
 # two-tone multi-band case below (same rfft/irfft + eigh construction). Bound
@@ -393,7 +393,7 @@ def test_mpod_band_oracle_matches_two_tone():
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     # Independent oracle uses plain eigh; apply the same sign rule as the seam.
-    ref_modes, _ = canonicalize_modes(ref_modes)
+    ref_modes, _ = canonicalize_reference(ref_modes)
     np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)
     np.testing.assert_array_equal(analyzer.band_mode_counts, ref_counts)
@@ -456,6 +456,6 @@ def test_mpod_band_oracle_interior_edge_half_open():
     assert abs(np.dot(edge_mode, phi_low)) < 0.1
 
     np.testing.assert_allclose(analyzer.eigenvalues, ref_eigs, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
-    ref_modes, _ = canonicalize_modes(ref_modes)
+    ref_modes, _ = canonicalize_reference(ref_modes)
     np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)

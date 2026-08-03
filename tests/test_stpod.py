@@ -147,7 +147,7 @@ class TestSTPODBasic:
         vectors under the library's sign convention. Agreement pins both the
         delay embedding and the per-column normalisation.
         """
-        from openmodalpy.core.base import canonicalize_modes
+        from tests.reference_helpers import canonicalize_reference
 
         rng = np.random.default_rng(7)
         Ns, Nspace = 12, 3
@@ -183,7 +183,7 @@ class TestSTPODBasic:
             hankel[lag * Nspace : (lag + 1) * Nspace, :] = data_centered[lag : lag + m_cols, :].T
         u, sigma, _vt = np.linalg.svd(hankel, full_matrices=False)
         ref_eigs = (sigma[:n_modes] ** 2) / m_cols
-        ref_modes, _ = canonicalize_modes(u[:, :n_modes])
+        ref_modes, _ = canonicalize_reference(u[:, :n_modes])
 
         np.testing.assert_allclose(
             analyzer.eigenvalues,

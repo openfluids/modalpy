@@ -48,6 +48,48 @@ def _mags_agree(a: float, b: float, rtol: float) -> bool:
     return abs(a - b) <= rtol * scale
 
 
+def canonicalize_reference(modes, coeffs=None):
+    """Sign/phase-canonicalize mode columns for independent oracle comparison.
+
+    Deliberately duplicates the library sign/phase rule in openmodalpy.core.base
+    rather than importing that helper. Oracle tests must pin WHICH convention is
+    intended: if the reference side called the library helper, both sides would
+    track the same factor under any rule change and the comparison would stay
+    green. This copy is the fixed expression of that rule on the reference side.
+
+    For each column the pivot is the lowest index whose magnitude is within a
+    relative band ``1e-12`` of the column maximum; the scale is
+    ``conj(pivot_value)/|pivot_value|`` so that entry becomes real and positive.
+    Modes and coeffs both receive the factor. All-zero columns are left alone.
+    """
+    modes = np.asarray(modes)
+    if coeffs is not None:
+        coeffs = np.asarray(coeffs)
+
+    if modes.size == 0 or modes.ndim < 2 or modes.shape[1] == 0:
+        return modes, coeffs
+
+    modes = modes.copy()
+    if coeffs is not None:
+        coeffs = coeffs.copy()
+
+    for k in range(modes.shape[1]):
+        col = modes[:, k]
+        mag = np.abs(col)
+        m = float(mag.max())
+        if m == 0.0:
+            continue
+        # Lowest index within relative band 1e-12 of the column maximum.
+        i = int(np.argmax(mag >= (1.0 - 1e-12) * m))
+        v = col[i]
+        s = np.conj(v) / np.abs(v)
+        modes[:, k] *= s
+        if coeffs is not None:
+            coeffs[:, k] *= s
+
+    return modes, coeffs
+
+
 def canonicalize_dmd_eigenvalues(eigvals: np.ndarray, rtol: float) -> np.ndarray:
     """Stable DMD spectrum order for reference fixtures.
 

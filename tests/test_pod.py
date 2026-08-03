@@ -84,7 +84,7 @@ def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
     analyzer's own modes. That pins the weighted seam, not just the final
     projection formula.
     """
-    from openmodalpy.core.base import canonicalize_modes
+    from tests.reference_helpers import canonicalize_reference
 
     q = np.array(
         [
@@ -131,7 +131,7 @@ def test_spatial_kernel_time_coefficients_use_weighted_inner_product():
     weighted_modes = weighted_modes[:, order]
     ref_modes = weighted_modes / sqrt_w[:, np.newaxis]
     ref_coeffs = q_weighted @ weighted_modes
-    ref_modes, ref_coeffs = canonicalize_modes(np.real(ref_modes), np.real(ref_coeffs))
+    ref_modes, ref_coeffs = canonicalize_reference(np.real(ref_modes), np.real(ref_coeffs))
 
     np.testing.assert_allclose(analyzer.eigenvalues, evals, rtol=1e-10, atol=1e-10)
     np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=1e-10, atol=1e-10)
