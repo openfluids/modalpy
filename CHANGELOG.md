@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- ST-POD percentages now mean share of total field energy (pre-truncation) and
+  will read lower than before for any truncated spectrum.
 - An unrecognised `spatial_weight_type` now raises at construction instead of
   being kept as-is. This is a behaviour break: any string other than `"auto"`,
   `"uniform"`, `"polar"` or `"prescribed"` used to fall through to the

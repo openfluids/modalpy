@@ -121,6 +121,9 @@ class STPODAnalyzer(BaseAnalyzer):
         self.time_coefficients = np.array([])
         # Any: np.mean(..., axis=0, dtype=float64) is typed as scalar | ndarray.
         self.temporal_mean: Any = np.array([])
+        # Pre-truncation total energy (‖data_weighted‖_F² / m); nan until perform/load.
+        self.total_energy = float("nan")
+        self.energy_captured_fraction = float("nan")
 
         self.analysis_type = "stpod"
 
@@ -210,14 +213,41 @@ class STPODAnalyzer(BaseAnalyzer):
             n_keep=k,
         )
 
+        # True pre-truncation total: sum of all sigma²/m = ‖data_weighted‖_F² / m.
+        # Use the same weight clamp as _solve_svd so the identity holds exactly.
+        sqrt_weights = np.sqrt(np.maximum(lifted_metric.weights, 1e-12))
+        data_weighted = lifted * sqrt_weights
+        n_samples = lifted.shape[0]
+        self.total_energy = float(np.linalg.norm(data_weighted, "fro") ** 2 / n_samples)
+        if self.total_energy > 0:
+            self.energy_captured_fraction = float(np.sum(self.eigenvalues) / self.total_energy)
+        else:
+            self.energy_captured_fraction = 0.0
+
         end_time = time.time()
         print(f"ST-POD completed in {end_time - start_time:.2f} seconds.")
-        print(f"Computed {self.n_modes_save} ST-POD modes.")
+        print(
+            f"Computed {self.n_modes_save} ST-POD modes "
+            f"({100.0 * self.energy_captured_fraction:.2f}% of total energy)."
+        )
+
+    def _energy_denominator(self) -> tuple[float, str]:
+        """Denominator for energy percentages and an optional label suffix.
+
+        Prefer the true pre-truncation total when known. Result files written
+        before that attribute was stored fall back to the sum of retained
+        eigenvalues; the label suffix says so so titles stay honest.
+        """
+        total = getattr(self, "total_energy", float("nan"))
+        if np.isfinite(total) and total > 0:
+            return float(total), ""
+        retained = float(np.sum(self.eigenvalues)) if self.eigenvalues.size else 0.0
+        return retained, " (retained modes only)"
 
     def _get_algorithm_metadata(self) -> dict:
         """Describe the current delay-embedded POD contract."""
         lift = getattr(self, "_lift", None) or decomposition.DelayEmbeddingLift(max(self.embedding_dim, 2))
-        return {
+        meta = {
             "lift_kind": lift.kind,
             "stpod_variant": "delay_embedded_pod",
             "uses_mean_subtraction": True,
@@ -225,6 +255,11 @@ class STPODAnalyzer(BaseAnalyzer):
             "eigenvalue_normalization": "sigma_squared_over_n_hankel_cols",
             "is_full_spacetime_pod": False,
         }
+        if np.isfinite(self.total_energy):
+            meta["total_energy"] = float(self.total_energy)
+        if np.isfinite(self.energy_captured_fraction):
+            meta["energy_captured_fraction"] = float(self.energy_captured_fraction)
+        return meta
 
     def extract_spatial_mode(self, mode_idx: int, delay_idx: int = 0) -> np.ndarray:
         """Extract a single spatial field from a space-time mode.
@@ -351,6 +386,15 @@ class STPODAnalyzer(BaseAnalyzer):
                 self.data["Ny"] = int(f.attrs["Ny"])
             if "Nz" in f.attrs:
                 self.data["Nz"] = int(f.attrs["Nz"])
+            # Reset first: a file without these attrs means "unknown", and a
+            # stale total from an earlier run on other data would otherwise be
+            # used as the denominator with no "retained modes only" label.
+            self.total_energy = float("nan")
+            self.energy_captured_fraction = float("nan")
+            if "total_energy" in f.attrs:
+                self.total_energy = float(f.attrs["total_energy"])
+            if "energy_captured_fraction" in f.attrs:
+                self.energy_captured_fraction = float(f.attrs["energy_captured_fraction"])
 
         print("ST-POD results loaded.")
 
@@ -363,7 +407,8 @@ class STPODAnalyzer(BaseAnalyzer):
         fig, ax = plt.subplots(figsize=(8, 5))
         try:
             mode_indices = np.arange(1, len(self.eigenvalues) + 1)
-            normalized = self.eigenvalues / np.sum(self.eigenvalues) * 100
+            denom, label_suffix = self._energy_denominator()
+            normalized = (self.eigenvalues / denom * 100) if denom > 0 else np.zeros_like(self.eigenvalues)
 
             ax.plot(mode_indices, normalized, "o-", linewidth=2, markersize=6)
 
@@ -373,7 +418,7 @@ class STPODAnalyzer(BaseAnalyzer):
 
             ax.set_yscale("log")
             ax.set_xlabel("Mode Number")
-            ax.set_ylabel("Normalized Eigenvalue (%)")
+            ax.set_ylabel(f"Normalized Eigenvalue (%){label_suffix}")
             ax.set_title(f"ST-POD Eigenvalue Spectrum (d={self.embedding_dim})")
             ax.grid(True, which="both", ls="--")
 
@@ -433,7 +478,7 @@ class STPODAnalyzer(BaseAnalyzer):
         else:
             x_mesh, y_mesh = x_coords, y_coords
 
-        total_energy = np.sum(self.eigenvalues)
+        denom, label_suffix = self._energy_denominator()
 
         for k in range(n_modes):
             row, col = divmod(k, ncols)
@@ -468,9 +513,16 @@ class STPODAnalyzer(BaseAnalyzer):
             ax.set_ylabel(r"$y/D$")
             ax.grid(True, linestyle="--", alpha=0.3)
 
-            energy_pct = 100.0 * self.eigenvalues[k] / total_energy
-            cum_pct = 100.0 * np.sum(self.eigenvalues[: k + 1]) / total_energy
-            ax.set_title(f"Mode {k + 1} (τ={delay_idx})\nE={energy_pct:.2f}% Cum={cum_pct:.2f}%", fontsize=9)
+            if denom > 0:
+                energy_pct = 100.0 * self.eigenvalues[k] / denom
+                cum_pct = 100.0 * np.sum(self.eigenvalues[: k + 1]) / denom
+            else:
+                energy_pct = 0.0
+                cum_pct = 0.0
+            ax.set_title(
+                f"Mode {k + 1} (τ={delay_idx})\nE={energy_pct:.2f}% Cum={cum_pct:.2f}%{label_suffix}",
+                fontsize=9,
+            )
 
             fig.colorbar(cf, ax=ax, shrink=0.8)
 
@@ -508,13 +560,13 @@ class STPODAnalyzer(BaseAnalyzer):
         y_coords = self.data.get("y")
         z_coords = self.data.get("z")
         n_modes = min(plot_n_modes, self.n_modes_save)
-        total_energy = np.sum(self.eigenvalues) if self.eigenvalues.size else None
+        denom, label_suffix = self._energy_denominator()
         items = []
         for mode_idx in range(n_modes):
             mode_3d = reshape_mode_to_volume(self.extract_spatial_mode(mode_idx, delay_idx), self.data)
-            if total_energy:
-                energy_pct = 100.0 * self.eigenvalues[mode_idx] / total_energy
-                title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx} | E={energy_pct:.2f}%"
+            if denom > 0:
+                energy_pct = 100.0 * self.eigenvalues[mode_idx] / denom
+                title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx} | E={energy_pct:.2f}%{label_suffix}"
             else:
                 title = f"ST-POD Mode {mode_idx + 1} | delay={delay_idx}"
             output_path = os.path.join(
@@ -624,8 +676,12 @@ class STPODAnalyzer(BaseAnalyzer):
             r, c = divmod(idx, ncols)
             axes[r, c].axis("off")
 
-        energy_pct = 100.0 * self.eigenvalues[mode_idx] / np.sum(self.eigenvalues)
-        fig.suptitle(f"ST-POD Mode {mode_idx + 1} Evolution (E={energy_pct:.2f}%)", fontsize=12)
+        denom, label_suffix = self._energy_denominator()
+        energy_pct = 100.0 * self.eigenvalues[mode_idx] / denom if denom > 0 else 0.0
+        fig.suptitle(
+            f"ST-POD Mode {mode_idx + 1} Evolution (E={energy_pct:.2f}%{label_suffix})",
+            fontsize=12,
+        )
 
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_spacetime_mode{mode_idx + 1}.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
@@ -715,7 +771,11 @@ class STPODAnalyzer(BaseAnalyzer):
             print("No eigenvalues to plot. Run perform_stpod() first.")
             return
 
-        cumulative = np.cumsum(self.eigenvalues) / np.sum(self.eigenvalues) * 100
+        denom, label_suffix = self._energy_denominator()
+        if denom > 0:
+            cumulative = np.cumsum(self.eigenvalues) / denom * 100
+        else:
+            cumulative = np.zeros_like(self.eigenvalues)
         mode_indices = np.arange(1, len(self.eigenvalues) + 1)
 
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -725,7 +785,7 @@ class STPODAnalyzer(BaseAnalyzer):
             ax.text(float(x), float(y), f" {idx + 1}", fontsize=7, va="bottom")
 
         ax.set_xlabel("Number of Modes")
-        ax.set_ylabel("Cumulative Energy (%)")
+        ax.set_ylabel(f"Cumulative Energy (%){label_suffix}")
         ax.set_title(f"Cumulative Energy of ST-POD Modes (d={self.embedding_dim})")
         ax.grid(True, which="both", ls="--")
         ax.set_ylim(0, 105)

@@ -404,3 +404,294 @@ def test_check_mode_orthogonality_empty(small_stpod_field, tmp_path):
         use_parallel=False,
     )
     assert not analyzer.check_mode_orthogonality()
+
+
+class TestSTPODTotalEnergy:
+    """True pre-truncation energy denominator for ST-POD percentages."""
+
+    def test_total_energy_matches_full_svd_frobenius(self):
+        """Cheap Frobenius total equals sum(all sigma²)/m from a full SVD.
+
+        Builds the same weighted lifted matrix that _solve_svd uses and checks
+        ‖data_weighted‖_F² / m against the full singular-value sum.
+        """
+        from openmodalpy.core import decomposition
+
+        rng = np.random.default_rng(11)
+        Ns, Nspace = 16, 5
+        embedding_dim = 4
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.arange(Nspace),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nspace,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_frob",
+            embedding_dim=embedding_dim,
+            n_modes_save=3,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+
+        data_centered = data["q"] - np.mean(data["q"], axis=0)
+        lifted = decomposition.DelayEmbeddingLift(embedding_dim).apply(data_centered)
+        weights = np.tile(np.ones(Nspace), embedding_dim)
+        sqrt_w = np.sqrt(np.maximum(weights, 1e-12))
+        data_weighted = lifted * sqrt_w
+        m = lifted.shape[0]
+        _u, sigma, _vt = np.linalg.svd(data_weighted.T, full_matrices=False)
+        full_svd_total = float(np.sum(sigma**2) / m)
+        frobenius_total = float(np.linalg.norm(data_weighted, "fro") ** 2 / m)
+
+        np.testing.assert_allclose(frobenius_total, full_svd_total, rtol=1e-12, atol=0.0)
+        np.testing.assert_allclose(analyzer.total_energy, full_svd_total, rtol=1e-12, atol=0.0)
+        assert analyzer.total_energy > float(np.sum(analyzer.eigenvalues))
+
+    def test_total_energy_uses_the_weights(self):
+        """The identity must hold with NON-UNIFORM weights, where W is visible.
+
+        Under uniform weights the weighted and unweighted Frobenius norms are
+        equal, so dropping the sqrt-weight factor would go unnoticed. These
+        weights span four decades and include one near-zero entry, which is
+        also the only place the 1e-12 clamp does anything.
+        """
+        from openmodalpy.core import decomposition
+
+        rng = np.random.default_rng(21)
+        Ns, Nspace = 20, 6
+        embedding_dim = 4
+        weights = np.array([1.0e-14, 1.0e-2, 0.5, 1.0, 3.0, 100.0])
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.arange(Nspace),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nspace,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_weighted",
+            embedding_dim=embedding_dim,
+            n_modes_save=3,
+            data_loader=lambda _: data,
+            spatial_weights=weights,
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+
+        data_centered = data["q"] - np.mean(data["q"], axis=0)
+        lifted = decomposition.DelayEmbeddingLift(embedding_dim).apply(data_centered)
+        tiled = np.tile(weights, embedding_dim)
+        data_weighted = lifted * np.sqrt(np.maximum(tiled, 1e-12))
+        _u, sigma, _vt = np.linalg.svd(data_weighted.T, full_matrices=False)
+        expected = float(np.sum(sigma**2) / lifted.shape[0])
+
+        np.testing.assert_allclose(analyzer.total_energy, expected, rtol=1e-10, atol=0.0)
+
+        # The weighting must actually matter: the unweighted total is far off.
+        unweighted = float(np.linalg.norm(lifted, "fro") ** 2 / lifted.shape[0])
+        assert abs(analyzer.total_energy - unweighted) > 0.5 * unweighted
+
+    def test_truncated_percentages_sum_to_captured_fraction(self):
+        """With truncation below full rank, percentages sum to less than 100%.
+
+        Their sum equals 100 * energy_captured_fraction against the true total.
+        """
+        rng = np.random.default_rng(12)
+        Ns, Nspace = 30, 8
+        embedding_dim = 5
+        n_modes = 3  # well below full rank
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.arange(Nspace),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nspace,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_pct",
+            embedding_dim=embedding_dim,
+            n_modes_save=n_modes,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+
+        denom, suffix = analyzer._energy_denominator()
+        assert suffix == ""
+        assert denom == analyzer.total_energy
+        percentages = 100.0 * analyzer.eigenvalues / denom
+        pct_sum = float(np.sum(percentages))
+        assert pct_sum < 100.0
+        np.testing.assert_allclose(
+            pct_sum,
+            100.0 * analyzer.energy_captured_fraction,
+            rtol=1e-12,
+            atol=0.0,
+        )
+        np.testing.assert_allclose(
+            analyzer.energy_captured_fraction,
+            float(np.sum(analyzer.eigenvalues) / analyzer.total_energy),
+            rtol=1e-12,
+            atol=0.0,
+        )
+
+    def test_total_energy_save_load_roundtrip(self, tmp_path):
+        """Both total_energy and energy_captured_fraction survive save → load."""
+        rng = np.random.default_rng(13)
+        Ns, Nspace = 18, 4
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.arange(Nspace),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nspace,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_energy_rt",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+        analyzer.save_results("stpod_energy_rt.hdf5")
+
+        with h5py.File(tmp_path / "stpod_energy_rt.hdf5", "r") as handle:
+            assert "total_energy" in handle.attrs
+            assert "energy_captured_fraction" in handle.attrs
+            assert handle.attrs["total_energy"] == analyzer.total_energy
+
+        reloaded = STPODAnalyzer(
+            file_path="test_stpod_energy_rt",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        reloaded.load_results("stpod_energy_rt.hdf5")
+        assert reloaded.total_energy == analyzer.total_energy
+        assert reloaded.energy_captured_fraction == analyzer.energy_captured_fraction
+        denom, suffix = reloaded._energy_denominator()
+        assert denom == analyzer.total_energy
+        assert suffix == ""
+
+    def test_legacy_results_fallback_to_retained_sum(self, tmp_path):
+        """Files without total_energy still load and fall back honestly."""
+        rng = np.random.default_rng(14)
+        Ns, Nspace = 16, 4
+        data = {
+            "q": rng.standard_normal((Ns, Nspace)),
+            "x": np.arange(Nspace),
+            "y": np.array([0.0]),
+            "dt": 0.1,
+            "Nx": Nspace,
+            "Ny": 1,
+            "Ns": Ns,
+        }
+        analyzer = STPODAnalyzer(
+            file_path="test_stpod_legacy",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        analyzer.load_and_preprocess()
+        analyzer.perform_stpod()
+        analyzer.save_results("stpod_legacy.hdf5")
+
+        # Strip the new attrs so the file looks pre-change.
+        path = tmp_path / "stpod_legacy.hdf5"
+        with h5py.File(path, "a") as handle:
+            del handle.attrs["total_energy"]
+            del handle.attrs["energy_captured_fraction"]
+
+        reloaded = STPODAnalyzer(
+            file_path="test_stpod_legacy",
+            embedding_dim=3,
+            n_modes_save=2,
+            results_dir=tmp_path,
+            figures_dir=tmp_path,
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+        )
+        reloaded.load_results("stpod_legacy.hdf5")
+        assert not np.isfinite(reloaded.total_energy)
+        denom, suffix = reloaded._energy_denominator()
+        retained = float(np.sum(reloaded.eigenvalues))
+        assert denom == retained
+        assert "retained" in suffix
+        # Percentages against the fallback still sum to 100%.
+        percentages = 100.0 * reloaded.eigenvalues / denom
+        np.testing.assert_allclose(float(np.sum(percentages)), 100.0, rtol=1e-12)
+
+    def test_legacy_load_clears_a_previous_runs_total(self, tmp_path):
+        """Loading a legacy file must not inherit the total from an earlier run.
+
+        Reusing one analyzer would otherwise denominate against another
+        dataset's total while the label claimed it was the true one.
+        """
+        rng = np.random.default_rng(15)
+        Ns, Nspace = 16, 4
+
+        def make_data(seed_rng):
+            return {
+                "q": seed_rng.standard_normal((Ns, Nspace)),
+                "x": np.arange(Nspace),
+                "y": np.array([0.0]),
+                "dt": 0.1,
+                "Nx": Nspace,
+                "Ny": 1,
+                "Ns": Ns,
+            }
+
+        def make_analyzer(data):
+            return STPODAnalyzer(
+                file_path="test_stpod_stale",
+                embedding_dim=3,
+                n_modes_save=2,
+                results_dir=tmp_path,
+                figures_dir=tmp_path,
+                data_loader=lambda _: data,
+                spatial_weight_type="uniform",
+            )
+
+        writer = make_analyzer(make_data(rng))
+        writer.load_and_preprocess()
+        writer.perform_stpod()
+        writer.save_results("stpod_stale.hdf5")
+        with h5py.File(tmp_path / "stpod_stale.hdf5", "a") as handle:
+            del handle.attrs["total_energy"]
+            del handle.attrs["energy_captured_fraction"]
+
+        # Same analyzer object: run on its own data first, then load the legacy file.
+        reused = make_analyzer(make_data(rng))
+        reused.load_and_preprocess()
+        reused.perform_stpod()
+        assert np.isfinite(reused.total_energy)
+        reused.load_results("stpod_stale.hdf5")
+
+        assert not np.isfinite(reused.total_energy)
+        assert not np.isfinite(reused.energy_captured_fraction)
+        denom, suffix = reused._energy_denominator()
+        assert denom == float(np.sum(reused.eigenvalues))
+        assert "retained" in suffix
