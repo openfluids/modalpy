@@ -54,6 +54,21 @@ def test_three_d_weights_with_equal_space_and_components():
         _coerce_spatial_weights(w3, 2)
 
 
+def test_three_d_per_component_route_through_the_seam():
+    """3-D per-component weights reach the seam as stacked diagonals.
+
+    Pins ``_as_weight_vector`` (not only ``_coerce_spatial_weights``) so a
+    future narrowing of the seam cannot drop the 3-D route silently.
+    """
+    # shape (3, 3, 2): two component diagonals -> n_space=6
+    w3 = np.stack(
+        [np.diag([1.0, 2.0, 3.0]), np.diag([4.0, 5.0, 6.0])],
+        axis=2,
+    )
+    got = _as_weight_vector(w3, 6)
+    np.testing.assert_allclose(got, [1.0, 4.0, 2.0, 5.0, 3.0, 6.0])
+
+
 def test_uniform_weights_1d_vs_2d():
     x = np.linspace(0.0, 1.0, 4)
     y = np.linspace(0.0, 2.0, 3)

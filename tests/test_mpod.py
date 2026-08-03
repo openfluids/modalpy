@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import h5py
 import numpy as np
+import pytest
 
 from openmodalpy import MPODAnalyzer, PODAnalyzer
 from tests.reference_helpers import canonicalize_reference
@@ -459,3 +460,80 @@ def test_mpod_band_oracle_interior_edge_half_open():
     ref_modes, _ = canonicalize_reference(ref_modes)
     np.testing.assert_allclose(analyzer.modes, ref_modes, rtol=_BAND_ORACLE_RTOL, atol=_BAND_ORACLE_ATOL)
     np.testing.assert_array_equal(analyzer.mode_band_indices, ref_bands)
+
+
+def test_mpod_accepts_a_non_square_weight_matrix_row_major():
+    """Non-square analyzer.W is flattened row-major at the weight seam.
+
+    Same modes/eigenvalues as the explicitly hand-written row-major vector.
+    The reference is written out by hand (not W.reshape(-1) from the library
+    path) so a column-major flip of the flatten order fails this test.
+
+    Multi-band edges are required: a single full band collapses to
+    perform_pod, which rewrites W under spatial_weight_type="uniform" and
+    never reaches the seam this bead pins.
+    """
+    rng = np.random.default_rng(0)
+    q = rng.standard_normal((40, 6))
+    data = _make_uniform_data(q, dt=0.05)  # nyquist = 10 Hz
+    # (3, 2) non-square; explicit row-major reference: [1, 2, 3, 4, 5, 6]
+    W_non_square = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+    W_row_major = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    W_column_major = np.array([1.0, 3.0, 5.0, 2.0, 4.0, 6.0])
+    band_edges = [0.0, 2.0, 10.0]
+
+    def run(weights):
+        analyzer = MPODAnalyzer(
+            file_path="dummy",
+            data_loader=lambda _: data,
+            spatial_weight_type="uniform",
+            n_modes_save=2,
+            band_edges=band_edges,
+        )
+        analyzer.load_and_preprocess()
+        analyzer.W = weights
+        analyzer.perform_mpod()
+        return analyzer
+
+    a_matrix = run(W_non_square)
+    a_row = run(W_row_major.reshape(6, 1))
+    a_column = run(W_column_major.reshape(6, 1))
+
+    np.testing.assert_allclose(a_matrix.eigenvalues, a_row.eigenvalues, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(a_matrix.modes, a_row.modes, rtol=1e-12, atol=1e-12)
+
+    # Agreement alone would also hold if the weights stopped reaching the
+    # eigenproblem at all -- every ordering agrees when none of them is used.
+    # The column-major control is what makes this a statement about the ORDER:
+    # measured separation is 19% in the eigenvalues, against 1e-12 agreement
+    # above, so 1% is far outside numerical noise and far inside the signal.
+    relative_shift = np.max(np.abs(a_matrix.eigenvalues - a_column.eigenvalues)) / np.max(
+        np.abs(a_matrix.eigenvalues)
+    )
+    assert relative_shift > 0.01, (
+        f"column-major weights gave the same answer as row-major (relative eigenvalue shift "
+        f"{relative_shift:.3g}), so this test is not sensitive to the flatten order"
+    )
+
+
+def test_mpod_rejects_a_zero_measure_weight():
+    """Assigning a zero-measure W after load must fail at perform_mpod.
+
+    Direct assignment is the route under test; the prescribed-at-load path
+    validates earlier and is a different gate.
+    """
+    # The weight check runs before any decomposition, so only the shape of q
+    # matters here: enough snapshots to load, and 6 spatial points.
+    q = np.random.default_rng(0).standard_normal((4, 6))
+    data = _make_uniform_data(q, dt=0.1)
+    analyzer = MPODAnalyzer(
+        file_path="dummy",
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+        band_edges=[0.0, 5.0],
+    )
+    analyzer.load_and_preprocess()
+    analyzer.W = np.zeros((6, 1))
+    with pytest.raises(ValueError, match="zero total measure"):
+        analyzer.perform_mpod()
