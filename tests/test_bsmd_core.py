@@ -554,6 +554,8 @@ def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
     for correctness (manufactured phase-locked/control triads) lives in
     tests/test_bsmd_manufactured.py.
     """
+    from openmodalpy.core.base import canonicalize_modes
+
     analyzer = _make_analyzer(tmp_path, triads=[(1, 2, 3)], nfft=8, Ns=24, Nspace=2)
     analyzer.W = np.ones((2, 1), dtype=complex)
 
@@ -569,11 +571,81 @@ def test_compute_single_triad_matches_dominant_eigenpair_shortcut(tmp_path):
     c_matrix = (np.conj(q3).T @ (analyzer.W * prod)) / q1.shape[1]
     eigvals, eigvecs = np.linalg.eig(c_matrix)
     dom = np.argmax(np.abs(eigvals))
-    coeffs = eigvecs[:, dom]
+    coeffs_col, _ = canonicalize_modes(eigvecs[:, dom].reshape(-1, 1))
+    coeffs = coeffs_col[:, 0]
 
     np.testing.assert_allclose(eigval, eigvals[dom], rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(mode1, q3 @ coeffs, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(mode2, prod @ coeffs, rtol=1e-12, atol=1e-12)
+
+
+def test_bsmd_modes_canonical_and_relative_phase_preserved(tmp_path, monkeypatch):
+    """Canonicalize the shared eigenvector a; relative phase of the two modes stays.
+
+    mode1 and mode2 inherit the same unit factor from a. Fixing each mode on
+    its own pivot would apply two different factors and change conj(mode1)*mode2.
+    The eigenvalue is the raw LAPACK value (phase of a does not enter it).
+
+    Local LAPACK often already returns a real-positive pivot on this size of
+    problem, so the free phase is injected through a unit factor on the
+    eigenvectors; without the canonicalize call the modes keep that factor.
+    """
+    from openmodalpy.core.base import canonicalize_modes
+
+    analyzer = _make_analyzer(tmp_path, triads=[(1, 2, 3)], nfft=8, Ns=32, Nspace=4)
+    analyzer.W = np.ones((4, 1), dtype=complex)
+
+    rng = np.random.default_rng(7)
+    q1 = rng.standard_normal((4, 3)) + 1j * rng.standard_normal((4, 3))
+    q2 = rng.standard_normal((4, 3)) + 1j * rng.standard_normal((4, 3))
+    q3 = rng.standard_normal((4, 3)) + 1j * rng.standard_normal((4, 3))
+    mapping = {1: q1, 2: q2, 3: q3}
+    analyzer._get_qhat_for_index = lambda idx: mapping[idx]
+
+    phase = np.exp(1j * 1.1)
+    real_eig = np.linalg.eig
+
+    def phased_eig(c_matrix):
+        vals, vecs = real_eig(c_matrix)
+        return vals, vecs * phase
+
+    monkeypatch.setattr(np.linalg, "eig", phased_eig)
+
+    eigval_a, mode1_a, mode2_a = analyzer._compute_single_triad(1, 2, 3)
+    eigval_b, mode1_b, mode2_b = analyzer._compute_single_triad(1, 2, 3)
+
+    # Determinism: two calls, bit-comparable modes (no abs).
+    np.testing.assert_allclose(mode1_a, mode1_b, rtol=0, atol=0)
+    np.testing.assert_allclose(mode2_a, mode2_b, rtol=0, atol=0)
+    np.testing.assert_allclose(eigval_a, eigval_b, rtol=0, atol=0)
+
+    prod = q1 * q2
+    c_matrix = (np.conj(q3).T @ (analyzer.W * prod)) / q1.shape[1]
+    eigvals, eigvecs = np.linalg.eig(c_matrix)
+    dom = np.argmax(np.abs(eigvals))
+    a_phased = eigvecs[:, dom]
+    a_can, _ = canonicalize_modes(a_phased.reshape(-1, 1))
+    a_can = a_can[:, 0]
+    assert not np.allclose(a_phased, a_can, rtol=0, atol=1e-10)
+
+    mode1_phased = q3 @ a_phased
+    mode2_phased = prod @ a_phased
+    relative_phased = np.conj(mode1_phased) * mode2_phased
+    relative_out = np.conj(mode1_a) * mode2_a
+
+    # Modes follow the shared canonical coefficients, not the phased LAPACK vector.
+    np.testing.assert_allclose(mode1_a, q3 @ a_can, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(mode2_a, prod @ a_can, rtol=0, atol=1e-12)
+    # Spectrum unchanged (eigenvalues are not scaled by the vector phase).
+    np.testing.assert_allclose(eigval_a, eigvals[dom], rtol=0, atol=1e-12)
+    # Same factor on both modes → relative product unchanged by canonicalization.
+    np.testing.assert_allclose(relative_out, relative_phased, rtol=0, atol=1e-12)
+
+    # Separate per-mode canonicalization would change that relative product.
+    m1_sep, _ = canonicalize_modes(mode1_phased.reshape(-1, 1))
+    m2_sep, _ = canonicalize_modes(mode2_phased.reshape(-1, 1))
+    relative_sep = np.conj(m1_sep[:, 0]) * m2_sep[:, 0]
+    assert not np.allclose(relative_sep, relative_phased, rtol=0, atol=1e-10)
 
 
 def test_save_results_records_bsmd_approximation_contract(tmp_path):

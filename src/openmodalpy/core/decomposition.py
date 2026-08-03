@@ -508,6 +508,9 @@ def spod_single_frequency(
         mask = _significant_eigenvalue_mask(lambda_tilde, nblocks)
         inv_sqrt_lambda[mask] = 1.0 / np.sqrt(lambda_tilde[mask])
         phi = x @ (psi * inv_sqrt_lambda[np.newaxis, :])
+        # Same unit factor on phi and psi so psi = X^H W phi Lambda^{-1/2} holds
+        # after the LAPACK phase is fixed (return_psi True or False → same phi).
+        phi, psi = canonicalize_modes(phi, psi)
         if return_psi:
             return phi, np.abs(lambda_tilde), psi
         return phi, np.abs(lambda_tilde)

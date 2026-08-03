@@ -46,6 +46,7 @@ from openmodalpy.core.base import (
     _verify_qhat_stamp,
     _write_qhat_stamp,
     add_inset_colorbar,
+    canonicalize_modes,
     get_fig_aspect_ratio,
     make_result_filename,
     plot_modes_3d,
@@ -591,6 +592,10 @@ class BSMDAnalyzer(BaseAnalyzer):
             eigvals, eigvecs = np.linalg.eig(C)
             dom = np.argmax(np.abs(eigvals))
             a = eigvecs[:, dom]
+            # Fix LAPACK phase on the shared coefficients only. mode1 and mode2
+            # then inherit the same unit factor, so their relative phase is kept.
+            a_col, _ = canonicalize_modes(a.reshape(-1, 1))
+            a = a_col[:, 0]
 
             mode1 = Q3 @ a
             mode2 = prod @ a

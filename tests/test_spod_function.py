@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from openmodalpy.core.base import PARALLEL_AVAILABLE, spod_function
+from openmodalpy.core.decomposition import spod_single_frequency
 from openmodalpy.core.parallel import spod_single_frequency_optimized
 
 
@@ -25,6 +26,72 @@ def test_spod_function_per_component_weights():
     assert psi.shape == (1, 1)
     assert np.allclose(lam, 9.0)
     assert np.allclose(phi[:, 0], [1 / 3, 2 / 3])
+
+
+def _assert_spod_modes_canonical(modes: np.ndarray) -> None:
+    """Each SPOD mode's band-pivot entry must be real and positive."""
+    from openmodalpy.core.base import canonical_pivot_index
+
+    for k in range(modes.shape[1]):
+        col = modes[:, k]
+        if not np.any(np.abs(col) > 0):
+            continue
+        i = canonical_pivot_index(col)
+        v = col[i]
+        assert float(np.real(v)) > 0
+        assert abs(float(np.imag(v))) <= 1e-9 * max(float(np.abs(v)), 1e-30)
+
+
+def test_spod_modes_deterministic_and_canonical():
+    """SPOD modes are phase-fixed, route-stable, and spectrum-invariant.
+
+    A global unit phase on ``qhat`` leaves the CSD matrix unchanged but multiplies
+    the raw spatial modes by that phase. After canonicalization both inputs give
+    the same phi (no ``np.abs``). Removing the call makes this fail.
+    """
+    rng = np.random.default_rng(42)
+    n_space, nblocks = 10, 6
+    qhat = rng.standard_normal((n_space, nblocks)) + 1j * rng.standard_normal((n_space, nblocks))
+    w = np.linspace(0.5, 2.0, n_space)
+    dst = 0.15
+    phase = np.exp(1j * 0.73)
+
+    phi_a, lam_a = spod_single_frequency(qhat, nblocks, dst, w)
+    phi_b, lam_b = spod_single_frequency(qhat, nblocks, dst, w)
+    phi_phased, lam_phased = spod_single_frequency(qhat * phase, nblocks, dst, w)
+    phi_psi, _, psi = spod_single_frequency(qhat, nblocks, dst, w, return_psi=True)
+    phi_no_psi, _ = spod_single_frequency(qhat, nblocks, dst, w, return_psi=False)
+
+    _assert_spod_modes_canonical(phi_a)
+    np.testing.assert_allclose(phi_a, phi_b, rtol=0, atol=0)
+    np.testing.assert_allclose(lam_a, lam_b, rtol=0, atol=0)
+    np.testing.assert_allclose(phi_a, phi_phased, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(lam_a, lam_phased, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(phi_a, phi_psi, rtol=0, atol=0)
+    np.testing.assert_allclose(phi_a, phi_no_psi, rtol=0, atol=0)
+    assert psi is not None
+
+    if PARALLEL_AVAILABLE:
+        phi_opt, lam_opt = spod_single_frequency_optimized(qhat, w.reshape(-1, 1), nblocks, dst)
+        np.testing.assert_allclose(phi_a, phi_opt, rtol=0, atol=0)
+        np.testing.assert_allclose(lam_a, lam_opt, rtol=0, atol=0)
+
+    # Spectrum from the CSD matrix alone — canonicalization must not move it.
+    x = qhat / np.sqrt(nblocks * dst)
+    m = (np.conj(x).T * w[np.newaxis, :]) @ x
+    lam_ref = np.sort(np.linalg.eigvalsh(m))[::-1]
+    np.testing.assert_allclose(lam_a, np.abs(lam_ref), rtol=0, atol=1e-12)
+
+    # psi must carry the SAME factor as phi, not be left at its raw LAPACK
+    # phase. Every assertion above passes if only phi is canonicalized, so
+    # check the relation that ties them: X psi = phi * sqrt(lambda).
+    significant = lam_a > 1e-12 * float(np.max(lam_a))
+    np.testing.assert_allclose(
+        (x @ psi)[:, significant],
+        (phi_psi * np.sqrt(lam_a)[np.newaxis, :])[:, significant],
+        rtol=0,
+        atol=1e-10,
+    )
 
 
 @pytest.mark.parametrize("use_parallel", [False, True])
