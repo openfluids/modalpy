@@ -4,7 +4,7 @@ import pytest
 from scipy import signal
 
 from openmodalpy import PODAnalyzer
-from openmodalpy.core.base import subset_volume_focus_3d
+from openmodalpy.core.base import get_robust_clim, subset_volume_focus_3d
 
 
 def test_perform_pod_simple():
@@ -262,6 +262,41 @@ def test_subset_volume_focus_3d_respects_volume_xlim():
     np.testing.assert_array_equal(x_focus, np.array([0.0, 0.5, 1.0]))
     np.testing.assert_array_equal(y_focus, y)
     np.testing.assert_array_equal(z_focus, z)
+
+
+def test_subset_volume_focus_3d_does_not_copy_when_nothing_is_cropped():
+    # Rendering one mode figure used to copy the whole volume here even with no
+    # cropping configured, because np.ix_ fancy indexing always copies.
+    field = np.arange(5 * 3 * 2, dtype=float).reshape(5, 3, 2)
+    x = np.array([-1.0, 0.0, 0.5, 1.0, 2.0])
+    y = np.array([0.0, 1.0, 2.0])
+    z = np.array([0.0, 1.0])
+
+    focused, x_focus, y_focus, z_focus = subset_volume_focus_3d(field, x, y, z, {})
+
+    assert focused.shape == field.shape
+    assert np.shares_memory(focused, field)
+    np.testing.assert_array_equal(focused, field)
+    np.testing.assert_array_equal(x_focus, x)
+    np.testing.assert_array_equal(y_focus, y)
+    np.testing.assert_array_equal(z_focus, z)
+
+
+def test_get_robust_clim_ignores_infinities_as_well_as_nan():
+    # np.nanpercentile would drop the NaN but keep the infinities. The limits would
+    # then be non-finite and fall through to the (-1, 1) fallback, so the colours
+    # would come from nowhere near the data. Assert the limits track the finite
+    # values instead: a plain "is it finite" check would pass on that fallback.
+    values = np.array([0.0, 1.0, 2.0, 3.0, 4.0, np.nan, np.inf, -np.inf])
+
+    # Limits are symmetrised around zero for diverging colormaps.
+    assert get_robust_clim(values, method="minmax") == (-4.0, 4.0)
+
+    for method in ("percentile", "sigma"):
+        vmin, vmax = get_robust_clim(values, method=method)
+        assert np.isfinite(vmin) and np.isfinite(vmax), method
+        assert vmax > 3.0, f"{method} collapsed to the fallback: {vmax}"
+        assert vmin == -vmax, method
 
 
 def _make_pod_analyzer(data, tmp_path, n_modes_save=3):

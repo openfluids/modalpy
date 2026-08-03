@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- Rendering a 3D mode figure now allocates about one copy of the mode volume
+  instead of three. `subset_volume_focus_3d` no longer copies the volume when
+  no cropping is configured, and `get_robust_clim` no longer copies the data to
+  filter it when every value is already finite. Measured on a 256x128x128
+  float64 volume (32 MiB): peak allocation before the plotting library is
+  called falls from 96 MiB to 32 MiB. Colour limits are unchanged, including
+  for fields containing NaN or infinities.
 - POD, ST-POD and DMD `load_results` now go through `read_results`, so
   pre-unification files with capitalised dataset names (`Modes`, `Eigenvalues`,
   `TimeCoefficients`) load and emit the reader's `DeprecationWarning`.

@@ -340,11 +340,19 @@ def get_robust_clim(data: np.ndarray, method: str = "percentile", sigma: float =
     vmin, vmax : float
         Colormap limits
     """
-    data_flat = np.asarray(data).ravel()
-    data_clean = data_flat[np.isfinite(data_flat)]
-
-    if len(data_clean) == 0:
+    arr = np.asarray(data)
+    if arr.size == 0:
         return -1.0, 1.0
+    # Fancy-indexing with isfinite always copies, even when every value is finite.
+    # Mode volumes are finite; keep that path allocation-light. Still drop NaN and
+    # +/-Inf when present (np.nanpercentile keeps Inf, so it is not a substitute).
+    if np.isfinite(arr).all():
+        data_clean = arr
+    else:
+        flat = arr.ravel()
+        data_clean = flat[np.isfinite(flat)]
+        if data_clean.size == 0:
+            return -1.0, 1.0
 
     if method == "percentile":
         vmin, vmax = np.percentile(data_clean, [2, 98])
@@ -572,7 +580,12 @@ def subset_volume_focus_3d(
     x_focus, x_mask = _axis_subset(x_arr, style.get("xlim"))
     y_focus, y_mask = _axis_subset(y_arr, style.get("ylim"))
     z_focus, z_mask = _axis_subset(z_arr, style.get("zlim"))
-    focused = values[np.ix_(x_mask, y_mask, z_mask)]
+    # np.ix_ fancy indexing always copies. When no axis is cropped (the default),
+    # return the input array as a view so the uncropped path pays no volume copy.
+    if x_mask.all() and y_mask.all() and z_mask.all():
+        focused = values
+    else:
+        focused = values[np.ix_(x_mask, y_mask, z_mask)]
     return focused, x_focus, y_focus, z_focus
 
 
