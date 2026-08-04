@@ -20,7 +20,10 @@ _DMD_EFFECTIVE_RANK_WARNING = r"DMD effective rank .* is below the requested"
 
 
 def analyzer_data(payload: dict[str, Any]) -> dict[str, Any]:
-    """Hand a generator payload to an analyzer under the loader contract."""
+    """Hand a generator payload to an analyzer under the loader contract.
+
+    Shared by reference comparison tests and the shipped ground-truth suite.
+    """
     return {
         "q": payload["q"],
         "x": payload["x"],

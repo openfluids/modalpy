@@ -14,27 +14,7 @@ import pytest
 
 from openmodalpy import DMDAnalyzer, PODAnalyzer, SPODAnalyzer
 from openmodalpy.example_data import generate_example_dataset
-
-
-def _analyzer_data(payload: dict) -> dict:
-    """Hand the generator payload to an analyzer (same keys as ``test_all`` loaders)."""
-    return {
-        "q": payload["q"],
-        "x": payload["x"],
-        "y": payload["y"],
-        "z": payload["z"],
-        "dt": payload["dt"],
-        "Nx": payload["Nx"],
-        "Ny": payload["Ny"],
-        "Nz": payload["Nz"],
-        "Ns": payload["Ns"],
-        "metadata": payload.get("metadata", {}),
-    }
-
-
-def _loader(payload: dict):
-    data = _analyzer_data(payload)
-    return lambda _path: data
+from tests.reference_helpers import make_loader
 
 
 def _weighted_centered_trace(q: np.ndarray, weights: np.ndarray) -> float:
@@ -95,7 +75,7 @@ def test_taylor_green_dmd_eigenvalue_matches_metadata(tmp_path):
 
     analyzer = DMDAnalyzer(
         file_path="shipped_tg",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=5,
         results_dir=tmp_path,
@@ -137,7 +117,7 @@ def test_taylor_green_pod_leading_eigenvalue_matches_trace(tmp_path):
     payload = generate_example_dataset("taylor_green", {"Nx": 24, "Ny": 24, "Nt": 60})
     analyzer = PODAnalyzer(
         file_path="shipped_tg_pod",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=5,
         results_dir=tmp_path,
@@ -188,7 +168,7 @@ def test_cylinder_wake_dmd_frequency_matches_metadata(tmp_path):
 
     analyzer = DMDAnalyzer(
         file_path="shipped_cw_dmd",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=10,
         results_dir=tmp_path,
@@ -248,7 +228,7 @@ def test_cylinder_wake_spod_peak_matches_metadata(tmp_path):
 
     analyzer = SPODAnalyzer(
         file_path="shipped_cw_spod",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         nfft=nfft,
         overlap=overlap,
@@ -292,7 +272,7 @@ def test_cylinder_wake_pod_spectrum_matches_trace(tmp_path):
     n_full = int(payload["Ns"])  # temporal kernel rank when Ns < Nspace
     analyzer = PODAnalyzer(
         file_path="shipped_cw_pod_trace",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=n_full,
         results_dir=tmp_path,
@@ -327,7 +307,7 @@ def test_double_gyre_pod_a1_peak_matches_metadata(tmp_path):
 
     analyzer = PODAnalyzer(
         file_path="shipped_dg_pod",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=5,
         results_dir=tmp_path,
@@ -366,7 +346,7 @@ def test_double_gyre_pod_spectrum_matches_trace(tmp_path):
     n_full = int(payload["Ns"])
     analyzer = PODAnalyzer(
         file_path="shipped_dg_pod_trace",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=n_full,
         results_dir=tmp_path,
@@ -405,7 +385,7 @@ def test_cylinder_wake_dmd_spod_frequency_cross_agreement(tmp_path):
 
     dmd = DMDAnalyzer(
         file_path="shipped_cw_cross_dmd",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         n_modes_save=10,
         results_dir=tmp_path,
@@ -428,7 +408,7 @@ def test_cylinder_wake_dmd_spod_frequency_cross_agreement(tmp_path):
 
     spod = SPODAnalyzer(
         file_path="shipped_cw_cross_spod",
-        data_loader=_loader(payload),
+        data_loader=make_loader(payload),
         spatial_weight_type="uniform",
         nfft=nfft,
         overlap=overlap,
