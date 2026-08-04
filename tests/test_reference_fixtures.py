@@ -79,11 +79,88 @@ def test_canonical_order_invariant_under_conjugate_tie_permutation():
     cb = canonicalize_dmd_eigenvalues(b, rtol=rtol)
     np.testing.assert_allclose(np.abs(ca), np.abs(cb), rtol=rtol, atol=1e-12)
     np.testing.assert_allclose(np.angle(ca), np.angle(cb), rtol=rtol, atol=1e-12)
-    # Magnitudes descending; within each tied group, phase ascending.
+    # Magnitudes descending; within each tied group, (Re, Im) ascending.
     mags = np.abs(ca)
     assert np.all(mags[:-1] >= mags[1:] - 1e-15)
-    # The conjugate pair at indices 1,2 must be phase-sorted ascending.
-    assert np.angle(ca[1]) <= np.angle(ca[2])
+    # A conjugate pair shares its real part, so (Re, Im) puts the negative
+    # imaginary part first — which is also what the old phase-ascending rule
+    # gave. That coincidence is why the committed fixtures did not move.
+    assert ca[1].imag <= ca[2].imag
+
+
+def test_canonical_order_no_magnitude_chain_merge():
+    """Near-neighbour |λ| chain must not form one group and reverse magnitude order.
+
+    Five magnitudes each 0.6*rtol below the previous: consecutive pairs agree
+    within rtol, but the ends differ by 2.4*rtol. Phases are laid so that
+    phase-ascending order is magnitude-ascending — the worst case for a
+    consecutive-neighbour merge. After canonicalization, magnitudes must stay
+    descending (within the rtol band) and the order must not depend on input
+    permutation.
+    """
+    rtol = 1e-6
+    mags = np.array([1.0 - k * 0.6e-6 for k in range(5)])
+    phases = np.array([(2 - k) * 0.5 for k in range(5)])
+    eig = mags * np.exp(1j * phases)
+
+    # Precondition: consecutive-neighbour grouping + phase sort would reverse
+    # magnitude order (would be RED under the old helper rules).
+    sorted_by_mag = eig[np.argsort(np.abs(eig))[::-1]]
+    phase_sorted = sorted_by_mag[np.argsort(np.angle(sorted_by_mag))]
+    old_mags = np.abs(phase_sorted)
+    assert old_mags[-1] - old_mags[0] > rtol * max(old_mags[0], old_mags[-1]), (
+        "precondition failed: phase-sorting the full chain did not reverse magnitude order"
+    )
+
+    ref = canonicalize_dmd_eigenvalues(eig, rtol=rtol)
+    m = np.abs(ref)
+    for i in range(len(m)):
+        for j in range(i + 1, len(m)):
+            assert m[j] - m[i] <= rtol * max(m[i], m[j]), (
+                f"index {j} (|λ|={m[j]:.12f}) larger than earlier index {i} (|λ|={m[i]:.12f}) by more than rtol"
+            )
+
+    rng = np.random.default_rng(0)
+    for _ in range(20):
+        perm = rng.permutation(len(eig))
+        got = canonicalize_dmd_eigenvalues(eig[perm], rtol=rtol)
+        np.testing.assert_allclose(got, ref, rtol=0.0, atol=1e-15)
+
+
+def test_canonical_order_continuous_across_negative_real_axis():
+    """Eigenvalues a ULP apart across the negative real axis stay adjacent.
+
+    ``np.angle`` returns +π for a real-negative eigenvalue and −π when the
+    imaginary part is 1 ULP negative, so those two sort to opposite ends of a
+    tied group. The within-group key must keep them next to each other, and
+    the order must not depend on input permutation.
+    """
+    rtol = 1e-6
+    z_a = complex(-1.0, 1e-16)
+    z_b = complex(-1.0, -1e-16)
+    z_c = complex(np.cos(0.5), np.sin(0.5))
+    z_d = np.conj(z_c)
+    eig = np.array([z_a, z_c, z_d, z_b])
+
+    # Precondition: phase-ascending on the full |λ|-tie group splits z_a/z_b.
+    phase_order = eig[np.argsort(np.angle(eig))]
+    ia_old = int(np.argmin(np.abs(phase_order - z_a)))
+    ib_old = int(np.argmin(np.abs(phase_order - z_b)))
+    assert abs(ia_old - ib_old) != 1, "precondition failed: np.angle order unexpectedly kept the pair adjacent"
+
+    ref = canonicalize_dmd_eigenvalues(eig, rtol=rtol)
+
+    def locate(z: complex) -> int:
+        return int(np.argmin(np.abs(ref - z)))
+
+    ia, ib = locate(z_a), locate(z_b)
+    assert abs(ia - ib) == 1, f"the two eigenvalues 2e-16 apart landed at indices {ia} and {ib}; they must be adjacent"
+
+    rng = np.random.default_rng(1)
+    for _ in range(20):
+        perm = rng.permutation(len(eig))
+        got = canonicalize_dmd_eigenvalues(eig[perm], rtol=rtol)
+        np.testing.assert_allclose(got, ref, rtol=0.0, atol=1e-15)
 
 
 @pytest.mark.parametrize("path", _fixture_paths(), ids=lambda p: p.stem)

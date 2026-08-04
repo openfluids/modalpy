@@ -41,7 +41,7 @@ def make_loader(payload: dict[str, Any]):
 
 
 def _mags_agree(a: float, b: float, rtol: float) -> bool:
-    """Relative consecutive-magnitude test (no fixed-digit rounding)."""
+    """Relative magnitude agreement (no fixed-digit rounding)."""
     scale = max(abs(a), abs(b))
     if scale == 0.0:
         return True
@@ -93,10 +93,19 @@ def canonicalize_reference(modes, coeffs=None):
 def canonicalize_dmd_eigenvalues(eigvals: np.ndarray, rtol: float) -> np.ndarray:
     """Stable DMD spectrum order for reference fixtures.
 
-    Magnitudes stay descending (same primary key as the analyzer). Eigenvalues
-    whose consecutive ``|λ|`` agree within ``rtol`` form a group; within each
-    group the order is phase ascending. That removes LAPACK conjugate-pair
-    emission order from the recorded spectrum without changing analyzer code.
+    Magnitudes stay descending (same primary key as the analyzer). After that
+    sort, a group is every run of eigenvalues whose ``|λ|`` agrees with the
+    group's first (largest) member within ``rtol`` — not merely with the
+    previous neighbour. That bound keeps any two members of a group within
+    ``rtol`` of each other relative to the larger of their magnitudes, and
+    stops a chain of near-neighbours from merging ends that differ by many
+    times ``rtol``.
+
+    Within each group the order is lexicographic ``(Re, Im)`` ascending. That
+    key is continuous across the negative real axis, so eigenvalues a ULP
+    apart do not jump to opposite ends of the group the way ``np.angle``
+    does at ``±π``. LAPACK conjugate-pair emission order is removed from the
+    recorded spectrum without changing analyzer code.
     """
     eigvals = np.asarray(eigvals, dtype=np.complex128).reshape(-1)
     if eigvals.size == 0:
@@ -113,11 +122,13 @@ def canonicalize_dmd_eigenvalues(eigvals: np.ndarray, rtol: float) -> np.ndarray
     n = sorted_eigs.size
     while i < n:
         j = i + 1
-        while j < n and _mags_agree(sorted_mag[j - 1], sorted_mag[j], rtol):
+        # Anchor: compare each candidate to the group's first member, not
+        # to its immediate predecessor (avoids single-linkage chaining).
+        while j < n and _mags_agree(sorted_mag[i], sorted_mag[j], rtol):
             j += 1
         group = sorted_eigs[i:j]
-        # Phase ascending within a tied-|λ| group (np.angle in (-π, π]).
-        group = group[np.argsort(np.angle(group))]
+        # (Re, Im) ascending — continuous across the negative real axis.
+        group = group[np.lexsort((group.imag, group.real))]
         out[i:j] = group
         i = j
     return out
