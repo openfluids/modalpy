@@ -137,7 +137,6 @@ class PSDPODAnalyzer(BaseAnalyzer):
             ensemble,
             decomposition.SpatialMetric(weights),
             method="eigh",
-            drop_nonpositive=False,
             n_keep=self.n_modes_save,
         )
 

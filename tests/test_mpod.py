@@ -38,40 +38,52 @@ def _independent_band_weighted_pod(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Weighted snapshot POD with plain numpy (no openmodalpy helpers).
 
-    Stated construction: weight the centered snapshots by sqrt(W), form the
-    Gram matrix / n_snapshots, eigh, drop eigenvalues <= 1e-12, recover spatial
+    Stated construction: weight the centered snapshots by exact sqrt(W), form
+    the Gram matrix / n_snapshots, eigh, drop eigenvalues at or below
+    ``n_kernel * eps * peak`` (peak = largest eigenvalue, n_kernel = Gram
+    matrix size, eps = machine epsilon of the working dtype), recover spatial
     modes. Snapshot-space path when n_t < n_x, otherwise spatial-space path.
     """
     n_snapshots, n_space = data_centered.shape
-    sqrt_w = np.sqrt(np.maximum(weight_vector, 1e-12))
+    sqrt_w = np.sqrt(weight_vector)
     data_w = data_centered * sqrt_w
 
     if n_snapshots < n_space:
+        n_kernel = n_snapshots
         kernel = np.dot(data_w, data_w.T) / n_snapshots
         eigenvalues, temporal = np.linalg.eigh(kernel)
         order = np.argsort(eigenvalues)[::-1]
         eigenvalues = np.real(eigenvalues[order])
         temporal = temporal[:, order]
-        positive = eigenvalues > 1e-12
-        eigenvalues = eigenvalues[positive]
-        temporal = temporal[:, positive]
+        peak = float(np.max(eigenvalues)) if eigenvalues.size else 0.0
+        if not np.isfinite(peak) or peak <= 0.0:
+            return np.empty((n_space, 0)), np.empty((0,))
+        cutoff = float(n_kernel) * float(np.finfo(eigenvalues.dtype).eps) * peak
+        significant = eigenvalues > cutoff
+        eigenvalues = eigenvalues[significant]
+        temporal = temporal[:, significant]
         if eigenvalues.size == 0:
             return np.empty((n_space, 0)), np.empty((0,))
         keep = min(n_modes_save, eigenvalues.size)
         eigenvalues = eigenvalues[:keep]
         temporal = temporal[:, :keep]
-        scale = 1.0 / np.sqrt(np.maximum(eigenvalues * n_snapshots, 1e-12))
+        scale = 1.0 / np.sqrt(eigenvalues * n_snapshots)
         modes_w = np.dot(data_w.T, temporal) * scale
         modes = modes_w / sqrt_w[:, np.newaxis]
     else:
+        n_kernel = n_space
         kernel = np.dot(data_w.T, data_w) / n_snapshots
         eigenvalues, modes_w = np.linalg.eigh(kernel)
         order = np.argsort(eigenvalues)[::-1]
         eigenvalues = np.real(eigenvalues[order])
         modes_w = modes_w[:, order]
-        positive = eigenvalues > 1e-12
-        eigenvalues = eigenvalues[positive]
-        modes_w = modes_w[:, positive]
+        peak = float(np.max(eigenvalues)) if eigenvalues.size else 0.0
+        if not np.isfinite(peak) or peak <= 0.0:
+            return np.empty((n_space, 0)), np.empty((0,))
+        cutoff = float(n_kernel) * float(np.finfo(eigenvalues.dtype).eps) * peak
+        significant = eigenvalues > cutoff
+        eigenvalues = eigenvalues[significant]
+        modes_w = modes_w[:, significant]
         if eigenvalues.size == 0:
             return np.empty((n_space, 0)), np.empty((0,))
         keep = min(n_modes_save, eigenvalues.size)
@@ -80,6 +92,39 @@ def _independent_band_weighted_pod(
         modes = modes_w / sqrt_w[:, np.newaxis]
 
     return np.real(modes), np.real(eigenvalues)
+
+
+def test_band_oracle_answer_is_linear_in_the_measure():
+    """The oracle's own cutoff must carry no absolute scale.
+
+    Spatial weights are a quadrature measure, so multiplying them by any
+    positive factor must multiply every eigenvalue by that same factor and keep
+    the same modes. An absolute floor (the ``1e-12`` this oracle used to carry)
+    breaks that: at a measure of order 1e-14 the floor dominates and the oracle
+    silently keeps fewer modes than it should — while still agreeing with the
+    library on the fixtures below, which sit far from the cutoff. That is why
+    this property needs its own test rather than riding on the band tests.
+    """
+    rng = np.random.default_rng(23)
+    data = rng.standard_normal((14, 6))
+    data -= data.mean(axis=0)
+    weights = np.array([0.5, 1.0, 2.0, 4.0, 8.0, 16.0])
+
+    _modes, reference = _independent_band_weighted_pod(data, weights, 4)
+    assert reference.size == 4, f"fixture kept {reference.size} modes, expected 4"
+
+    for scale in (1e-14, 1e-6, 1e6, 1e14):
+        _m, scaled = _independent_band_weighted_pod(data, weights * scale, 4)
+        assert scaled.size == reference.size, (
+            f"measure x {scale:.0e}: kept {scaled.size} modes, reference kept {reference.size}"
+        )
+        np.testing.assert_allclose(
+            scaled / scale,
+            reference,
+            rtol=1e-10,
+            atol=0.0,
+            err_msg=f"measure x {scale:.0e}: the oracle's spectrum is not linear in the measure",
+        )
 
 
 def _independent_multiband_mpod(
@@ -507,9 +552,7 @@ def test_mpod_accepts_a_non_square_weight_matrix_row_major():
     # The column-major control is what makes this a statement about the ORDER:
     # measured separation is 19% in the eigenvalues, against 1e-12 agreement
     # above, so 1% is far outside numerical noise and far inside the signal.
-    relative_shift = np.max(np.abs(a_matrix.eigenvalues - a_column.eigenvalues)) / np.max(
-        np.abs(a_matrix.eigenvalues)
-    )
+    relative_shift = np.max(np.abs(a_matrix.eigenvalues - a_column.eigenvalues)) / np.max(np.abs(a_matrix.eigenvalues))
     assert relative_shift > 0.01, (
         f"column-major weights gave the same answer as row-major (relative eigenvalue shift "
         f"{relative_shift:.3g}), so this test is not sensitive to the flatten order"

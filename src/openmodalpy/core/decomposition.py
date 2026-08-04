@@ -277,7 +277,6 @@ def weighted_second_order(
     metric: SpatialMetric | np.ndarray,
     *,
     method: Literal["eigh", "svd"] = "eigh",
-    drop_nonpositive: bool = True,
     n_keep: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Solve the weighted second-order problem on lifted data.
@@ -294,11 +293,6 @@ def weighted_second_order(
         ``"eigh"`` — covariance / Gram kernel eigenproblem (POD, mPOD,
         PSD-POD). ``"svd"`` — weighted SVD of the data matrix (ST-POD); use
         this rather than squaring a Hankel matrix.
-    drop_nonpositive
-        Retained for call-site compatibility. Both routes always drop modes
-        at or below their relative cutoff (eigenvalue domain on eigh,
-        singular-value domain on svd); this flag no longer selects an
-        absolute floor or a keep-all policy.
     n_keep
         If set, keep only the leading ``n_keep`` modes inside the solver
         (mPOD / ST-POD / PSD-POD). POD passes None and truncates after.
@@ -309,7 +303,9 @@ def weighted_second_order(
         ``modes`` has shape ``(n_space, r)``, ``eigenvalues`` shape ``(r,)``,
         ``time_coefficients`` shape ``(n_samples, r)``. Rank-deficient input
         returns fewer than ``n_keep`` / ``n_modes_save`` modes — the honest
-        count above the route's relative cutoff.
+        count above the route's relative cutoff. Both routes always drop
+        modes at or below their relative cutoff (eigenvalue domain on eigh,
+        singular-value domain on svd).
     """
     data = np.asarray(data)
     if data.ndim != 2:

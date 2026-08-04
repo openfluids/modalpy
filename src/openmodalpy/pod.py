@@ -228,7 +228,6 @@ class PODAnalyzer(BaseAnalyzer):
             lifted,
             metric,
             method=solver,
-            drop_nonpositive=False,
             n_keep=None,
         )
 

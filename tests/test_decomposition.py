@@ -84,7 +84,8 @@ def test_weighted_second_order_eigh_matches_manual_unweighted():
     assert coeffs.shape == (20, 5)
 
 
-def test_weighted_second_order_drop_nonpositive_and_n_keep():
+def test_weighted_second_order_relative_cutoff_and_n_keep():
+    """Relative cutoff keeps only significant modes; n_keep truncates further."""
     rng = np.random.default_rng(1)
     # Rank-2 signal in 6D space
     a = rng.standard_normal((30, 2))
@@ -180,7 +181,7 @@ def test_complex_route_coeffs_remain_weighted_projection():
     rng = np.random.default_rng(7)
     ens = rng.standard_normal((12, 8)) + 1j * rng.standard_normal((12, 8))
     w = np.linspace(0.5, 2.0, 8)
-    modes, _eig, coeffs = weighted_second_order(ens, SpatialMetric(w), method="eigh", drop_nonpositive=True, n_keep=3)
+    modes, _eig, coeffs = weighted_second_order(ens, SpatialMetric(w), method="eigh", n_keep=3)
     expected = ens.conj() @ (w[:, np.newaxis] * modes)
     scale = float(np.linalg.norm(ens))
     rel = float(np.linalg.norm(coeffs - expected) / scale)
@@ -258,7 +259,7 @@ def test_weighted_second_order_modes_are_canonical():
     _assert_modes_canonical(modes_s)
 
     ens = rng.standard_normal((10, 5)) + 1j * rng.standard_normal((10, 5))
-    modes_c, _e_c, _coeffs_c = weighted_second_order(ens, np.ones(5), method="eigh", drop_nonpositive=True, n_keep=3)
+    modes_c, _e_c, _coeffs_c = weighted_second_order(ens, np.ones(5), method="eigh", n_keep=3)
     _assert_modes_canonical(modes_c)
 
 
@@ -335,7 +336,7 @@ def test_svd_nonuniform_metric_matches_weighted_singular_values():
     np.testing.assert_allclose(overlap, np.ones(n_keep), rtol=1e-10, atol=1e-12)
 
 
-def test_drop_nonpositive_keeps_leading_reference_spectrum():
+def test_relative_cutoff_keeps_leading_reference_spectrum():
     """Relative cutoff keeps only significant eigenvalues, and those values.
 
     Rank-2 product ``a @ b`` in 6-D space: the weighted spatial Gram has two
@@ -366,8 +367,8 @@ def test_drop_nonpositive_keeps_leading_reference_spectrum():
     np.testing.assert_allclose(eigs2, ref_pos, rtol=1e-10, atol=1e-12)
 
 
-def test_drop_nonpositive_empty_result_shapes():
-    """All-zero data: every eigenvalue is non-positive, so the result is empty.
+def test_relative_cutoff_empty_result_shapes():
+    """All-zero data: no eigenvalue exceeds the relative cutoff, so empty.
 
     Expected shapes from the seam contract: modes ``(n_space, 0)``, eigs
     ``(0,)``, coeffs ``(n_samples, 0)``.

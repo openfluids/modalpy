@@ -171,7 +171,6 @@ class MPODAnalyzer(PODAnalyzer):
                 data_band,
                 metric,
                 method="eigh",
-                drop_nonpositive=True,
                 n_keep=self.n_modes_save,
             )
             if eigenvalues.size == 0:

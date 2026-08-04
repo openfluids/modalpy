@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- `weighted_second_order` no longer takes `drop_nonpositive`. Passing it now
+  raises `TypeError`. The flag had stopped selecting anything — both routes
+  always drop modes at or below their relative cutoff — so a caller passing
+  `drop_nonpositive=False` to keep the full spectrum received the filtered one
+  with no warning. Nothing about the filtering changes; only the misleading
+  parameter goes. Use `n_keep` to control how many modes are returned.
 - Spatial weights are now used exactly, with no absolute `1e-12` floor. The
   weights are a quadrature measure (m³ in 3-D, m² in 2-D), so an absolute floor
   had units it cannot have: a mesh whose cells fall below `1e-12` was silently
@@ -233,13 +239,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - POD, mPOD, ST-POD and PSD-POD now share one lift / metric / second-order
   seam in `core/decomposition.py` (`IdentityLift`, `DelayEmbeddingLift`,
   `BandFilteredLift`, `SpatialMetric`, `weighted_second_order`). Results are
-  unchanged; each caller keeps its own truncation policy via
-  `drop_nonpositive` / `n_keep`.
+  unchanged; each caller keeps its own truncation policy via `n_keep`.
 - An invalid spatial metric now raises instead of producing a confident answer.
   A non-finite weight, a negative weight, or a metric whose total measure is
   zero raises `ValueError`; an isolated zero among positive weights is still
-  accepted and floored at `1e-12`, as before. Results for strictly positive
-  weights are unchanged.
+  accepted, and that cell now contributes nothing (see the exact-measure entry
+  above). Results for strictly positive weights are unchanged.
 
   This closes a real hole: polar weights on a grid whose radial coordinate is
   zero give every annulus an area of `pi*r**2 = 0`, and POD would report an

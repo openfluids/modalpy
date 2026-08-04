@@ -57,7 +57,6 @@ def _run_solver(ensemble: np.ndarray, weights: np.ndarray, n_keep: int):
         ensemble,
         SpatialMetric(weights),
         method="eigh",
-        drop_nonpositive=False,
         n_keep=n_keep,
     )
 
