@@ -43,8 +43,6 @@ from tqdm import tqdm
 from openmodalpy.core.base import (
     BaseAnalyzer,
     _hdf5_write_mode,
-    _verify_qhat_stamp,
-    _write_qhat_stamp,
     add_inset_colorbar,
     canonicalize_modes,
     get_fig_aspect_ratio,
@@ -62,7 +60,6 @@ from openmodalpy.core.config import (
     FIG_DPI,
     FIGURES_DIR_BSMD,
     RESULTS_DIR_BSMD,
-    RESULTS_DIR_SPOD,
 )
 from openmodalpy.core.threads import apply_blas_limit
 
@@ -363,119 +360,13 @@ class BSMDAnalyzer(BaseAnalyzer):
         """
         super().load_and_preprocess()  # Leverages BaseAnalyzer's core logic
 
-    def compute_fft_blocks(self):
+    def _on_fft_blocks_ready(self) -> None:
+        """Set frequency axes and optionally offload large ``qhat`` to disk.
+
+        The shared cache lives in ``BaseAnalyzer.compute_fft_blocks``; BSMD
+        only needs this post-step. ``_qhat_cache_path`` is set by the base
+        path so ``save_results`` can still append onto the same file.
         """
-        Computes the Short-Time Fourier Transform (STFT) of the loaded data.
-
-        This method is typically called by `load_and_preprocess`.
-        It uses the `blocksfft` utility function with parameters `self.nfft`,
-        `self.novlap`, `self.fs`, and `WINDOW_TYPE`, `WINDOW_NORM` from `configs.py`.
-
-        Sets/updates attributes:
-            qhat (np.ndarray): STFT of the data [freq_bin, spatial_loc, block].
-            freq (np.ndarray): Array of frequency bins.
-            St (np.ndarray): Array of Strouhal numbers (if applicable).
-            nblocks (int): Number of blocks in the STFT.
-        """
-
-        # Path for BSMD-specific cached FFT blocks
-        fname_bsmd = make_result_filename(
-            self.data_root,
-            self.nfft,
-            self.overlap,
-            self.data.get("Ns", 0),
-            self.analysis_type,
-        )
-        cache_path = os.path.join(self.results_dir, fname_bsmd)
-        self._qhat_cache_path = cache_path
-
-        # Try loading cached FFT blocks from a previous BSMD run first.
-        # The OSError guard covers the read only (same shape as SPOD); post-load
-        # work and any later write sit outside so a full disk is not reported
-        # as a load failure.
-        if os.path.exists(cache_path):
-            loaded = False
-            try:
-                with h5py.File(cache_path, "r") as f:
-                    if "FFTBlocks" in f:
-                        qhat_cached = f["FFTBlocks"][:]
-                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(f, self, self.data["q"]):
-                            self.qhat = qhat_cached
-                            self.nblocks = qhat_cached.shape[2]
-                            self.qhat_cached = True
-                            print(f"Loaded cached FFT blocks from {cache_path}")
-                            loaded = True
-            except OSError as exc:
-                print(f"Failed to load cached FFT blocks from {cache_path} ({exc}), recomputing.")
-            if loaded:
-                self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
-                self.St = self.freq.copy()
-                self._maybe_offload_qhat()
-                return
-
-        # Otherwise, see if SPOD cached blocks exist to reuse. This goes through
-        # the same stamp verification as our own cache: SPOD's FFT parameters
-        # (window_type, window_norm, blockwise_mean, normvar) must match the
-        # values this BSMD analyzer would itself use, or the reuse is rejected
-        # and we fall through to a fresh computation below.
-        fname_spod = make_result_filename(
-            self.data_root,
-            self.nfft,
-            self.overlap,
-            self.data.get("Ns", 0),
-            "spod",
-        )
-        spod_path = os.path.join(RESULTS_DIR_SPOD, fname_spod)
-        if os.path.exists(spod_path):
-            loaded = False
-            try:
-                with h5py.File(spod_path, "r") as f:
-                    if "FFTBlocks" in f:
-                        qhat_cached = f["FFTBlocks"][:]
-                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(f, self, self.data["q"]):
-                            self.qhat = qhat_cached
-                            self.nblocks = qhat_cached.shape[2]
-                            self.qhat_cached = True
-                            print(f"Reusing cached FFT blocks from {spod_path}")
-                            loaded = True
-            except OSError as exc:
-                print(f"Failed to load cached FFT blocks from {spod_path} ({exc}), recomputing.")
-            if loaded:
-                # Save a copy for future BSMD runs (outside the read guard so a
-                # write failure propagates, as on the no-cache path below).
-                os.makedirs(self.results_dir, exist_ok=True)
-                mode = _hdf5_write_mode(cache_path)
-                with h5py.File(cache_path, mode) as f_bsmd:
-                    if "FFTBlocks" in f_bsmd:
-                        del f_bsmd["FFTBlocks"]
-                    f_bsmd.create_dataset("FFTBlocks", data=self.qhat, compression="gzip")
-                    if mode == "w":
-                        for key, value in self._get_metadata().items():
-                            f_bsmd.attrs[key] = value
-                    _write_qhat_stamp(f_bsmd, self, self.data["q"])
-                print(f"Saved FFT blocks to cache at {cache_path}")
-                self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
-                self.St = self.freq.copy()
-                self._maybe_offload_qhat()
-                return
-
-        # If no cache available, compute and save
-        super().compute_fft_blocks()  # Leverages BaseAnalyzer's core logic
-        self.qhat_cached = False
-
-        os.makedirs(self.results_dir, exist_ok=True)
-        mode = _hdf5_write_mode(cache_path)
-        with h5py.File(cache_path, mode) as f:
-            if "FFTBlocks" in f:
-                del f["FFTBlocks"]
-            f.create_dataset("FFTBlocks", data=self.qhat, compression="gzip")
-            if mode == "w":
-                for key, value in self._get_metadata().items():
-                    f.attrs[key] = value
-            _write_qhat_stamp(f, self, self.data["q"])
-        print(f"Saved FFT blocks to cache at {cache_path}")
-
-        # Set frequency and Strouhal vectors after qhat is available
         self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())
         self.St = self.freq.copy()  # Default: Strouhal equals frequency if no scaling
         self._maybe_offload_qhat()

@@ -150,7 +150,7 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, caplog):
     np.testing.assert_allclose(analyzer2.qhat, reference)
 
 
-def test_matching_cache_hit_is_still_used(tmp_path, capsys):
+def test_matching_cache_hit_is_still_used(tmp_path, caplog):
     """A legitimate, fully-matching cache hit must still be served from disk.
 
     This is the mandatory counterpart to the tests above: a fix that merely
@@ -163,15 +163,15 @@ def test_matching_cache_hit_is_still_used(tmp_path, capsys):
     analyzer1 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
     assert not analyzer1.qhat_cached
 
-    analyzer2 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
-    captured = capsys.readouterr()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.core.base"):
+        analyzer2 = _make_spod(tmp_path, q, window_type="hamming", file_path="dummy.h5")
 
     assert analyzer2.qhat_cached
-    assert "Loaded cached FFT blocks" in captured.out
+    assert any("Loaded cached FFT blocks" in r.getMessage() for r in caplog.records)
     np.testing.assert_array_equal(analyzer2.qhat, analyzer1.qhat)
 
 
-def test_corrupt_truncated_spod_cache_recomputes_without_raising(tmp_path, capsys):
+def test_corrupt_truncated_spod_cache_recomputes_without_raising(tmp_path, caplog):
     """A truncated (corrupt) SPOD cache must recompute and rewrite, not raise.
 
     Exercises the unreadable-file path (h5py OSError on open), not the
@@ -190,11 +190,11 @@ def test_corrupt_truncated_spod_cache_recomputes_without_raising(tmp_path, capsy
     with open(cache_file, "r+b") as fh:
         fh.truncate(64)
 
-    warm = _make_spod(tmp_path, q, file_path="dummy.h5")
-    captured = capsys.readouterr()
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        warm = _make_spod(tmp_path, q, file_path="dummy.h5")
 
     assert not warm.qhat_cached
-    assert "Failed to load cached FFT blocks" in captured.out
+    assert any("Failed to load cached FFT blocks" in r.getMessage() for r in caplog.records)
     np.testing.assert_allclose(warm.qhat, ref)
 
     # Third run must hit the rewritten cache.
@@ -221,7 +221,7 @@ def _make_bsmd(tmp_path, q, *, nfft=8, overlap=0.0, file_path="dummy.h5"):
     return analyzer
 
 
-def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsys):
+def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, caplog):
     """A truncated BSMD cache must recompute rather than raise on the read."""
     rng = np.random.default_rng(5)
     q = rng.standard_normal((32, 4))
@@ -236,11 +236,11 @@ def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsy
     with open(cache_file, "r+b") as fh:
         fh.truncate(64)
 
-    warm = _make_bsmd(tmp_path, q, file_path="dummy.h5")
-    captured = capsys.readouterr()
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        warm = _make_bsmd(tmp_path, q, file_path="dummy.h5")
 
     assert not warm.qhat_cached
-    assert "Failed to load cached FFT blocks" in captured.out
+    assert any("Failed to load cached FFT blocks" in r.getMessage() for r in caplog.records)
     np.testing.assert_allclose(warm.qhat, ref)
 
     again = _make_bsmd(tmp_path, q, file_path="dummy.h5")
@@ -248,43 +248,109 @@ def test_corrupt_truncated_bsmd_cache_recomputes_without_raising(tmp_path, capsy
     np.testing.assert_allclose(again.qhat, ref)
 
 
-def test_corrupt_spod_cache_does_not_stop_bsmd(tmp_path, monkeypatch, capsys):
-    """A truncated SPOD cache must not abort BSMD; recompute and match cold run.
+def test_bsmd_adopts_stamp_matching_spod_sibling(tmp_path):
+    """BSMD serves from a stamp-matching SPOD cache in the same results_dir.
 
-    BSMD reuses SPOD FFT blocks when the path and stamp match. That open must
-    catch OSError and fall through to a fresh computation — the same policy as
-    the BSMD self-cache read — rather than raising on a corrupt SPOD file.
+    Both write only their own ``..._<type>.hdf5``; adopting a sibling still
+    copies the blocks into the reader's own cache file for later runs.
     """
-    import openmodalpy.bsmd as bsmd_mod
-
     rng = np.random.default_rng(6)
     q = rng.standard_normal((32, 4))
 
-    spod_dir = tmp_path / "spod"
-    spod_dir.mkdir()
+    spod = _make_spod(tmp_path, q, file_path="dummy.h5")
+    assert not spod.qhat_cached
+    spod_name = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
+    bsmd_name = "dummy_Nfft8_ovlap0.0_32snapshots_bsmd.hdf5"
+    assert (tmp_path / spod_name).exists()
+    assert not (tmp_path / bsmd_name).exists()
+
+    bsmd = _make_bsmd(tmp_path, q, file_path="dummy.h5")
+    assert bsmd.qhat_cached
+    np.testing.assert_array_equal(bsmd.qhat, spod.qhat)
+    # Adoption writes a local BSMD copy; never renames or overwrites the SPOD file.
+    assert (tmp_path / bsmd_name).exists()
+    assert (tmp_path / spod_name).exists()
+
+    warm = _make_bsmd(tmp_path, q, file_path="dummy.h5")
+    assert warm.qhat_cached
+    np.testing.assert_array_equal(warm.qhat, spod.qhat)
+
+
+def test_corrupt_sibling_cache_recomputes_without_raising(tmp_path, caplog):
+    """A truncated sibling cache must recompute, with the file named in the warning.
+
+    Lookup tries the reader's own file first, then siblings in the same
+    ``results_dir``. An unreadable sibling must fail soft — same policy as a
+    corrupt own-file read.
+    """
+    rng = np.random.default_rng(7)
+    q = rng.standard_normal((32, 4))
+
+    # Cold BSMD with no sibling present (reference blocks).
     ref_dir = tmp_path / "ref"
     ref_dir.mkdir()
-    bsmd_dir = tmp_path / "bsmd"
-    bsmd_dir.mkdir()
-
-    # Cold reference with no SPOD cache in play.
-    monkeypatch.setattr(bsmd_mod, "RESULTS_DIR_SPOD", str(ref_dir))
     cold = _make_bsmd(ref_dir, q, file_path="dummy.h5")
     assert not cold.qhat_cached
     ref = np.array(cold.qhat, copy=True)
 
-    # Real SPOD cache, then truncate it so the reuse open would raise.
-    _make_spod(spod_dir, q, file_path="dummy.h5")
-    fname = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
-    spod_cache = spod_dir / fname
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    _make_spod(shared, q, file_path="dummy.h5")
+    spod_name = "dummy_Nfft8_ovlap0.0_32snapshots_spod.hdf5"
+    spod_cache = shared / spod_name
     assert spod_cache.exists()
     with open(spod_cache, "r+b") as fh:
         fh.truncate(64)
 
-    monkeypatch.setattr(bsmd_mod, "RESULTS_DIR_SPOD", str(spod_dir))
-    warm = _make_bsmd(bsmd_dir, q, file_path="dummy.h5")
-    captured = capsys.readouterr()
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        warm = _make_bsmd(shared, q, file_path="dummy.h5")
 
     assert not warm.qhat_cached
-    assert "Failed to load cached FFT blocks" in captured.out
+    failure = [r for r in caplog.records if "Failed to load cached FFT blocks" in r.getMessage()]
+    assert failure, f"no load-failure warning; saw {[r.getMessage() for r in caplog.records]}"
+    assert str(spod_cache) in failure[0].getMessage()
     np.testing.assert_allclose(warm.qhat, ref)
+
+
+def _sibling_path(tmp_path, analysis):
+    return tmp_path / f"dummy_Nfft8_ovlap0.0_32snapshots_{analysis}.hdf5"
+
+
+def test_malformed_sibling_cache_recomputes_instead_of_raising(tmp_path, caplog):
+    """A neighbour's bad cache file must never abort this analyzer's run.
+
+    Sibling adoption opens files written by OTHER analyses, so a malformed one
+    is no longer only the reader's own problem. Two payloads that are readable
+    as HDF5 but wrong: FFTBlocks stored with the wrong rank, and a stamp
+    attribute that will not cast to its expected type. Both used to escape the
+    OSError-only guard as IndexError and ValueError respectively.
+    """
+    from openmodalpy.core.base import _write_qhat_stamp
+
+    rng = np.random.default_rng(11)
+    q = rng.standard_normal((32, 8))
+    reference = _make_spod(tmp_path / "ref", q, file_path="dummy.h5").qhat
+
+    for case, mutate in (
+        ("wrong_rank", "rank"),
+        ("bad_stamp_attr", "stamp"),
+    ):
+        case_dir = tmp_path / case
+        case_dir.mkdir()
+        stamped = _make_spod(case_dir / "stamp_src", q, file_path="dummy.h5")
+
+        sibling = _sibling_path(case_dir, "bsmd")
+        with h5py.File(sibling, "w") as f:
+            blocks = np.ones((5, 8), dtype=complex) if mutate == "rank" else np.ones((5, 8, 3), dtype=complex)
+            f.create_dataset("FFTBlocks", data=blocks)
+            _write_qhat_stamp(f, stamped, _make_data(q)["q"])
+            if mutate == "stamp":
+                for key in list(f.attrs):
+                    if key.endswith("nfft"):
+                        f.attrs[key] = "not-an-int"
+
+        with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+            analyzer = _make_spod(case_dir, q, file_path="dummy.h5")
+
+        assert not analyzer.qhat_cached, f"{case}: adopted a malformed sibling"
+        np.testing.assert_allclose(analyzer.qhat, reference, err_msg=case)

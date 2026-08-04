@@ -81,6 +81,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- PSD-POD reuses cached FFT blocks again instead of recomputing them on every
+  run. The Welch-family analyzers (SPOD, BSMD, PSD-POD) now share one cache
+  implementation, and any of them can adopt another's cached blocks when the
+  stamped FFT parameters match, since all three produce identical blocks for
+  the same parameters. Each still writes only its own `..._<type>.hdf5` file.
+- The FFT cache looks for reusable blocks in the analyzer's own `results_dir`.
+  BSMD previously looked for an SPOD cache in the globally configured results
+  directory regardless of where it was writing; with default settings the two
+  are the same directory, so only setups using per-analysis directories see a
+  difference.
+- FFT cache progress messages (`Loaded cached FFT blocks ...`, `Saved FFT
+  blocks to cache ...`) now go to the logger instead of standard output.
 - Rendering a 3D mode figure now allocates about one copy of the mode volume
   instead of three. `subset_volume_focus_3d` no longer copies the volume when
   no cropping is configured, and `get_robust_clim` no longer copies the data to
@@ -297,6 +309,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- A malformed FFT cache file now recomputes the blocks instead of raising. The
+  read guard previously caught only unreadable files, so a file that opened
+  cleanly but held a wrong-rank `FFTBlocks` dataset or an uncastable stamp
+  attribute aborted the run. This matters more now that an analyzer may open a
+  file written by another analysis.
 - `read_results` now loads 0-d (scalar) HDF5 datasets into `extra` instead of
   raising on a scalar dataspace; normal datasets in the same file are unchanged.
 - SPOD and BSMD modes no longer flip sign or phase between runs.

@@ -14,8 +14,6 @@ from tqdm import tqdm
 
 from openmodalpy.core.base import (
     BaseAnalyzer,
-    _hdf5_write_mode,
-    _verify_qhat_stamp,
     _write_qhat_stamp,
     add_inset_colorbar,
     format_mode_title,
@@ -229,51 +227,6 @@ class SPODAnalyzer(BaseAnalyzer):
             self.dst = self.St[0]  # Or some other appropriate non-zero value if St[0] can be 0
         else:
             self.dst = 0
-
-    ############################################################
-    # FFT Block Caching                                        #
-    ############################################################
-    def compute_fft_blocks(self):
-        """Compute or load FFT blocks (qhat), with disk caching."""
-
-        filename = make_result_filename(
-            self.data_root,
-            self.nfft,
-            self.overlap,
-            self.data.get("Ns", 0),
-            self.analysis_type,
-        )
-        cache_path = os.path.join(self.results_dir, filename)
-
-        # Try loading cached FFT blocks from previous SPOD run
-        if os.path.exists(cache_path):
-            try:
-                with h5py.File(cache_path, "r") as f:
-                    if "FFTBlocks" in f:
-                        qhat_cached = f["FFTBlocks"][:]
-                        if qhat_cached.shape[0] == self.nfft // 2 + 1 and _verify_qhat_stamp(f, self, self.data["q"]):
-                            self.qhat = qhat_cached
-                            self.nblocks = qhat_cached.shape[2]
-                            self.qhat_cached = True
-                            print(f"Loaded cached FFT blocks from {cache_path}")
-                            return
-            except OSError as exc:
-                print(f"Failed to load cached FFT blocks ({exc}), recomputing.")
-
-        # Otherwise compute and save to cache
-        super().compute_fft_blocks()
-
-        os.makedirs(self.results_dir, exist_ok=True)
-        mode = _hdf5_write_mode(cache_path)
-        with h5py.File(cache_path, mode) as f:
-            if "FFTBlocks" in f:
-                del f["FFTBlocks"]
-            f.create_dataset("FFTBlocks", data=self.qhat, compression="gzip")
-            if mode == "w":
-                for key, value in self._get_metadata().items():
-                    f.attrs[key] = value
-            _write_qhat_stamp(f, self, self.data["q"])
-        print(f"Saved FFT blocks to cache at {cache_path}")
 
     ############################################################
     # Core SPOD Computation                                    #

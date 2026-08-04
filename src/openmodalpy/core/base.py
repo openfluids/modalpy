@@ -1438,10 +1438,131 @@ class BaseAnalyzer:
 
         return np.arange(n, dtype=float), "Sample index"
 
+    def _fft_block_cache_path(self) -> str | None:
+        """Return the per-analysis-type FFT cache path, or None to skip caching.
+
+        Caching is tied to ``analysis_type`` so a plain ``BaseAnalyzer`` (used
+        by quiet/library tests) keeps computing in memory only, while SPOD,
+        BSMD and PSD-POD each write their own ``..._<type>.hdf5`` file.
+        """
+        analysis_type = getattr(self, "analysis_type", None)
+        if not analysis_type:
+            return None
+        filename = make_result_filename(
+            self.data_root,
+            self.nfft,
+            self.overlap,
+            self.data.get("Ns", 0),
+            analysis_type,
+        )
+        return os.path.join(self.results_dir, filename)
+
+    def _sibling_fft_cache_paths(self, own_path: str) -> list[str]:
+        """Other ``..._<analysis>.hdf5`` files in ``results_dir`` for the same params.
+
+        All Welch-family analyzers produce bit-identical FFT blocks for matching
+        parameters, so a stamp-matching sibling may be adopted. Lookup is
+        confined to this analyzer's ``results_dir`` (not a global results constant).
+        """
+        if not getattr(self, "analysis_type", None) or not os.path.isdir(self.results_dir):
+            return []
+        stem = f"{self.data_root}_Nfft{self.nfft}_ovlap{self.overlap}_{self.data.get('Ns', 0)}snapshots_"
+        own_name = os.path.basename(own_path)
+        siblings: list[str] = []
+        for name in sorted(os.listdir(self.results_dir)):
+            if name == own_name:
+                continue
+            if name.startswith(stem) and name.endswith(".hdf5"):
+                siblings.append(os.path.join(self.results_dir, name))
+        return siblings
+
+    def _try_load_fft_block_cache(self, cache_path: str) -> bool:
+        """Load FFT blocks from ``cache_path`` when shape and stamp match.
+
+        Returns True on a usable hit (sets ``qhat``, ``nblocks``, ``qhat_cached``).
+        On missing file, missing dataset, stamp mismatch, or unreadable file,
+        returns False so the caller recomputes. Read failures are fail-soft;
+        write failures are not handled here.
+
+        Fail-soft covers a malformed payload, not just an unreadable file. Since
+        this now also opens files written by OTHER analyses, a neighbour's bad
+        cache must never abort this run: a wrong-rank dataset, a group where a
+        dataset belongs, or a stamp attribute that will not cast all recompute.
+        """
+        if not os.path.exists(cache_path):
+            return False
+        try:
+            with h5py.File(cache_path, "r") as f:
+                if "FFTBlocks" not in f:
+                    return False
+                qhat_cached = f["FFTBlocks"][:]
+                if qhat_cached.ndim != 3 or qhat_cached.shape[0] != self.nfft // 2 + 1:
+                    return False
+                if not _verify_qhat_stamp(f, self, self.data["q"]):
+                    return False
+                self.qhat = qhat_cached
+                self.nblocks = qhat_cached.shape[2]
+                self.qhat_cached = True
+                logger.info("Loaded cached FFT blocks from %s", cache_path)
+                return True
+        except (OSError, KeyError, TypeError, ValueError, IndexError) as exc:
+            logger.warning(
+                "Failed to load cached FFT blocks from %s (%s), recomputing.",
+                cache_path,
+                exc,
+            )
+            return False
+
+    def _save_fft_block_cache(self, cache_path: str) -> None:
+        """Write ``self.qhat`` and its parameter stamp to ``cache_path``."""
+        os.makedirs(self.results_dir, exist_ok=True)
+        mode = _hdf5_write_mode(cache_path)
+        with h5py.File(cache_path, mode) as f:
+            if "FFTBlocks" in f:
+                del f["FFTBlocks"]
+            f.create_dataset("FFTBlocks", data=self.qhat, compression="gzip")
+            if mode == "w":
+                for key, value in self._get_metadata().items():
+                    f.attrs[key] = value
+            _write_qhat_stamp(f, self, self.data["q"])
+        logger.info("Saved FFT blocks to cache at %s", cache_path)
+
+    def _on_fft_blocks_ready(self) -> None:
+        """Hook after FFT blocks are available (cache hit or fresh compute).
+
+        Subclasses such as BSMD use this for frequency axes and optional
+        disk offload; the default is a no-op.
+        """
+
     def compute_fft_blocks(self):
-        """Compute blocked FFT using Welch's method."""
+        """Compute blocked FFT using Welch's method, with optional disk cache.
+
+        When ``analysis_type`` is set, blocks are loaded from / saved to a
+        per-type HDF5 file under ``results_dir``. Stamp verification lives
+        only here so SPOD, BSMD and PSD-POD share one implementation.
+
+        Lookup order: this analyzer's own cache file, then other
+        ``..._<analysis>.hdf5`` siblings in the same ``results_dir`` whose
+        stamp matches. Adopting a sibling still writes only this analyzer's
+        own file (a local copy for later runs).
+        """
         if "q" not in self.data:
             raise ValueError("Data not loaded. Call load_and_preprocess() first.")
+
+        self.qhat_cached = False
+        cache_path = self._fft_block_cache_path()
+        if cache_path is not None:
+            # BSMD save_results compares this path to decide append vs rewrite.
+            self._qhat_cache_path = cache_path
+            candidates = [cache_path, *self._sibling_fft_cache_paths(cache_path)]
+            for path in candidates:
+                if self._try_load_fft_block_cache(path):
+                    if path != cache_path:
+                        # Keep a copy under our own name so the next run hits
+                        # the own-file path without depending on the sibling.
+                        self._save_fft_block_cache(cache_path)
+                    self._on_fft_blocks_ready()
+                    return
 
         pools = get_threadpool_summary()
         logger.info(
@@ -1462,6 +1583,10 @@ class BaseAnalyzer:
             use_parallel=self.use_parallel,
         )
         logger.info("FFT computation complete.")
+
+        if cache_path is not None:
+            self._save_fft_block_cache(cache_path)
+        self._on_fft_blocks_ready()
 
     def save_results(self, filename: str | None = None) -> None:
         """Save results to HDF5 file with harmonized filename and format.

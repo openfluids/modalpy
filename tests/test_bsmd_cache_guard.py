@@ -10,8 +10,7 @@ import h5py
 import numpy as np
 import pytest
 
-import openmodalpy.bsmd as bsmd_mod
-from openmodalpy import BSMDAnalyzer, SPODAnalyzer
+from openmodalpy import BSMDAnalyzer
 
 NFFT = 8
 NS = 32
@@ -31,21 +30,6 @@ def _data() -> dict:
     }
 
 
-def _spod(results_dir) -> SPODAnalyzer:
-    an = SPODAnalyzer(
-        file_path="dummy.h5",
-        nfft=NFFT,
-        overlap=0.0,
-        results_dir=str(results_dir),
-        figures_dir=str(results_dir),
-        data_loader=lambda _: _data(),
-        spatial_weight_type="uniform",
-    )
-    an.load_and_preprocess()
-    an.compute_fft_blocks()
-    return an
-
-
 def _bsmd(results_dir) -> BSMDAnalyzer:
     return BSMDAnalyzer(
         file_path="dummy.h5",
@@ -61,13 +45,14 @@ def _bsmd(results_dir) -> BSMDAnalyzer:
     )
 
 
-def test_write_failure_is_not_called_a_load_failure(tmp_path, monkeypatch, capsys):
-    """A full disk while SAVING the BSMD cache must not print a load failure."""
-    spod_dir = tmp_path / "spod"
+def test_write_failure_is_not_called_a_load_failure(tmp_path, monkeypatch, caplog):
+    """A full disk while SAVING the BSMD cache must not log a load failure."""
+    import logging
+
+    import openmodalpy.core.base as base_mod
+
     bsmd_dir = tmp_path / "bsmd"
     bsmd_dir.mkdir(parents=True, exist_ok=True)
-    _spod(spod_dir)
-    monkeypatch.setattr(bsmd_mod, "RESULTS_DIR_SPOD", str(spod_dir))
 
     real_file = h5py.File
 
@@ -76,20 +61,22 @@ def test_write_failure_is_not_called_a_load_failure(tmp_path, monkeypatch, capsy
             raise OSError("No space left on device")
         return real_file(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(bsmd_mod.h5py, "File", fake_file)
+    # Cache load/save lives in BaseAnalyzer; patch the module that opens the file.
+    monkeypatch.setattr(base_mod.h5py, "File", fake_file)
 
     analyzer = _bsmd(bsmd_dir)
     analyzer.load_and_preprocess()
-    with pytest.raises(OSError, match="No space left on device"):
-        analyzer.compute_fft_blocks()
-    out = capsys.readouterr().out
-    assert "Failed to load cached FFT blocks" not in out, (
-        "a cache WRITE failure was reported as a cache LOAD failure:\n" + out
-    )
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        with pytest.raises(OSError, match="No space left on device"):
+            analyzer.compute_fft_blocks()
+    load_msgs = [r.getMessage() for r in caplog.records if "Failed to load cached FFT blocks" in r.getMessage()]
+    assert not load_msgs, "a cache WRITE failure was reported as a cache LOAD failure:\n" + "\n".join(load_msgs)
 
 
-def test_read_failure_still_recomputes_and_names_the_file(tmp_path, capsys):
+def test_read_failure_still_recomputes_and_names_the_file(tmp_path, caplog):
     """A corrupt BSMD cache must still recompute, with the file named."""
+    import logging
+
     bsmd_dir = tmp_path / "bsmd"
     bsmd_dir.mkdir(parents=True, exist_ok=True)
     analyzer = _bsmd(bsmd_dir)
@@ -103,12 +90,11 @@ def test_read_failure_still_recomputes_and_names_the_file(tmp_path, capsys):
 
     fresh = _bsmd(bsmd_dir)
     fresh.load_and_preprocess()
-    fresh.compute_fft_blocks()
-    out = capsys.readouterr().out
-    # The FAILURE line itself must name the file — a later "Saved FFT blocks to
-    # cache at ..." line would otherwise satisfy a whole-output search.
-    failure_lines = [line for line in out.splitlines() if "Failed to load cached FFT blocks" in line]
-    assert len(failure_lines) == 1, out
-    assert str(cache_path) in failure_lines[0]
+    with caplog.at_level(logging.WARNING, logger="openmodalpy.core.base"):
+        fresh.compute_fft_blocks()
+    # The failure record itself must name the file.
+    failure = [r for r in caplog.records if "Failed to load cached FFT blocks" in r.getMessage()]
+    assert len(failure) == 1, [r.getMessage() for r in caplog.records]
+    assert str(cache_path) in failure[0].getMessage()
     assert fresh.qhat_cached is False
     assert fresh.qhat.shape[0] == NFFT // 2 + 1
