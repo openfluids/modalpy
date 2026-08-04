@@ -185,6 +185,19 @@ def _as_weight_vector(metric: SpatialMetric | np.ndarray, n_space: int) -> np.nd
     return _coerce_spatial_weights(metric, n_space)
 
 
+def _unweight_modes(weighted_modes: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """Recover physical modes from sqrt(W)-weighted ones.
+
+    Division is taken only where ``weights > 0``; a zero-measure cell gets
+    exactly 0 (no NaN/Inf from 0/0).
+    """
+    modes = np.zeros_like(weighted_modes)
+    positive = weights > 0
+    if np.any(positive):
+        modes[positive] = weighted_modes[positive] / np.sqrt(weights[positive])[:, np.newaxis]
+    return modes
+
+
 def _working_eps(dtype: np.dtype | type) -> float:
     """Machine epsilon of a real working dtype (float64 fallback)."""
     dt = np.dtype(dtype)
@@ -321,7 +334,7 @@ def _solve_eigh(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     n_samples, n_space = data.shape
     weights = _as_weight_vector(metric, n_space)
-    sqrt_weights = np.sqrt(np.maximum(weights, 1e-12))
+    sqrt_weights = np.sqrt(weights)
     data_weighted = data * sqrt_weights
 
     # Complex ensembles (PSD-POD Fourier realizations) use the Hermitian
@@ -372,7 +385,7 @@ def _solve_eigh(
         safe = eigenvalues * n_samples
         normalization = 1.0 / np.sqrt(safe)
         weighted_modes = np.dot(data_weighted.T, vectors) * normalization
-        modes = weighted_modes / sqrt_weights[:, np.newaxis]
+        modes = _unweight_modes(weighted_modes, weights)
         coeffs = vectors * np.sqrt(safe)
     else:
         n_kernel = n_space
@@ -398,7 +411,7 @@ def _solve_eigh(
             eigenvalues = eigenvalues[:take]
             weighted_modes = weighted_modes[:, :take]
 
-        modes = weighted_modes / sqrt_weights[:, np.newaxis]
+        modes = _unweight_modes(weighted_modes, weights)
         coeffs = np.dot(data_weighted, weighted_modes)
 
     modes, coeffs = canonicalize_modes(np.real(modes), np.real(coeffs))
@@ -456,7 +469,7 @@ def _solve_svd(
     """Weighted SVD route (ST-POD). ``data`` is samples × lifted features."""
     n_samples, n_space = data.shape
     weights = _as_weight_vector(metric, n_space)
-    sqrt_weights = np.sqrt(np.maximum(weights, 1e-12))
+    sqrt_weights = np.sqrt(weights)
     data_weighted = data * sqrt_weights
 
     # Same meaning as the eigh path: dimension of the Gram matrix that would
@@ -493,7 +506,7 @@ def _solve_svd(
         )
 
     eigenvalues = (sigma**2) / n_samples
-    modes = u / sqrt_weights[:, np.newaxis]
+    modes = _unweight_modes(u, weights)
     coeffs = (vt * sigma[:, np.newaxis]).T
     modes, coeffs = canonicalize_modes(np.real(modes), np.real(coeffs))
     return modes, np.real(eigenvalues), coeffs
@@ -535,6 +548,9 @@ def spod_single_frequency(
         # Same unit factor on phi and psi so psi = X^H W phi Lambda^{-1/2} holds
         # after the LAPACK phase is fixed (return_psi True or False → same phi).
         phi, psi = canonicalize_modes(phi, psi)
+        # Gram is PSD: a negative eigenvalue is roundoff. Clamp to zero —
+        # abs() would report it as real energy with the wrong sign flipped.
+        lambda_out = np.maximum(lambda_tilde, 0.0)
         if return_psi:
-            return phi, np.abs(lambda_tilde), psi
-        return phi, np.abs(lambda_tilde)
+            return phi, lambda_out, psi
+        return phi, lambda_out

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- Spatial weights are now used exactly, with no absolute `1e-12` floor. The
+  weights are a quadrature measure (m³ in 3-D, m² in 2-D), so an absolute floor
+  had units it cannot have: a mesh whose cells fall below `1e-12` was silently
+  inflated, and the energy spectrum was not linear in the measure — scaling a
+  metric by `1e-14` changed the eigenvalues by a factor of about 95. A cell with
+  zero measure now contributes nothing to the decomposition and its POD/ST-POD
+  mode value is exactly `0`, matching what SPOD and BSMD already did. Before,
+  such a cell entered the kernel with weight `1e-12`, so data held there — a
+  masked wall value, for instance — leaked into the spectrum; a masked cell
+  holding `1e6` shifted the eigenvalues by 199 %.
 - `SpatialMetric` now rejects square matrices and 3-D weight arrays with a
   named `ValueError` (shape + `np.diag` fix) instead of flattening them and
   later failing on length. It holds a diagonal metric as a vector; pass
@@ -309,6 +319,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- SPOD no longer reports a roundoff-negative eigenvalue with its sign flipped.
+  The cross-spectral matrix is positive semi-definite, so an eigenvalue that
+  comes back slightly negative is roundoff; taking its absolute value presented
+  it as real energy. Such values are now clamped to exactly zero. Only the
+  roundoff tail of the spectrum is affected, and the number of returned modes
+  is unchanged.
 - A malformed FFT cache file now recomputes the blocks instead of raising. The
   read guard previously caught only unreadable files, so a file that opened
   cleanly but held a wrong-rank `FFTBlocks` dataset or an uncastable stamp

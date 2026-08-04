@@ -138,16 +138,16 @@ def test_psd_pod_isolated_zero_weight_station():
     weights[2] = 0.0
     assert weights[2] == 0.0
     assert np.count_nonzero(weights == 0.0) == 1
-    # Shared solver floors sqrt(W) at 1e-12; bare sqrt(0) is exact zero. On this
-    # ensemble the two paths still agree within the tolerances below.
+    # Zero measure: the cell contributes nothing (exact sqrt(0) = 0). On this
+    # ensemble the shared path still agrees with the reference within tol.
     _assert_matches_reference(ensemble, weights, n_keep=4)
 
 
 def test_psd_pod_negative_weight_station_raises():
     """A negative weight is not a valid inner-product metric — raise ValueError.
 
-    An isolated zero among positive weights is still allowed (floored at
-    ``1e-12``); a negative entry means the metric is not an inner product, so
+    An isolated zero among positive weights is still allowed (it contributes
+    nothing); a negative entry means the metric is not an inner product, so
     the solver refuses it before taking ``sqrt(W)``.
     """
     ensemble, weights = _fourier_ensemble()

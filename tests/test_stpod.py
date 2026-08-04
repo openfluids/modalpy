@@ -442,7 +442,7 @@ class TestSTPODTotalEnergy:
         data_centered = data["q"] - np.mean(data["q"], axis=0)
         lifted = decomposition.DelayEmbeddingLift(embedding_dim).apply(data_centered)
         weights = np.tile(np.ones(Nspace), embedding_dim)
-        sqrt_w = np.sqrt(np.maximum(weights, 1e-12))
+        sqrt_w = np.sqrt(weights)
         data_weighted = lifted * sqrt_w
         m = lifted.shape[0]
         _u, sigma, _vt = np.linalg.svd(data_weighted.T, full_matrices=False)
@@ -458,8 +458,8 @@ class TestSTPODTotalEnergy:
 
         Under uniform weights the weighted and unweighted Frobenius norms are
         equal, so dropping the sqrt-weight factor would go unnoticed. These
-        weights span four decades and include one near-zero entry, which is
-        also the only place the 1e-12 clamp does anything.
+        weights span four decades and include one near-zero entry (1e-14)
+        that must enter as its true measure, not a floored substitute.
         """
         from openmodalpy.core import decomposition
 
@@ -489,7 +489,7 @@ class TestSTPODTotalEnergy:
         data_centered = data["q"] - np.mean(data["q"], axis=0)
         lifted = decomposition.DelayEmbeddingLift(embedding_dim).apply(data_centered)
         tiled = np.tile(weights, embedding_dim)
-        data_weighted = lifted * np.sqrt(np.maximum(tiled, 1e-12))
+        data_weighted = lifted * np.sqrt(tiled)
         _u, sigma, _vt = np.linalg.svd(data_weighted.T, full_matrices=False)
         expected = float(np.sum(sigma**2) / lifted.shape[0])
 

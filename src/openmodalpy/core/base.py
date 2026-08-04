@@ -1119,11 +1119,11 @@ def require_spatial_metric(weights):
     """Raise ``ValueError`` if ``weights`` do not define an inner product.
 
     A metric that is not an inner product must not reach a solver. Isolated
-    zeros among positive weights stay allowed -- the POD seam floors those at
-    1e-12, while SPOD and BSMD simply let that cell contribute nothing. What is
-    rejected: complex entries, non-finite entries, negative entries, and a
-    zero total measure. Single definition, used by the decomposition seam,
-    SPOD (via ``_coerce_spatial_weights``) and BSMD.
+    zeros among positive weights stay allowed -- a zero-measure cell
+    contributes nothing (same as SPOD and BSMD). What is rejected: complex
+    entries, non-finite entries, negative entries, and a zero total measure.
+    Single definition, used by the decomposition seam, SPOD (via
+    ``_coerce_spatial_weights``) and BSMD.
     """
     weights = np.asarray(weights)
     if np.iscomplexobj(weights):

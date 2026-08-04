@@ -213,8 +213,8 @@ class STPODAnalyzer(BaseAnalyzer):
         )
 
         # True pre-truncation total: sum of all sigma²/m = ‖data_weighted‖_F² / m.
-        # Use the same weight clamp as _solve_svd so the identity holds exactly.
-        sqrt_weights = np.sqrt(np.maximum(lifted_metric.weights, 1e-12))
+        # Same exact sqrt(W) as _solve_svd so the identity holds.
+        sqrt_weights = np.sqrt(lifted_metric.weights)
         data_weighted = lifted * sqrt_weights
         n_samples = lifted.shape[0]
         self.total_energy = float(np.linalg.norm(data_weighted, "fro") ** 2 / n_samples)
@@ -226,8 +226,7 @@ class STPODAnalyzer(BaseAnalyzer):
         end_time = time.time()
         print(f"ST-POD completed in {end_time - start_time:.2f} seconds.")
         print(
-            f"Computed {self.n_modes_save} ST-POD modes "
-            f"({100.0 * self.energy_captured_fraction:.2f}% of total energy)."
+            f"Computed {self.n_modes_save} ST-POD modes ({100.0 * self.energy_captured_fraction:.2f}% of total energy)."
         )
 
     def _energy_denominator(self) -> tuple[float, str]:
