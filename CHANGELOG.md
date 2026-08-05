@@ -129,10 +129,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   difference.
 - FFT cache progress messages (`Loaded cached FFT blocks ...`, `Saved FFT
   blocks to cache ...`) now go to the logger instead of standard output.
-- POD, PSD-POD, SPOD and ST-POD now report progress, results and diagnostics on
-  their module loggers (`openmodalpy.pod`, `openmodalpy.psd_pod`,
-  `openmodalpy.spod`, `openmodalpy.stpod`) instead of writing to
-  standard output. The command-line tool installs a handler and still shows
+- Every analyzer — POD, PSD-POD, SPOD, ST-POD, BSMD and DMD — now reports
+  progress, results and diagnostics on its module logger (`openmodalpy.pod`,
+  `openmodalpy.psd_pod`, `openmodalpy.spod`, `openmodalpy.stpod`,
+  `openmodalpy.bsmd`, `openmodalpy.dmd`) instead of writing to
+  standard output. Nothing in the library writes to stdout any more. The
+  command-line tool installs a handler and still shows
   every message, so its output is unchanged; a library caller now sees nothing
   on stdout and can route, filter, or silence the messages like any other
   Python logging. Messages that need the user to act — no results file to plot,

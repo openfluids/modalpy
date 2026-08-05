@@ -1,3 +1,4 @@
+import logging
 import warnings
 
 import h5py
@@ -409,10 +410,10 @@ def test_perform_bsmd_static_path_shapes_and_nontrivial(tmp_path):
     assert not np.allclose(analyzer.energy_map[finite], 0.0)
 
 
-def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, capsys):
+def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, caplog):
     """use_parallel=True must match the serial perform_bsmd path on the same data.
 
-    Branch taken is pinned by capturing bsmd.py's own stdout message
+    Branch taken is pinned by the openmodalpy.bsmd logger message
     ("Thread-parallel BSMD ..."), not by re-deriving the use_parallel flag.
     """
     triads = [(0, 0, 0), (1, -1, 0), (1, 1, 2)]
@@ -425,10 +426,11 @@ def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, capsys):
         use_parallel=False,
         file_path="serial.h5",
     )
-    capsys.readouterr()  # drop load / FFT noise
-    serial.perform_bsmd()
-    serial_out = capsys.readouterr().out
-    assert "Thread-parallel BSMD" not in serial_out
+    with caplog.at_level(logging.INFO, logger="openmodalpy.bsmd"):
+        serial.perform_bsmd()
+    serial_msgs = [r.getMessage() for r in caplog.records if r.name == "openmodalpy.bsmd"]
+    assert not any("Thread-parallel BSMD" in m for m in serial_msgs)
+    caplog.clear()
 
     parallel = _make_analyzer(
         tmp_path / "parallel",
@@ -439,10 +441,10 @@ def test_perform_bsmd_parallel_agrees_with_serial(tmp_path, capsys):
         use_parallel=True,
         file_path="parallel.h5",
     )
-    capsys.readouterr()  # drop load / FFT noise
-    parallel.perform_bsmd()
-    parallel_out = capsys.readouterr().out
-    assert "Thread-parallel BSMD" in parallel_out
+    with caplog.at_level(logging.INFO, logger="openmodalpy.bsmd"):
+        parallel.perform_bsmd()
+    parallel_msgs = [r.getMessage() for r in caplog.records if r.name == "openmodalpy.bsmd"]
+    assert any("Thread-parallel BSMD" in m for m in parallel_msgs)
 
     np.testing.assert_allclose(parallel.eigenvalues, serial.eigenvalues, rtol=0, atol=1e-12)
     np.testing.assert_allclose(np.abs(parallel.modes1), np.abs(serial.modes1), rtol=0, atol=1e-12)
@@ -776,14 +778,15 @@ def test_empty_qhat_message_says_no_bins_loaded_default_triads(tmp_path):
     assert "no frequency bins" in warn_text.lower()
 
 
-def test_perform_bsmd_raises_on_empty_qhat(tmp_path, capsys):
-    """perform_bsmd refuses empty qhat before printing Starting BSMD analysis."""
+def test_perform_bsmd_raises_on_empty_qhat(tmp_path, caplog):
+    """perform_bsmd refuses empty qhat before logging Starting BSMD analysis."""
     analyzer = _make_analyzer_without_fft(tmp_path, triads=[(1, 1, 2)])
     assert analyzer.qhat.size == 0
-    with pytest.raises(ValueError) as excinfo:
-        analyzer.perform_bsmd()
-    out = capsys.readouterr().out
-    assert "Starting BSMD analysis" not in out
+    with caplog.at_level(logging.INFO, logger="openmodalpy.bsmd"):
+        with pytest.raises(ValueError) as excinfo:
+            analyzer.perform_bsmd()
+    msgs = [r.getMessage() for r in caplog.records if r.name == "openmodalpy.bsmd"]
+    assert not any("Starting BSMD analysis" in m for m in msgs)
     assert "load_and_preprocess" in str(excinfo.value) or "qhat" in str(excinfo.value).lower()
 
 

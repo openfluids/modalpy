@@ -12,7 +12,7 @@ import re
 import numpy as np
 import pytest
 
-from openmodalpy import PODAnalyzer, SPODAnalyzer, STPODAnalyzer
+from openmodalpy import BSMDAnalyzer, DMDAnalyzer, PODAnalyzer, SPODAnalyzer, STPODAnalyzer
 from openmodalpy.core.base import BaseAnalyzer, print_summary
 from openmodalpy.core.io import MATDataLoader
 
@@ -255,3 +255,91 @@ def test_stpod_run_still_says_something(tmp_path, caplog):
         f"({100.0 * analyzer.energy_captured_fraction:.2f}% of total energy)."
     )
     assert any(expected in r.getMessage() for r in info), [r.getMessage() for r in info]
+
+
+def _make_bsmd(tmp_path, data: dict) -> BSMDAnalyzer:
+    """BSMDAnalyzer on synthetic data — load + FFT + perform_bsmd path."""
+    return BSMDAnalyzer(
+        file_path="dummy.h5",
+        nfft=8,
+        overlap=0.0,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_static_triads=True,
+        static_triads=[(0, 0, 0), (1, -1, 0), (1, 1, 2)],
+        use_parallel=False,
+    )
+
+
+def test_bsmd_run_is_quiet_on_stdout(tmp_path, capsys):
+    """End-to-end BSMD (load + FFT + perform_bsmd) must leave stdout empty."""
+    analyzer = _make_bsmd(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    analyzer.perform_bsmd()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_bsmd_run_still_says_something(tmp_path, caplog):
+    """Silence must come from routing, not from deleting the diagnostics.
+
+    After perform_bsmd the openmodalpy.bsmd logger should still report the
+    completed analysis at INFO, including the wall-clock duration.
+    """
+    analyzer = _make_bsmd(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.bsmd"):
+        analyzer.perform_bsmd()
+
+    info = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert info, "perform_bsmd emitted no INFO records at all"
+    # Pin the completion duration (a real reported quantity), not bare existence
+    # of any INFO record. Deleting that log line turns this red.
+    pattern = re.compile(r"BSMD analysis completed in \d+\.\d{2} seconds")
+    assert any(pattern.search(r.getMessage()) for r in info), [r.getMessage() for r in info]
+
+
+def _make_dmd(tmp_path, data: dict) -> DMDAnalyzer:
+    """DMDAnalyzer on synthetic data — load + perform_dmd + save_results path."""
+    return DMDAnalyzer(
+        file_path="dummy.h5",
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=4,
+        rank=4,
+    )
+
+
+def test_dmd_run_is_quiet_on_stdout(tmp_path, capsys):
+    """End-to-end DMD (load + perform_dmd + save) must leave stdout empty."""
+    analyzer = _make_dmd(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.perform_dmd()
+    analyzer.save_results()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_dmd_run_still_says_something(tmp_path, caplog):
+    """Silence must come from routing, not from deleting the diagnostics.
+
+    After save_results the openmodalpy.dmd logger should still report the
+    result path at INFO (perform_dmd itself has no progress prints to convert).
+    """
+    analyzer = _make_dmd(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.perform_dmd()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.dmd"):
+        analyzer.save_results()
+
+    info = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert info, "save_results emitted no INFO records at all"
+    # Pin the results path (a real reported quantity). Deleting that log line turns this red.
+    pattern = re.compile(r"DMD results saved to .+/.*_dmd\.hdf5")
+    assert any(pattern.search(r.getMessage()) for r in info), [r.getMessage() for r in info]

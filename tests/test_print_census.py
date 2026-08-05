@@ -12,13 +12,13 @@ from pathlib import Path
 # Upper bounds measured after phase-1 conversion (core/ → 0). Counts are
 # inclusive of the one removed SPOD qhat-guard print (spod.py was 31).
 PRINT_UPPER_BOUNDS: dict[str, int] = {
-    "bsmd.py": 28,
+    "bsmd.py": 0,
     "cli.py": 12,
     "commands.py": 13,
     "core/base.py": 0,
     "core/io.py": 0,
     "core/parallel.py": 0,
-    "dmd.py": 26,
+    "dmd.py": 0,
     "pod.py": 0,
     "psd_pod.py": 0,
     "spod.py": 0,

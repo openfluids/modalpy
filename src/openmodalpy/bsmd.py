@@ -26,6 +26,7 @@ Method:
 """
 
 # Standard library imports
+import logging
 import os
 import re
 import time
@@ -62,6 +63,8 @@ from openmodalpy.core.config import (
     RESULTS_DIR_BSMD,
 )
 from openmodalpy.core.threads import apply_blas_limit
+
+logger = logging.getLogger(__name__)
 
 # Standard static triad list
 ALL_TRIADS = [
@@ -298,9 +301,10 @@ class BSMDAnalyzer(BaseAnalyzer):
             return  # No cache file to back onto
 
         qhat_gb = self.qhat.nbytes / 1024**3
-        print(
-            f"qhat is {qhat_gb:.1f} GB (threshold {self._max_qhat_bytes / 1024**3:.1f} GB) "
-            f"— switching to disk-backed mode."
+        logger.info(
+            "qhat is %.1f GB (threshold %.1f GB) — switching to disk-backed mode.",
+            qhat_gb,
+            self._max_qhat_bytes / 1024**3,
         )
         self._qhat_file = h5py.File(cache_path, "r")
         self._qhat_dataset = self._qhat_file["FFTBlocks"]
@@ -326,8 +330,11 @@ class BSMDAnalyzer(BaseAnalyzer):
             if bin_idx < self._qhat_dataset.shape[0]:
                 self._qhat_bin_cache[bin_idx] = self._qhat_dataset[bin_idx, :, :]
         total_mb = sum(v.nbytes for v in self._qhat_bin_cache.values()) / 1024**2
-        print(
-            f"Pre-fetched {len(to_read)} frequency bins ({total_mb:.0f} MB) for {len(self.static_triads_list)} triads."
+        logger.info(
+            "Pre-fetched %d frequency bins (%.0f MB) for %d triads.",
+            len(to_read),
+            total_mb,
+            len(self.static_triads_list),
         )
 
     def close(self):
@@ -385,14 +392,14 @@ class BSMDAnalyzer(BaseAnalyzer):
         if self.qhat.size == 0 and not self._qhat_on_disk:
             raise ValueError("STFT data (qhat) not found. Call load_and_preprocess() first.")
         start_time = time.time()
-        print("Starting BSMD analysis...")
+        logger.info("Starting BSMD analysis...")
 
         if self.use_static_triads:
             self._perform_static_bsmd_core()
         else:
             raise NotImplementedError("Dynamic BSMD is not yet implemented.")
 
-        print(f"BSMD analysis completed in {time.time() - start_time:.2f} seconds.")
+        logger.info("BSMD analysis completed in %.2f seconds.", time.time() - start_time)
 
     @property
     def _n_freq_bins(self) -> int:
@@ -515,10 +522,10 @@ class BSMDAnalyzer(BaseAnalyzer):
         Python 3.14+ free-threading removes it entirely, so threads give
         near-linear speedup for the matmul-dominated inner loop.
         """
-        print("Performing static BSMD core analysis...")
+        logger.info("Performing static BSMD core analysis...")
         start_time = time.time()
         if not self.static_triads_list or len(self.static_triads_list) == 0:
-            print("Error: Static triads list is empty. Cannot perform static BSMD.")
+            logger.error("Static triads list is empty. Cannot perform static BSMD.")
             self.modes1 = np.array([])
             self.modes2 = np.array([])
             self.eigenvalues = np.array([])
@@ -641,7 +648,7 @@ class BSMDAnalyzer(BaseAnalyzer):
 
         num_triads = len(self.static_triads_list)
         Nspace = self._n_spatial
-        print(f"Using {num_triads} statically defined triads ({Nspace} spatial points).")
+        logger.info("Using %d statically defined triads (%d spatial points).", num_triads, Nspace)
 
         self.modes1 = np.zeros((num_triads, Nspace), dtype=complex)
         self.modes2 = np.zeros((num_triads, Nspace), dtype=complex)
@@ -675,7 +682,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         with apply_blas_limit():
             if self.use_parallel:
                 n_workers = min(num_triads, os.cpu_count() or 1)
-                print(f"Thread-parallel BSMD with {n_workers} workers.")
+                logger.info("Thread-parallel BSMD with %d workers.", n_workers)
                 with ThreadPoolExecutor(max_workers=n_workers) as pool:
                     futures = {
                         pool.submit(self._compute_single_triad, p1, p2, p3): i
@@ -690,7 +697,7 @@ class BSMDAnalyzer(BaseAnalyzer):
                     lam, m1, m2 = self._compute_single_triad(p1, p2, p3)
                     _store_result(i, lam, m1, m2)
 
-        print(f"Static BSMD core analysis completed in {time.time() - start_time:.2f} seconds.")
+        logger.info("Static BSMD core analysis completed in %.2f seconds.", time.time() - start_time)
 
         # Build energy map for quick visualisation
         self.energy_map = self._compute_energy_map()
@@ -774,7 +781,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         if self.energy_map.size:
             datasets["energy_map"] = self.energy_map
         write_results(results_path, datasets, attrs=self._get_metadata(), mode=file_mode, compression=None)
-        print(f"Results saved to {results_path}")
+        logger.info("Results saved to %s", results_path)
 
     def load_results(self, filename: str | None = None) -> None:
         """Load BSMD results from an HDF5 file."""
@@ -787,16 +794,16 @@ class BSMDAnalyzer(BaseAnalyzer):
             )
         else:
             load_path = os.path.join(self.results_dir, filename)
-        print(f"Loading BSMD results from {load_path}")
+        logger.info("Loading BSMD results from %s", load_path)
         if not os.path.isfile(load_path):
             from openmodalpy.core.results import find_latest_result
 
             latest = find_latest_result(self.results_dir, "*_bsmd.hdf5")
             if latest:
                 load_path = latest
-                print(f"[Auto-detect] Using: {load_path}")
+                logger.info("[Auto-detect] Using: %s", load_path)
             else:
-                print(f"[ERROR] No BSMD results file found in {self.results_dir}")
+                logger.error("No BSMD results file found in %s", self.results_dir)
                 return
         res = read_results(load_path)
         stamp = res.attrs.get("bispectrum_conjugation")
@@ -821,12 +828,12 @@ class BSMDAnalyzer(BaseAnalyzer):
         for attr_key in ("dt", "Ns", "Nx", "Ny", "Nz", "nfft", "overlap"):
             if attr_key in res.attrs:
                 self.data[attr_key] = res.attrs[attr_key]
-        print("BSMD results loaded.")
+        logger.info("BSMD results loaded.")
 
     def plot_modes(self, triad_indices=None, plot_n_modes: Optional[int] = 10):
         """Plot spatial BSMD modes for selected triads."""
         if self.modes1.size == 0 or self.modes2.size == 0:
-            print("No BSMD modes to plot. Run perform_bsmd() first.")
+            logger.warning("No BSMD modes to plot. Run perform_bsmd() first.")
             return
         if resolve_volume_layout(self.data, self.modes1.shape[1]) is not None:
             self.plot_modes_3d_slices(triad_indices=triad_indices, plot_n_modes=plot_n_modes)
@@ -928,7 +935,7 @@ class BSMDAnalyzer(BaseAnalyzer):
             fname = os.path.join(self.figures_dir, f"{self.data_root}_BSMD_triad{idx}_{var_name}.png")
             plt.savefig(fname, dpi=FIG_DPI)
             plt.close(fig)
-            print(f"BSMD mode plot saved to {fname}")
+            logger.info("BSMD mode plot saved to %s", fname)
 
     def plot_modes_3d_slices(self, triad_indices=None, plot_n_modes: Optional[int] = 10):
         """Plot orthogonal 3D slices for selected BSMD triads."""
@@ -940,10 +947,10 @@ class BSMDAnalyzer(BaseAnalyzer):
 
     def _plot_modes_3d(self, kind: str, triad_indices=None, plot_n_modes: Optional[int] = 10):
         if self.modes1.size == 0 or self.modes2.size == 0:
-            print("No BSMD modes to plot. Run perform_bsmd() first.")
+            logger.warning("No BSMD modes to plot. Run perform_bsmd() first.")
             return
         if resolve_volume_layout(self.data, self.modes1.shape[1]) is None:
-            print(f"plot_modes_3d_{kind} requires volumetric data.")
+            logger.warning("plot_modes_3d_%s requires volumetric data.", kind)
             return
         if triad_indices is None:
             lambdas = np.abs(self.eigenvalues)
@@ -975,7 +982,7 @@ class BSMDAnalyzer(BaseAnalyzer):
     def plot_energy_map(self):
         """Plot a 2D heatmap of eigenvalue magnitudes indexed by triad frequencies."""
         if self.energy_map.size == 0:
-            print("No energy map available. Run perform_bsmd() first.")
+            logger.warning("No energy map available. Run perform_bsmd() first.")
             return
 
         offset = (self.energy_map.shape[0] - 1) // 2
@@ -996,7 +1003,7 @@ class BSMDAnalyzer(BaseAnalyzer):
         fname = os.path.join(self.figures_dir, f"{self.data_root}_BSMD_energy_map.png")
         plt.savefig(fname, dpi=FIG_DPI, bbox_inches="tight")
         plt.close(fig)
-        print(f"Energy map saved to {fname}")
+        logger.info("Energy map saved to %s", fname)
 
     # Execute the full BSMD pipeline.
     def run_analysis(self):
@@ -1013,12 +1020,12 @@ class BSMDAnalyzer(BaseAnalyzer):
 
         This is the primary method to call to run a complete BSMD study on a dataset.
         """
-        print(f"🔎 Starting BSMD analysis for {os.path.basename(self.file_path)}")
+        logger.info("Starting BSMD analysis for %s", os.path.basename(self.file_path))
         start_total_time = time.time()
         self.load_and_preprocess()
         self.compute_fft_blocks()
         self.perform_bsmd()
         self.save_results()
         self.close()  # Release disk-backed resources if any
-        print(f"Total BSMD runtime: {time.time() - start_total_time:.2f} s")
+        logger.info("Total BSMD runtime: %.2f s", time.time() - start_total_time)
         print_summary("BSMD", self.results_dir, self.figures_dir)

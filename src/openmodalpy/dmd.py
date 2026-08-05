@@ -507,7 +507,7 @@ class DMDAnalyzer(BaseAnalyzer):
         if "z" in self.data and self.data["z"] is not None:
             datasets["z"] = self.data["z"]
         write_results(path, datasets, attrs=self._get_metadata())
-        print(f"DMD results saved to {path}")
+        logger.info("DMD results saved to %s", path)
 
     def run_analysis(self) -> None:
         """One-call entry: load, compute DMD, save. No default plots."""
@@ -537,10 +537,12 @@ class DMDAnalyzer(BaseAnalyzer):
             latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
             if latest:
                 path = latest
-                print(f"[Auto-detect] Using available results file: {path}")
+                logger.info("[Auto-detect] Using available results file: %s", path)
             else:
-                print(
-                    f"[ERROR] No results file found for plotting in {self.results_dir} matching '*_{self.analysis_type}.hdf5'. Run with --compute first."
+                logger.error(
+                    "No results file found for plotting in %s matching '*_%s.hdf5'. Run with --compute first.",
+                    self.results_dir,
+                    self.analysis_type,
                 )
                 return  # Or: raise FileNotFoundError("No DMD results file found for plotting.")
 
@@ -592,7 +594,7 @@ class DMDAnalyzer(BaseAnalyzer):
             self.data["Ny"] = int(res.attrs["Ny"])
         if "Nz" in res.attrs:
             self.data["Nz"] = int(res.attrs["Nz"])
-        print(f"DMD results loaded from {path}")
+        logger.info("DMD results loaded from %s", path)
 
     def _mode_freq(self, eigvals):
         """Return mode frequencies in Hz, or ``None`` when ``dt`` is unusable.
@@ -614,7 +616,7 @@ class DMDAnalyzer(BaseAnalyzer):
     def plot_eigenvalues(self):
         """Plot DMD eigenvalues in the complex plane."""
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot.")
+            logger.warning("No eigenvalues to plot.")
             return
         plt.figure(figsize=(6, 6))
         plt.plot(self.eigenvalues.real, self.eigenvalues.imag, "bo")
@@ -630,12 +632,12 @@ class DMDAnalyzer(BaseAnalyzer):
         fname = os.path.join(self.figures_dir, f"{self.data_root}_dmd_eigenvalues.png")
         plt.savefig(fname, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {fname}")
+        logger.info("Saving figure %s", fname)
 
     def plot_eigenspectra(self):
         """Create composite spectra figure: eigenvalues circle, amplitude vs frequency and growth rate."""
         if self.eigenvalues.size == 0 or self.amplitudes.size == 0:
-            print("No eigenvalue data to plot. Run perform_dmd() first.")
+            logger.warning("No eigenvalue data to plot. Run perform_dmd() first.")
             return
         dt = self._require_dt()
         eigvals = self.eigenvalues
@@ -717,7 +719,7 @@ class DMDAnalyzer(BaseAnalyzer):
         fname_spec = os.path.join(self.figures_dir, f"{self.data_root}_dmd_eigenspectra.png")
         fig.savefig(fname_spec, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {fname_spec}")
+        logger.info("Saving figure %s", fname_spec)
 
     def plot_modes_detailed(
         self,
@@ -737,17 +739,17 @@ class DMDAnalyzer(BaseAnalyzer):
             show_cylinder: If True, add cylinder mask at origin with radius 0.5
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_dmd() first.")
+            logger.warning("No modes to plot. Run perform_dmd() first.")
             return
         n_modes = min(plot_n_modes, self.modes.shape[1])
         if n_modes == 0:
-            print("No modes available to plot.")
+            logger.warning("No modes available to plot.")
             return
 
         nx = self.data.get("Nx", int(np.sqrt(self.modes.shape[0])))
         ny = self.data.get("Ny", int(np.sqrt(self.modes.shape[0])))
         if self.modes.shape[0] != nx * ny or nx <= 1 or ny <= 1:
-            print("Detailed mode plotting supports 2D data only.")
+            logger.warning("Detailed mode plotting supports 2D data only.")
             return
 
         x_coords = self.data.get("x", np.arange(nx))
@@ -858,12 +860,12 @@ class DMDAnalyzer(BaseAnalyzer):
         fname_modes = os.path.join(self.figures_dir, f"{self.data_root}_dmd_modes_detailed_{n_modes}_{var_name}.png")
         fig.savefig(fname_modes, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {fname_modes}")
+        logger.info("Saving figure %s", fname_modes)
 
     def plot_cumulative_energy(self):
         """Plot the cumulative energy captured by DMD modes (using |eigval|^2 as proxy)."""
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_dmd() first.")
+            logger.warning("No eigenvalues to plot. Run perform_dmd() first.")
             return
         # Use squared modulus as 'energy' proxy
         eigvals_abs2 = np.abs(self.eigenvalues) ** 2
@@ -879,7 +881,7 @@ class DMDAnalyzer(BaseAnalyzer):
         fname = os.path.join(self.figures_dir, f"{self.data_root}_dmd_cumulative_energy.png")
         plt.savefig(fname, dpi=FIG_DPI * 0.8)
         plt.close()
-        print(f"Saving figure {fname}")
+        logger.info("Saving figure %s", fname)
 
     def plot_modes(self, plot_n_modes: Optional[int] = 10, modes_per_fig: int = 1, show_cylinder: bool = False):
         """Plot the spatial DMD modes (1D/2D, like POD).
@@ -890,13 +892,13 @@ class DMDAnalyzer(BaseAnalyzer):
             show_cylinder: If True, add cylinder mask at origin with radius 0.5
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_dmd() first.")
+            logger.warning("No modes to plot. Run perform_dmd() first.")
             return
         n_modes = self.modes.shape[1]
         if plot_n_modes is not None:
             n_modes = min(plot_n_modes, n_modes, self.n_modes_save)
         if n_modes == 0:
-            print("No modes available to plot.")
+            logger.warning("No modes available to plot.")
             return
         if resolve_volume_layout(self.data, self.modes.shape[0]) is not None:
             self.plot_modes_3d_slices(plot_n_modes=n_modes)
@@ -957,7 +959,7 @@ class DMDAnalyzer(BaseAnalyzer):
                     mode_flat = mode_2d[~combined_mask]
                     # Guard against empty array (e.g., all points masked)
                     if mode_flat.size == 0:
-                        print(f"  Warning: Mode {i} has no valid data points, skipping plot.")
+                        logger.warning("Mode %d has no valid data points, skipping plot.", i)
                         continue
                     # Compute levels with robust limits
                     mode_clean = mode_flat[np.isfinite(mode_flat)]
@@ -998,7 +1000,7 @@ class DMDAnalyzer(BaseAnalyzer):
             )
             fig.savefig(fname, dpi=FIG_DPI)
             plt.close(fig)
-            print(f"Saving figure {fname}")
+            logger.info("Saving figure %s", fname)
 
     def plot_modes_3d_slices(self, plot_n_modes: Optional[int] = 4, delay_idx: int = 0) -> None:
         """Plot orthogonal 3D slices for leading DMD/HODMD modes."""
@@ -1010,11 +1012,11 @@ class DMDAnalyzer(BaseAnalyzer):
 
     def _plot_modes_3d(self, kind: str, plot_n_modes: Optional[int] = 4, delay_idx: int = 0) -> None:
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_dmd() first.")
+            logger.warning("No modes to plot. Run perform_dmd() first.")
             return
         layout = resolve_volume_layout(self.data, self.modes.shape[0])
         if layout is None:
-            print(f"plot_modes_3d_{kind} requires volumetric data.")
+            logger.warning("plot_modes_3d_%s requires volumetric data.", kind)
             return
         _nx, _ny, _nz, lifted_delays = layout
         if delay_idx >= lifted_delays:
@@ -1048,11 +1050,11 @@ class DMDAnalyzer(BaseAnalyzer):
     def plot_time_coefficients(self, n_coeffs_to_plot=2):
         """Plot DMD temporal coefficients."""
         if self.time_coefficients.size == 0:
-            print("No time coefficients to plot. Run perform_dmd() first.")
+            logger.warning("No time coefficients to plot. Run perform_dmd() first.")
             return
         n_coeffs_to_plot = min(n_coeffs_to_plot, self.time_coefficients.shape[1], self.n_modes_save)
         if n_coeffs_to_plot == 0:
-            print("No coefficients available to plot.")
+            logger.warning("No coefficients available to plot.")
             return
         Ns_total = self.time_coefficients.shape[0]
         t, xlabel = self._time_axis(Ns_total)
@@ -1089,19 +1091,21 @@ class DMDAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_dmd_time_coeffs.png")
         fig.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_reconstruction_error(self):
         """Plot the data reconstruction error using an increasing number of DMD modes."""
         if self.modes.size == 0 or self.time_coefficients.size == 0 or "q" not in self.data:
-            print("Data, modes, or time coefficients not available. Run perform_dmd() first.")
+            logger.warning("Data, modes, or time coefficients not available. Run perform_dmd() first.")
             return
         data_matrix = self.data["q"]
         # Guard: delay-embedded modes live in a lifted space incompatible with q
         if self.modes.shape[0] != data_matrix.shape[1]:
-            print(
+            logger.warning(
                 "Reconstruction error plot is not available for delay-embedded DMD "
-                f"(mode dimension {self.modes.shape[0]} != spatial dimension {data_matrix.shape[1]})."
+                "(mode dimension %d != spatial dimension %d).",
+                self.modes.shape[0],
+                data_matrix.shape[1],
             )
             return
         # DMD reconstruction: sum_k a_k(t) * phi_k
@@ -1122,4 +1126,4 @@ class DMDAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_dmd_reconstruction_error.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
