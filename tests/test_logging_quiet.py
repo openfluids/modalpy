@@ -11,7 +11,7 @@ import logging
 import numpy as np
 import pytest
 
-from openmodalpy import SPODAnalyzer
+from openmodalpy import PODAnalyzer, SPODAnalyzer
 from openmodalpy.core.base import BaseAnalyzer, print_summary
 from openmodalpy.core.io import MATDataLoader
 
@@ -125,3 +125,44 @@ def test_perform_spod_raises_when_qhat_not_computed(tmp_path):
 
     with pytest.raises(RuntimeError, match=r"qhat not computed|compute_fft_blocks|run\(compute_fft"):
         analyzer.perform_spod()
+
+
+def _make_pod(tmp_path, data: dict) -> PODAnalyzer:
+    """PODAnalyzer on synthetic data — same shape as the base helper."""
+    return PODAnalyzer(
+        file_path="dummy.h5",
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=4,
+        use_parallel=False,
+    )
+
+
+def test_pod_run_is_quiet_on_stdout(tmp_path, capsys):
+    """End-to-end POD (load + perform_pod) must leave stdout empty."""
+    analyzer = _make_pod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_pod_run_still_says_something(tmp_path, caplog):
+    """Silence must come from routing, not from deleting the diagnostics.
+
+    After perform_pod the openmodalpy.pod logger should still report the
+    completed decomposition (mode count) at INFO.
+    """
+    analyzer = _make_pod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.pod"):
+        analyzer.perform_pod()
+
+    info = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert info, "perform_pod emitted no INFO records at all"
+    # Pin the actual mode count, not just the word "Computed" — a message like
+    # "Computed spatial weights" would satisfy a bare substring check.
+    expected = f"Computed {analyzer.modes.shape[1]} POD modes"
+    assert any(expected in r.getMessage() for r in info), [r.getMessage() for r in info]

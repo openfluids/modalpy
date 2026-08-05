@@ -129,6 +129,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   difference.
 - FFT cache progress messages (`Loaded cached FFT blocks ...`, `Saved FFT
   blocks to cache ...`) now go to the logger instead of standard output.
+- POD and PSD-POD now report progress, results and diagnostics on their module
+  loggers (`openmodalpy.pod`, `openmodalpy.psd_pod`) instead of writing to
+  standard output. The command-line tool installs a handler and still shows
+  every message, so its output is unchanged; a library caller now sees nothing
+  on stdout and can route, filter, or silence the messages like any other
+  Python logging. Messages that need the user to act — no results file to plot,
+  a mode with no valid data, weights of an unexpected shape — carry `WARNING`
+  or `ERROR` level rather than an inline `Warning:` prefix.
 - Rendering a 3D mode figure now allocates about one copy of the mode volume
   instead of three. `subset_volume_focus_3d` no longer copies the volume when
   no cropping is configured, and `get_robust_clim` no longer copies the data to

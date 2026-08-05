@@ -19,8 +19,8 @@ PRINT_UPPER_BOUNDS: dict[str, int] = {
     "core/io.py": 0,
     "core/parallel.py": 0,
     "dmd.py": 26,
-    "pod.py": 62,
-    "psd_pod.py": 2,
+    "pod.py": 0,
+    "psd_pod.py": 0,
     "spod.py": 30,
     "stpod.py": 31,
 }

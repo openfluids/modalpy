@@ -13,6 +13,7 @@ Reference codes:
 """
 
 # Standard library imports
+import logging
 import os
 import time
 from typing import Literal, Optional
@@ -45,6 +46,8 @@ from openmodalpy.core.config import (
     FIGURES_DIR_POD,
     RESULTS_DIR_POD,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PODAnalyzer(BaseAnalyzer):
@@ -174,7 +177,7 @@ class PODAnalyzer(BaseAnalyzer):
         if "q" not in self.data:
             raise ValueError("Data not loaded. Call load_and_preprocess() first.")
 
-        print("Performing POD analysis...")
+        logger.info("Performing POD analysis...")
         start_time = time.time()
 
         # Data is expected as [time, space]
@@ -214,9 +217,17 @@ class PODAnalyzer(BaseAnalyzer):
 
         use_temporal_kernel = num_snapshots < num_space_points
         if use_temporal_kernel:
-            print(f"Using temporal kernel: {num_snapshots} snapshots < {num_space_points} spatial points")
+            logger.info(
+                "Using temporal kernel: %d snapshots < %d spatial points",
+                num_snapshots,
+                num_space_points,
+            )
         else:
-            print(f"Using spatial kernel: {num_space_points} spatial points <= {num_snapshots} snapshots")
+            logger.info(
+                "Using spatial kernel: %d spatial points <= %d snapshots",
+                num_space_points,
+                num_snapshots,
+            )
 
         # 3. Identity lift + weighted second-order eigenproblem.
         # The solver drops eigenvalues below its relative cutoff; POD truncates
@@ -238,8 +249,10 @@ class PODAnalyzer(BaseAnalyzer):
         # Truncate to requested number of modes
         n_available_modes = len(self.eigenvalues)
         if self.n_modes_save > n_available_modes:
-            print(
-                f"Warning: n_modes_save ({self.n_modes_save}) > available modes ({n_available_modes}). Using all available."
+            logger.warning(
+                "n_modes_save (%d) > available modes (%d). Using all available.",
+                self.n_modes_save,
+                n_available_modes,
             )
             self.n_modes_save = n_available_modes
 
@@ -248,13 +261,17 @@ class PODAnalyzer(BaseAnalyzer):
         self.time_coefficients = self.time_coefficients[:, : self.n_modes_save]
 
         end_time = time.time()
-        print(f"POD analysis completed in {end_time - start_time:.2f} seconds.")
-        print(f"Computed {self.modes.shape[1]} POD modes.")
+        logger.info("POD analysis completed in %.2f seconds.", end_time - start_time)
+        logger.info("Computed %d POD modes.", self.modes.shape[1])
 
         # Fraction of pre-truncation energy retained by the saved modes.
         if total_energy > 0:
             self.energy_captured_fraction = float(np.sum(self.eigenvalues) / total_energy)
-            print(f"Energy captured by {self.n_modes_save} modes: {100.0 * self.energy_captured_fraction:.2f}%")
+            logger.info(
+                "Energy captured by %d modes: %.2f%%",
+                self.n_modes_save,
+                100.0 * self.energy_captured_fraction,
+            )
         else:
             self.energy_captured_fraction = 0.0
 
@@ -278,7 +295,7 @@ class PODAnalyzer(BaseAnalyzer):
         if not filename:
             filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_{self.analysis_type}.hdf5"
         load_path = os.path.join(self.results_dir, filename)
-        print(f"Loading POD results from {load_path}")
+        logger.info("Loading POD results from %s", load_path)
         if not os.path.isfile(load_path):
             # Try to auto-detect a results file for this variable and analysis type
             from openmodalpy.core.results import find_latest_result
@@ -286,10 +303,12 @@ class PODAnalyzer(BaseAnalyzer):
             latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
             if latest:
                 load_path = latest
-                print(f"[Auto-detect] Using available results file: {load_path}")
+                logger.info("[Auto-detect] Using available results file: %s", load_path)
             else:
-                print(
-                    f"[ERROR] No results file found for plotting in {self.results_dir} matching '*_{self.analysis_type}.hdf5'. Run with --compute first."
+                logger.error(
+                    "No results file found for plotting in %s matching '*_%s.hdf5'. Run with --compute first.",
+                    self.results_dir,
+                    self.analysis_type,
                 )
                 return  # Or: raise FileNotFoundError("No POD results file found for plotting.")
 
@@ -333,7 +352,7 @@ class PODAnalyzer(BaseAnalyzer):
             self.data["Ny"] = int(res.attrs["Ny"])
         if "Nz" in res.attrs:
             self.data["Nz"] = int(res.attrs["Nz"])
-        print("POD results loaded.")
+        logger.info("POD results loaded.")
 
     def save_results(self, filename: str | None = None) -> None:
         """Save POD modes, eigenvalues, and time coefficients to an HDF5 file.
@@ -351,7 +370,7 @@ class PODAnalyzer(BaseAnalyzer):
             filename = f"{self.data_root}_{self.data.get('Ns', 0)}snapshots_{self.analysis_type}.hdf5"
 
         save_path = os.path.join(self.results_dir, filename)
-        print(f"Saving POD results to {save_path}")
+        logger.info("Saving POD results to %s", save_path)
 
         datasets: dict = {
             "modes": self.modes,
@@ -374,7 +393,7 @@ class PODAnalyzer(BaseAnalyzer):
         attrs["n_snapshots"] = self.data.get("Ns", 0)
         attrs["Nspace"] = self.modes.shape[0]
         write_results(save_path, datasets, attrs=attrs)
-        print("POD results saved.")
+        logger.info("POD results saved.")
 
     def plot_eigenvalues(self):
         """Plot the POD eigenvalue spectrum (energy vs. mode number).
@@ -383,7 +402,7 @@ class PODAnalyzer(BaseAnalyzer):
         The plot is saved to `self.figures_dir`.
         """
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_pod() first.")
+            logger.warning("No eigenvalues to plot. Run perform_pod() first.")
             return
 
         # Create figure with better memory management
@@ -410,7 +429,7 @@ class PODAnalyzer(BaseAnalyzer):
 
             plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_eigenvalues.png")
             plt.savefig(plot_filename, dpi=FIG_DPI, bbox_inches="tight")
-            print(f"Saving figure {plot_filename}")
+            logger.info("Saving figure %s", plot_filename)
 
         finally:
             plt.close(fig)  # Ensure figure is closed even if error occurs
@@ -430,14 +449,14 @@ class PODAnalyzer(BaseAnalyzer):
             show_cylinder (bool): If True, add cylinder mask at origin with radius 0.5. Defaults to False.
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_pod() first.")
+            logger.warning("No modes to plot. Run perform_pod() first.")
             return
 
         n_modes = self.modes.shape[1]
         if plot_n_modes is not None:
             n_modes = min(plot_n_modes, n_modes, self.n_modes_save)
         if n_modes == 0:
-            print("No modes available to plot.")
+            logger.warning("No modes available to plot.")
             return
 
         if resolve_volume_layout(self.data, self.modes.shape[0]) is not None:
@@ -457,7 +476,7 @@ class PODAnalyzer(BaseAnalyzer):
             end = min(start + modes_per_fig, n_modes)
             ncols = end - start
             if not is_2d_plot:
-                print("plot_modes currently supports 2-D fields only.")
+                logger.warning("plot_modes currently supports 2-D fields only.")
                 return
 
             fig, axes = plt.subplots(
@@ -488,7 +507,7 @@ class PODAnalyzer(BaseAnalyzer):
                 mode_flat = mode_2d[~combined_mask]
                 # Guard against empty array (e.g., all points masked)
                 if mode_flat.size == 0:
-                    print(f"  Warning: Mode {mode_idx} has no valid data points, skipping plot.")
+                    logger.warning("Mode %d has no valid data points, skipping plot.", mode_idx)
                     continue
                 # Compute levels with robust limits
 
@@ -530,7 +549,7 @@ class PODAnalyzer(BaseAnalyzer):
             plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{start + 1}_to_{end}.png")
             plt.savefig(plot_filename, dpi=FIG_DPI)
             plt.close(fig)
-            print(f"Saving figure {plot_filename}")
+            logger.info("Saving figure %s", plot_filename)
 
     def plot_modes_pair_detailed(self, plot_n_modes: int = 4, cmap=CMAP_SEQ, show_cylinder: bool = False) -> None:
         """Plot modes in pairs with an additional magnitude row (2×2 per figure).
@@ -541,12 +560,12 @@ class PODAnalyzer(BaseAnalyzer):
         `pod_mode_1_to_2.png`, `pod_mode_3_to_4.png`, etc.
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_pod() first.")
+            logger.warning("No modes to plot. Run perform_pod() first.")
             return
 
         n_modes = min(plot_n_modes, self.modes.shape[1], self.n_modes_save)
         if n_modes == 0:
-            print("No modes available to plot.")
+            logger.warning("No modes available to plot.")
             return
 
         Nx = self.data.get("Nx", int(np.sqrt(self.modes.shape[0])))
@@ -564,7 +583,7 @@ class PODAnalyzer(BaseAnalyzer):
             end = min(start + 2, n_modes)
             ncols = end - start
             if not is_2d_plot:
-                print("plot_modes_pair_detailed currently supports 2-D fields only.")
+                logger.warning("plot_modes_pair_detailed currently supports 2-D fields only.")
                 return
 
             fig, axes = plt.subplots(
@@ -629,7 +648,7 @@ class PODAnalyzer(BaseAnalyzer):
             plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{start + 1}_to_{end}.png")
             plt.savefig(plot_filename, dpi=FIG_DPI)
             plt.close(fig)
-            print(f"Saving figure {plot_filename}")
+            logger.info("Saving figure %s", plot_filename)
 
     def plot_modes_3d_slices(self, plot_n_modes: Optional[int] = 4) -> None:
         """Plot orthogonal 3D slices for the leading POD modes."""
@@ -641,14 +660,14 @@ class PODAnalyzer(BaseAnalyzer):
 
     def _plot_modes_3d(self, kind: str, plot_n_modes: Optional[int] = 4) -> None:
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_pod() first.")
+            logger.warning("No modes to plot. Run perform_pod() first.")
             return
 
         nx = int(self.data.get("Nx", 1))
         ny = int(self.data.get("Ny", 1))
         nz = int(self.data.get("Nz", 1))
         if nz <= 1 or self.modes.shape[0] != nx * ny * nz:
-            print(f"plot_modes_3d_{kind} requires volumetric data.")
+            logger.warning("plot_modes_3d_%s requires volumetric data.", kind)
             return
 
         x_coords = self.data.get("x", np.arange(nx))
@@ -685,7 +704,7 @@ class PODAnalyzer(BaseAnalyzer):
         """
         # Preconditions – ensure POD has been performed
         if self.modes.size == 0 or self.eigenvalues.size == 0:
-            print("No POD modes/eigenvalues to plot. Run perform_pod() first.")
+            logger.warning("No POD modes/eigenvalues to plot. Run perform_pod() first.")
             return
 
         total_energy = np.sum(self.eigenvalues)
@@ -694,7 +713,7 @@ class PODAnalyzer(BaseAnalyzer):
         n_modes_plot = int(np.searchsorted(cumulative_pct, energy_threshold, side="right")) + 1
         n_modes_plot = min(n_modes_plot, self.n_modes_save, self.modes.shape[1])
         if n_modes_plot <= 0:
-            print("Energy threshold too low – nothing to plot.")
+            logger.warning("Energy threshold too low – nothing to plot.")
             return
 
         # Spatial grid information
@@ -800,7 +819,7 @@ class PODAnalyzer(BaseAnalyzer):
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_time_coefficients(self, n_coeffs_to_plot=2, n_snapshots_plot=None, L=1.0, U=1.0):
         """Plot the temporal coefficients for selected modes.
@@ -824,12 +843,12 @@ class PODAnalyzer(BaseAnalyzer):
         labeled as Strouhal numbers.
         """
         if self.time_coefficients.size == 0:
-            print("No time coefficients to plot. Run perform_pod() first.")
+            logger.warning("No time coefficients to plot. Run perform_pod() first.")
             return
 
         n_coeffs_to_plot = min(n_coeffs_to_plot, self.time_coefficients.shape[1], self.n_modes_save)
         if n_coeffs_to_plot == 0:
-            print("No coefficients available to plot.")
+            logger.warning("No coefficients available to plot.")
             return
 
         Ns_total = self.time_coefficients.shape[0]
@@ -885,7 +904,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_time_coeffs.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def check_mode_pair_phase(self, start_mode: int = 1, threshold: float = 0.9):
         """Identify mode pairs with strongly correlated time coefficients.
@@ -915,7 +934,7 @@ class PODAnalyzer(BaseAnalyzer):
         """
 
         if self.time_coefficients.size == 0:
-            print("No time coefficients available. Run perform_pod() first.")
+            logger.warning("No time coefficients available. Run perform_pod() first.")
             return
 
         n_modes = self.time_coefficients.shape[1]
@@ -927,13 +946,13 @@ class PODAnalyzer(BaseAnalyzer):
                 coeff_j = self.time_coefficients[:, j - 1]
                 corr = np.corrcoef(coeff_i, coeff_j)[0, 1]
                 if np.abs(corr) >= threshold:
-                    print(f"Found correlated pair ({i}, {j}) with r={corr:.3f}")
+                    logger.info("Found correlated pair (%d, %d) with r=%.3f", i, j, corr)
                     yield (i, j)
                     i = j + 1
                     found = True
                     break
             if not found:
-                print(f"No correlated partner found for mode {i}")
+                logger.info("No correlated partner found for mode %d", i)
                 i += 1
 
     def plot_mode_pair_phase(self, start_mode: int = 1, threshold: float = 0.9):
@@ -954,7 +973,7 @@ class PODAnalyzer(BaseAnalyzer):
 
         pairs = list(self.check_mode_pair_phase(start_mode=start_mode, threshold=threshold))
         if not pairs:
-            print("No mode pairs met the correlation threshold.")
+            logger.warning("No mode pairs met the correlation threshold.")
             return
 
         for i, j in pairs:
@@ -969,7 +988,7 @@ class PODAnalyzer(BaseAnalyzer):
             fname = os.path.join(self.figures_dir, f"{self.data_root}_pod_phase_pair_{i}_{j}.png")
             plt.savefig(fname, dpi=FIG_DPI)
             plt.close()
-            print(f"Saving figure {fname}")
+            logger.info("Saving figure %s", fname)
 
     def plot_cumulative_energy(self):
         """Plot the cumulative energy captured by POD modes.
@@ -978,7 +997,7 @@ class PODAnalyzer(BaseAnalyzer):
         The plot is saved to `self.figures_dir`.
         """
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_pod() first.")
+            logger.warning("No eigenvalues to plot. Run perform_pod() first.")
             return
 
         cumulative_energy = np.cumsum(self.eigenvalues) / np.sum(self.eigenvalues) * 100
@@ -997,7 +1016,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_cumulative_energy.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_reconstruction_error(self):
         """Plot the data reconstruction error using an increasing number of POD modes.
@@ -1008,7 +1027,7 @@ class PODAnalyzer(BaseAnalyzer):
         The plot is saved to `self.figures_dir`.
         """
         if self.modes.size == 0 or self.time_coefficients.size == 0 or "q" not in self.data:
-            print("Data, modes, or time coefficients not available. Run perform_pod() first.")
+            logger.warning("Data, modes, or time coefficients not available. Run perform_pod() first.")
             return
 
         data_matrix = self.data["q"]
@@ -1040,7 +1059,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_reconstruction_error.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_reconstruction_comparison(self, snapshot_indices_to_plot=None, modes_for_reconstruction=None):
         """Compare original snapshots with their POD reconstructions.
@@ -1057,7 +1076,7 @@ class PODAnalyzer(BaseAnalyzer):
                                                               Defaults to [1, n_modes_save//2, n_modes_save] if None.
         """
         if self.modes.size == 0 or self.time_coefficients.size == 0 or "q" not in self.data:
-            print("Data, modes, or time coefficients not available. Run perform_pod() first.")
+            logger.warning("Data, modes, or time coefficients not available. Run perform_pod() first.")
             return
 
         data_matrix = self.data["q"]
@@ -1081,11 +1100,11 @@ class PODAnalyzer(BaseAnalyzer):
             if not modes_for_reconstruction and k_max > 0:  # if k_max is small
                 modes_for_reconstruction = [k_max]
             elif k_max == 0:
-                print("No modes available for reconstruction comparison.")
+                logger.warning("No modes available for reconstruction comparison.")
                 return
 
         if not snapshot_indices_to_plot or not modes_for_reconstruction:
-            print("Not enough snapshots or modes to plot reconstruction comparison.")
+            logger.warning("Not enough snapshots or modes to plot reconstruction comparison.")
             return
 
         # Determine plot layout details (similar to plot_modes)
@@ -1158,7 +1177,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_reconstruction_comparison.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def check_spatial_mode_orthogonality(self, tolerance=1e-9):
         """Check the orthogonality of spatial modes with respect to weights W.
@@ -1175,10 +1194,10 @@ class PODAnalyzer(BaseAnalyzer):
             bool: True if modes are orthogonal within the specified tolerance.
         """
         if self.modes.size == 0 or self.W.size == 0:
-            print("Modes or weights not available. Run perform_pod() first.")
+            logger.warning("Modes or weights not available. Run perform_pod() first.")
             return False
 
-        print("\nChecking spatial mode orthogonality (Modes.T @ W @ Modes)...")
+        logger.info("Checking spatial mode orthogonality (Modes.T @ W @ Modes)...")
         Nspace, n_saved_modes = self.modes.shape
 
         # Ensure W is a diagonal matrix for the check
@@ -1189,8 +1208,9 @@ class PODAnalyzer(BaseAnalyzer):
         elif self.W.ndim == 2 and self.W.shape[1] == 1:  # (Nspace, 1) column vector
             W_diag_matrix = np.diag(self.W.flatten())
         else:
-            print(
-                f"  Warning: Unexpected shape or type for spatial weights W: {self.W.shape}. Cannot perform accurate orthogonality check."
+            logger.warning(
+                "Unexpected shape or type for spatial weights W: %s. Cannot perform accurate orthogonality check.",
+                self.W.shape,
             )
             return False
 
@@ -1205,12 +1225,12 @@ class PODAnalyzer(BaseAnalyzer):
 
         is_orthogonal = (max_diag_deviation < tolerance) and (max_off_diag_val < tolerance)
 
-        print(f"  Max deviation of diagonal elements from 1: {max_diag_deviation:.2e}")
-        print(f"  Max absolute value of off-diagonal elements: {max_off_diag_val:.2e}")
+        logger.info("Max deviation of diagonal elements from 1: %.2e", max_diag_deviation)
+        logger.info("Max absolute value of off-diagonal elements: %.2e", max_off_diag_val)
         if is_orthogonal:
-            print("  Spatial modes appear to be W-orthogonal.")
+            logger.info("Spatial modes appear to be W-orthogonal.")
         else:
-            print("  Warning: Spatial modes may not be perfectly W-orthogonal within tolerance.")
+            logger.warning("Spatial modes may not be perfectly W-orthogonal within tolerance.")
 
         # Optional: Plot the orthogonality matrix
         plt.figure(figsize=(7, 6))
@@ -1227,7 +1247,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_spatial_ortho_check.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
         return is_orthogonal
 
     def check_temporal_coefficient_orthogonality(self, tolerance=1e-9):
@@ -1243,10 +1263,10 @@ class PODAnalyzer(BaseAnalyzer):
                                        Defaults to 1e-9.
         """
         if self.time_coefficients.size == 0 or self.eigenvalues.size == 0 or "Ns" not in self.data:
-            print("Time coefficients, eigenvalues, or Ns not available. Run perform_pod() first.")
+            logger.warning("Time coefficients, eigenvalues, or Ns not available. Run perform_pod() first.")
             return False
 
-        print("\nChecking temporal coefficient pseudo-orthogonality ((1/Ns) * Psi.T @ Psi)...")
+        logger.info("Checking temporal coefficient pseudo-orthogonality ((1/Ns) * Psi.T @ Psi)...")
         num_snapshots = self.data["Ns"]
         n_saved_coeffs = self.time_coefficients.shape[1]
 
@@ -1271,12 +1291,20 @@ class PODAnalyzer(BaseAnalyzer):
         # is_orthogonal means diag(ortho_check_matrix) approx diag(expected_matrix) AND off-diag(ortho_check_matrix) approx 0
         is_pseudo_orthogonal = (max_diag_abs_error < tolerance) and (max_off_diag_val_computed < tolerance)
 
-        print(f"  Max absolute error of diagonal elements from eigenvalues: {max_diag_abs_error:.2e}")
-        print(f"  Max absolute value of off-diagonal elements in computed matrix: {max_off_diag_val_computed:.2e}")
+        logger.info(
+            "Max absolute error of diagonal elements from eigenvalues: %.2e",
+            max_diag_abs_error,
+        )
+        logger.info(
+            "Max absolute value of off-diagonal elements in computed matrix: %.2e",
+            max_off_diag_val_computed,
+        )
         if is_pseudo_orthogonal:
-            print("  Temporal coefficients appear to satisfy (1/Ns) * Psi.T @ Psi = diag(Lambda).")
+            logger.info("Temporal coefficients appear to satisfy (1/Ns) * Psi.T @ Psi = diag(Lambda).")
         else:
-            print("  Warning: Temporal coefficients may not perfectly satisfy (1/Ns) * Psi.T @ Psi = diag(Lambda).")
+            logger.warning(
+                "Temporal coefficients may not perfectly satisfy (1/Ns) * Psi.T @ Psi = diag(Lambda)."
+            )
 
         # Optional: Plot the computed matrix and the expected diagonal matrix
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
@@ -1307,7 +1335,7 @@ class PODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_temporal_ortho_check.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
         return is_pseudo_orthogonal
 
     def _perform_decomposition(self):
@@ -1327,7 +1355,7 @@ class PODAnalyzer(BaseAnalyzer):
             check_orthogonality (bool, optional): If True, perform and print orthogonality checks.
                                                 Defaults to True.
         """
-        print(f"🔎 Starting POD analysis for {os.path.basename(self.file_path)}")
+        logger.info("Starting POD analysis for %s", os.path.basename(self.file_path))
         start_total_time = time.time()
 
         # Load data and calculate weights via BaseAnalyzer's run method.
@@ -1374,5 +1402,8 @@ class PODAnalyzer(BaseAnalyzer):
             self.check_temporal_coefficient_orthogonality()
 
         end_total_time = time.time()
-        print(f"\nPOD analysis and plotting completed successfully in {end_total_time - start_total_time:.2f} seconds.")
+        logger.info(
+            "POD analysis and plotting completed successfully in %.2f seconds.",
+            end_total_time - start_total_time,
+        )
         print_summary("POD", self.results_dir, self.figures_dir)

@@ -9,6 +9,7 @@ problem rather than one per frequency bin.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Optional
 
@@ -22,6 +23,8 @@ from openmodalpy.core.config import (
     WINDOW_NORM,
     WINDOW_TYPE,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PSDPODAnalyzer(BaseAnalyzer):
@@ -187,11 +190,11 @@ class PSDPODAnalyzer(BaseAnalyzer):
             attrs=attrs,
         )
         self.results_path = save_path
-        print(f"Saved PSD-POD results to {save_path}")
+        logger.info("Saved PSD-POD results to %s", save_path)
 
     def run_analysis(self) -> None:
         """One-call entry: load, FFT blocks, eigenproblem, save."""
-        print(f"Starting PSD-POD analysis for {os.path.basename(self.file_path)}")
+        logger.info("Starting PSD-POD analysis for %s", os.path.basename(self.file_path))
         self.load_and_preprocess()
         self.compute_fft_blocks()
         self.perform_psd_pod()

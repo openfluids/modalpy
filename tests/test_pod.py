@@ -1,3 +1,5 @@
+import logging
+
 import h5py
 import numpy as np
 import pytest
@@ -345,13 +347,13 @@ def test_check_temporal_coefficient_orthogonality_empty(small_pod_field, tmp_pat
     assert not analyzer.check_temporal_coefficient_orthogonality()
 
 
-def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_path, capsys):
+def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_path, caplog):
     """Both POD kernels must agree on the same active field.
 
     Spatial branch: Ns >= Nspace (small_pod_field is built that way).
     Temporal branch: pad zero spatial columns so Ns < Nspace while leaving the
     active columns identical — zero columns do not change the Gram spectrum.
-    Branch taken is pinned by capturing pod.py's own stdout messages
+    Branch taken is pinned by capturing pod.py's own INFO log messages
     ("Using temporal kernel:" / "Using spatial kernel:"), not by re-deriving
     the Ns < Nspace predicate in the test.
 
@@ -374,11 +376,12 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
 
     analyzer_spatial = _make_pod_analyzer(data_spatial, tmp_path / "spatial", n_modes_save=n_modes)
     analyzer_spatial.load_and_preprocess()
-    capsys.readouterr()  # drop load noise
-    analyzer_spatial.perform_pod()
-    spatial_out = capsys.readouterr().out
-    assert "Using spatial kernel:" in spatial_out
-    assert "Using temporal kernel:" not in spatial_out
+    with caplog.at_level(logging.INFO, logger="openmodalpy.pod"):
+        caplog.clear()
+        analyzer_spatial.perform_pod()
+        spatial_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("Using spatial kernel:" in m for m in spatial_msgs)
+    assert not any("Using temporal kernel:" in m for m in spatial_msgs)
 
     # Temporal-kernel case: same active q, zero-padded in space until Ns < Nspace
     n_pad = Ns_s - Nspace_s + 1  # guarantees Ns < Nspace_padded
@@ -397,11 +400,12 @@ def test_pod_temporal_and_spatial_kernel_branches_agree(small_pod_field, tmp_pat
 
     analyzer_temporal = _make_pod_analyzer(data_temporal, tmp_path / "temporal", n_modes_save=n_modes)
     analyzer_temporal.load_and_preprocess()
-    capsys.readouterr()
-    analyzer_temporal.perform_pod()
-    temporal_out = capsys.readouterr().out
-    assert "Using temporal kernel:" in temporal_out
-    assert "Using spatial kernel:" not in temporal_out
+    with caplog.at_level(logging.INFO, logger="openmodalpy.pod"):
+        caplog.clear()
+        analyzer_temporal.perform_pod()
+        temporal_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("Using temporal kernel:" in m for m in temporal_msgs)
+    assert not any("Using spatial kernel:" in m for m in temporal_msgs)
 
     np.testing.assert_allclose(
         analyzer_spatial.eigenvalues,
