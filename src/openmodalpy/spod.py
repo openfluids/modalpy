@@ -1,4 +1,5 @@
 # Standard library imports
+import logging
 import os
 import time
 import warnings
@@ -35,6 +36,9 @@ from openmodalpy.core.config import (
     WINDOW_NORM,
     WINDOW_TYPE,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class SPODAnalyzer(BaseAnalyzer):
@@ -209,7 +213,7 @@ class SPODAnalyzer(BaseAnalyzer):
         # entries (D, U0) if present, then to unity.
         self.L = self.L if self.L is not None else self.data.get("D", 1.0)
         self.U = self.U if self.U is not None else self.data.get("U0", 1.0)
-        print(f"Strouhal normalization: L={self.L}, U={self.U}.")
+        logger.info("Strouhal normalization: L=%s, U=%s.", self.L, self.U)
 
         # Calculate Strouhal vector and frequency axis (self.freq is set by BaseAnalyzer)
         # Here, we ensure self.freq and self.St are set before perform_spod
@@ -262,13 +266,15 @@ class SPODAnalyzer(BaseAnalyzer):
 
         # Check if self.freq and self.St are consistent with qhat's frequency bins
         if len(self.freq) != num_freq_bins:
-            print(
-                f"Warning: self.freq length ({len(self.freq)}) mismatch with qhat bins ({num_freq_bins}). Recalculating."
+            logger.warning(
+                "self.freq length (%d) mismatch with qhat bins (%d). Recalculating.",
+                len(self.freq),
+                num_freq_bins,
             )
             # Recalculate freq and St based on nfft and fs (from BaseAnalyzer)
             self.freq = np.fft.rfftfreq(self.nfft, d=1.0 / self._require_fs())[:num_freq_bins]
             self.St = self.freq * self.L / self.U
-            print(f"Realigned self.freq to {len(self.freq)} elements and self.St.")
+            logger.info("Realigned self.freq to %d elements and self.St.", len(self.freq))
 
         # Initialize result arrays using num_freq_bins
         self.eigenvalues = np.zeros((num_freq_bins, self.nblocks))
@@ -277,7 +283,7 @@ class SPODAnalyzer(BaseAnalyzer):
             (num_freq_bins, self.nblocks, self.nblocks), dtype=complex
         )  # Temporal coefficients
 
-        print("Performing SPOD for each frequency...")
+        logger.info("Performing SPOD for each frequency...")
 
         weights = weights if weights is not None else self.W
         for i in tqdm(range(num_freq_bins), desc="SPOD Computation", unit="freq"):
@@ -293,7 +299,7 @@ class SPODAnalyzer(BaseAnalyzer):
             self.modes[i, :, :] = phi_freq
             self.eigenvalues[i, :] = lambda_freq
             self.time_coefficients[i, :, :] = psi_freq
-        print(f"SPOD eigenvalue decomposition completed in {time.time() - start_time:.2f} seconds")
+        logger.info("SPOD eigenvalue decomposition completed in %.2f seconds", time.time() - start_time)
 
     ############################################################
     # Results Handling                                         #
@@ -316,7 +322,7 @@ class SPODAnalyzer(BaseAnalyzer):
         save_path = os.path.join(self.results_dir, filename)
         os.makedirs(self.results_dir, exist_ok=True)
 
-        print(f"Saving SPOD results to {save_path}")
+        logger.info("Saving SPOD results to %s", save_path)
         datasets: dict = {
             "eigenvalues": self.eigenvalues,
             "modes": self.modes,
@@ -342,7 +348,7 @@ class SPODAnalyzer(BaseAnalyzer):
         if self.qhat is not None and self.qhat.size > 0 and self.data.get("q") is not None:
             with h5py.File(save_path, "a") as handle:
                 _write_qhat_stamp(handle, self, self.data["q"])
-        print(f"SPOD results saved to {save_path}")
+        logger.info("SPOD results saved to %s", save_path)
 
     def load_results(self, filename=None):
         """Load SPOD results from an HDF5 file."""
@@ -353,16 +359,16 @@ class SPODAnalyzer(BaseAnalyzer):
                 self.data_root, self.nfft, self.overlap, self.data.get("Ns", 0), self.analysis_type
             )
         load_path = os.path.join(self.results_dir, filename)
-        print(f"Loading SPOD results from {load_path}")
+        logger.info("Loading SPOD results from %s", load_path)
         if not os.path.isfile(load_path):
             from openmodalpy.core.results import find_latest_result
 
             latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
             if latest:
                 load_path = latest
-                print(f"[Auto-detect] Using: {load_path}")
+                logger.info("[Auto-detect] Using: %s", load_path)
             else:
-                print(f"[ERROR] No SPOD results file found in {self.results_dir}")
+                logger.error("No SPOD results file found in %s", self.results_dir)
                 return
 
         res = read_results(load_path)
@@ -397,7 +403,7 @@ class SPODAnalyzer(BaseAnalyzer):
                 self.data[attr_key] = res.attrs[attr_key]
         if "dt" in self.data:
             self.fs = 1.0 / self._require_dt()
-        print("SPOD results loaded.")
+        logger.info("SPOD results loaded.")
 
     ############################################################
     # Main Analysis Pipeline Orchestration                     #
@@ -443,7 +449,7 @@ class SPODAnalyzer(BaseAnalyzer):
         time_opts = plot_time_coeffs_options or opts.get("time_coeffs")
         cplex_opts = plot_complex_plane_options or opts.get("complex_plane")
 
-        print(f"🔎 Starting SPOD analysis for {os.path.basename(self.file_path)}")
+        logger.info("Starting SPOD analysis for %s", os.path.basename(self.file_path))
 
         self.load_and_preprocess()
         super().run(compute_fft=True)  # Compute/load qhat before SPOD
@@ -478,7 +484,7 @@ class SPODAnalyzer(BaseAnalyzer):
                                         Defaults to 'inferno_r' (yellow at bottom, dark at top).
         """
         if self.eigenvalues.size == 0 or self.St.size == 0:
-            print(
+            logger.warning(
                 "Eigenvalues (self.eigenvalues) or Strouhal numbers (self.St) not computed. Run perform_spod() first."
             )
             return
@@ -530,7 +536,7 @@ class SPODAnalyzer(BaseAnalyzer):
                 rasterized=True,
             )  # Rasterize for potentially large mesh
         else:
-            print("Warning: Could not generate pcolormesh shading due to invalid vmin/vmax for LogNorm.")
+            logger.warning("Could not generate pcolormesh shading due to invalid vmin/vmax for LogNorm.")
 
         # Plot individual modal energies (eigenvalues) - grayscale lines
         num_modes_actual = min(n_modes_line_plot, L_plot.shape[1])
@@ -569,7 +575,7 @@ class SPODAnalyzer(BaseAnalyzer):
         # Save the figure
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"SPOD eigenvalue plot (v2) saved to {plot_filename}")
+        logger.info("SPOD eigenvalue plot (v2) saved to %s", plot_filename)
 
     def plot_modes(
         self, freqs_to_plot=None, plot_n_modes: Optional[int] = 10, modes_per_fig: int = 1, show_cylinder: bool = False
@@ -589,7 +595,7 @@ class SPODAnalyzer(BaseAnalyzer):
         """
 
         if self.modes.size == 0 or self.St.size == 0:
-            print("No modes to plot. Run perform_spod() first.")
+            logger.warning("No modes to plot. Run perform_spod() first.")
             return
 
         n_modes_total = self.modes.shape[2]
@@ -700,7 +706,14 @@ class SPODAnalyzer(BaseAnalyzer):
                     )
                 fig.savefig(fname, dpi=FIG_DPI)
                 plt.close(fig)
-                print(f"SPOD modes {start + 1}-{end} at St={st_val:.4f} (freq index {f_idx}) saved to {fname}")
+                logger.info(
+                    "SPOD modes %d-%d at St=%.4f (freq index %d) saved to %s",
+                    start + 1,
+                    end,
+                    st_val,
+                    f_idx,
+                    fname,
+                )
 
     def plot_modes_3d_slices(self, freqs_to_plot=None, plot_n_modes: Optional[int] = 2) -> None:
         """Plot orthogonal 3D slices for selected SPOD frequencies and modes."""
@@ -712,10 +725,10 @@ class SPODAnalyzer(BaseAnalyzer):
 
     def _plot_modes_3d(self, kind: str, freqs_to_plot=None, plot_n_modes: Optional[int] = 2) -> None:
         if self.modes.size == 0 or self.St.size == 0:
-            print("No modes to plot. Run perform_spod() first.")
+            logger.warning("No modes to plot. Run perform_spod() first.")
             return
         if resolve_volume_layout(self.data, self.modes.shape[1]) is None:
-            print(f"plot_modes_3d_{kind} requires volumetric data.")
+            logger.warning("plot_modes_3d_%s requires volumetric data.", kind)
             return
         x_coords = self.data.get("x")
         y_coords = self.data.get("y")
@@ -752,7 +765,7 @@ class SPODAnalyzer(BaseAnalyzer):
     def plot_cumulative_energy(self, freq_idx=None):
         """Plot cumulative energy captured by modes at a given frequency."""
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_spod() first.")
+            logger.warning("No eigenvalues to plot. Run perform_spod() first.")
             return
         if freq_idx is None:
             freq_idx = int(np.argmax(self.eigenvalues[:, 0]))
@@ -770,12 +783,12 @@ class SPODAnalyzer(BaseAnalyzer):
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Cumulative energy plot saved to {plot_filename}")
+        logger.info("Cumulative energy plot saved to %s", plot_filename)
 
     def plot_time_coeffs(self, modes_to_plot=None, freq=None, n_blocks=None):
         """Plot temporal coefficients for selected modes."""
         if self.time_coefficients.size == 0:
-            print("No time coefficients to plot. Run perform_spod() first.")
+            logger.warning("No time coefficients to plot. Run perform_spod() first.")
             return
         if freq is None:
             freq_idx = int(np.argmax(self.eigenvalues[:, 0]))
@@ -801,12 +814,12 @@ class SPODAnalyzer(BaseAnalyzer):
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Time coefficients plot saved to {plot_filename}")
+        logger.info("Time coefficients plot saved to %s", plot_filename)
 
     def plot_reconstruction_error(self, st_target=None, n_modes_max=None):
         """Plot reconstruction error of qhat as a function of modes used."""
         if self.qhat.size == 0 or self.modes.size == 0:
-            print("No data to plot reconstruction error. Run perform_spod() first.")
+            logger.warning("No data to plot reconstruction error. Run perform_spod() first.")
             return
         if st_target is None:
             freq_idx = int(np.argmax(self.eigenvalues[:, 0]))
@@ -843,12 +856,12 @@ class SPODAnalyzer(BaseAnalyzer):
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Reconstruction error plot saved to {plot_filename}")
+        logger.info("Reconstruction error plot saved to %s", plot_filename)
 
     def plot_eig_complex_plane(self, freq=None, n_modes=4):
         """Plot modes in the complex plane for a given frequency."""
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_spod() first.")
+            logger.warning("No modes to plot. Run perform_spod() first.")
             return
         if freq is None:
             freq_idx = int(np.argmax(self.eigenvalues[:, 0]))
@@ -868,4 +881,4 @@ class SPODAnalyzer(BaseAnalyzer):
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Complex plane plot saved to {plot_filename}")
+        logger.info("Complex plane plot saved to %s", plot_filename)

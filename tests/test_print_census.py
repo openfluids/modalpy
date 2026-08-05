@@ -21,8 +21,8 @@ PRINT_UPPER_BOUNDS: dict[str, int] = {
     "dmd.py": 26,
     "pod.py": 0,
     "psd_pod.py": 0,
-    "spod.py": 30,
-    "stpod.py": 31,
+    "spod.py": 0,
+    "stpod.py": 0,
 }
 
 _SRC_ROOT = Path(__file__).resolve().parents[1] / "src" / "openmodalpy"

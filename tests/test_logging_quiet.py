@@ -7,11 +7,12 @@ CLI installs its own handler; library import paths do not.
 from __future__ import annotations
 
 import logging
+import re
 
 import numpy as np
 import pytest
 
-from openmodalpy import PODAnalyzer, SPODAnalyzer
+from openmodalpy import PODAnalyzer, SPODAnalyzer, STPODAnalyzer
 from openmodalpy.core.base import BaseAnalyzer, print_summary
 from openmodalpy.core.io import MATDataLoader
 
@@ -165,4 +166,92 @@ def test_pod_run_still_says_something(tmp_path, caplog):
     # Pin the actual mode count, not just the word "Computed" — a message like
     # "Computed spatial weights" would satisfy a bare substring check.
     expected = f"Computed {analyzer.modes.shape[1]} POD modes"
+    assert any(expected in r.getMessage() for r in info), [r.getMessage() for r in info]
+
+
+def _make_spod(tmp_path, data: dict) -> SPODAnalyzer:
+    """SPODAnalyzer on synthetic data — load + FFT + perform_spod path."""
+    return SPODAnalyzer(
+        file_path="dummy.h5",
+        nfft=8,
+        overlap=0.0,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+
+
+def test_spod_run_is_quiet_on_stdout(tmp_path, capsys):
+    """End-to-end SPOD (load + FFT + perform_spod) must leave stdout empty."""
+    analyzer = _make_spod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    analyzer.perform_spod()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_spod_run_still_says_something(tmp_path, caplog):
+    """Silence must come from routing, not from deleting the diagnostics.
+
+    After perform_spod the openmodalpy.spod logger should still report the
+    completed eigenvalue decomposition at INFO, including the wall-clock duration.
+    """
+    analyzer = _make_spod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.compute_fft_blocks()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.spod"):
+        analyzer.perform_spod()
+
+    info = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert info, "perform_spod emitted no INFO records at all"
+    # Pin the completion duration (a real reported quantity), not bare existence
+    # of any INFO record. Deleting that log line turns this red.
+    pattern = re.compile(r"SPOD eigenvalue decomposition completed in \d+\.\d{2} seconds")
+    assert any(pattern.search(r.getMessage()) for r in info), [r.getMessage() for r in info]
+
+
+def _make_stpod(tmp_path, data: dict) -> STPODAnalyzer:
+    """STPODAnalyzer on synthetic data — delay-embedded POD path."""
+    return STPODAnalyzer(
+        file_path="dummy.h5",
+        embedding_dim=2,
+        n_modes_save=4,
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        use_parallel=False,
+    )
+
+
+def test_stpod_run_is_quiet_on_stdout(tmp_path, capsys):
+    """End-to-end ST-POD (load + perform_stpod) must leave stdout empty."""
+    analyzer = _make_stpod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    analyzer.perform_stpod()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+
+
+def test_stpod_run_still_says_something(tmp_path, caplog):
+    """Silence must come from routing, not from deleting the diagnostics.
+
+    After perform_stpod the openmodalpy.stpod logger should still report the
+    mode count and energy fraction at INFO.
+    """
+    analyzer = _make_stpod(tmp_path, _synthetic_data())
+    analyzer.load_and_preprocess()
+    with caplog.at_level(logging.INFO, logger="openmodalpy.stpod"):
+        analyzer.perform_stpod()
+
+    info = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert info, "perform_stpod emitted no INFO records at all"
+    # Pin mode count and energy percentage — a bare "Computed" would not bite.
+    expected = (
+        f"Computed {analyzer.n_modes_save} ST-POD modes "
+        f"({100.0 * analyzer.energy_captured_fraction:.2f}% of total energy)."
+    )
     assert any(expected in r.getMessage() for r in info), [r.getMessage() for r in info]

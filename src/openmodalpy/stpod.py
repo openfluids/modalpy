@@ -22,6 +22,7 @@ Reference:
       "Spectral proper orthogonal decomposition." JFM, 792, 798-828.
 """
 
+import logging
 import os
 import time
 from typing import Any, Optional
@@ -48,6 +49,9 @@ from openmodalpy.core.config import (
     FIGURES_DIR_STPOD,
     RESULTS_DIR_STPOD,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class STPODAnalyzer(BaseAnalyzer):
@@ -179,9 +183,12 @@ class STPODAnalyzer(BaseAnalyzer):
             raise ValueError(f"embedding_dim ({self.embedding_dim}) must be < number of snapshots ({Ns})")
 
         m = Ns - self.embedding_dim + 1  # Number of Hankel columns
-        print(
-            f"Performing ST-POD: d={self.embedding_dim}, m={m} columns, "
-            f"Hankel shape=({self.embedding_dim * Nspace}, {m})"
+        logger.info(
+            "Performing ST-POD: d=%d, m=%d columns, Hankel shape=(%d, %d)",
+            self.embedding_dim,
+            m,
+            self.embedding_dim * Nspace,
+            m,
         )
         start_time = time.time()
 
@@ -202,7 +209,7 @@ class STPODAnalyzer(BaseAnalyzer):
         n_min = min(lifted.shape)
         k = min(self.n_modes_save, n_min - 1)
         if k < self.n_modes_save:
-            print(f"Warning: Only {k} modes available, requested {self.n_modes_save}")
+            logger.warning("Only %d modes available, requested %d", k, self.n_modes_save)
             self.n_modes_save = k
 
         self.modes, self.eigenvalues, self.time_coefficients = decomposition.weighted_second_order(
@@ -224,9 +231,11 @@ class STPODAnalyzer(BaseAnalyzer):
             self.energy_captured_fraction = 0.0
 
         end_time = time.time()
-        print(f"ST-POD completed in {end_time - start_time:.2f} seconds.")
-        print(
-            f"Computed {self.n_modes_save} ST-POD modes ({100.0 * self.energy_captured_fraction:.2f}% of total energy)."
+        logger.info("ST-POD completed in %.2f seconds.", end_time - start_time)
+        logger.info(
+            "Computed %d ST-POD modes (%.2f%% of total energy).",
+            self.n_modes_save,
+            100.0 * self.energy_captured_fraction,
         )
 
     def _energy_denominator(self) -> tuple[float, str]:
@@ -307,7 +316,7 @@ class STPODAnalyzer(BaseAnalyzer):
             )
 
         save_path = os.path.join(self.results_dir, filename)
-        print(f"Saving ST-POD results to {save_path}")
+        logger.info("Saving ST-POD results to %s", save_path)
 
         datasets: dict = {
             "modes": self.modes,
@@ -331,7 +340,7 @@ class STPODAnalyzer(BaseAnalyzer):
         attrs["n_snapshots"] = self.data.get("Ns", 0)
         attrs["Nspace"] = self.modes.shape[0] // self.embedding_dim
         write_results(save_path, datasets, attrs=attrs)
-        print("ST-POD results saved.")
+        logger.info("ST-POD results saved.")
 
     def load_results(self, filename: Optional[str] = None) -> None:
         """Load ST-POD results from HDF5 file."""
@@ -343,7 +352,7 @@ class STPODAnalyzer(BaseAnalyzer):
             )
 
         load_path = os.path.join(self.results_dir, filename)
-        print(f"Loading ST-POD results from {load_path}")
+        logger.info("Loading ST-POD results from %s", load_path)
 
         if not os.path.isfile(load_path):
             from openmodalpy.core.results import find_latest_result
@@ -351,9 +360,9 @@ class STPODAnalyzer(BaseAnalyzer):
             latest = find_latest_result(self.results_dir, f"*_{self.analysis_type}.hdf5")
             if latest:
                 load_path = latest
-                print(f"[Auto-detect] Using: {load_path}")
+                logger.info("[Auto-detect] Using: %s", load_path)
             else:
-                print(f"[ERROR] No results file found in {self.results_dir}")
+                logger.error("No results file found in %s", self.results_dir)
                 return
 
         res = read_results(load_path)
@@ -409,12 +418,12 @@ class STPODAnalyzer(BaseAnalyzer):
         if "energy_captured_fraction" in res.attrs:
             self.energy_captured_fraction = float(res.attrs["energy_captured_fraction"])
 
-        print("ST-POD results loaded.")
+        logger.info("ST-POD results loaded.")
 
     def plot_eigenvalues(self) -> None:
         """Plot the ST-POD eigenvalue spectrum."""
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_stpod() first.")
+            logger.warning("No eigenvalues to plot. Run perform_stpod() first.")
             return
 
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -437,7 +446,7 @@ class STPODAnalyzer(BaseAnalyzer):
 
             plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_eigenvalues.png")
             plt.savefig(plot_filename, dpi=FIG_DPI, bbox_inches="tight")
-            print(f"Saving figure {plot_filename}")
+            logger.info("Saving figure %s", plot_filename)
         finally:
             plt.close(fig)
 
@@ -455,7 +464,7 @@ class STPODAnalyzer(BaseAnalyzer):
             show_cylinder: If True, mask cylinder at origin.
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_stpod() first.")
+            logger.warning("No modes to plot. Run perform_stpod() first.")
             return
 
         Nspace = self.modes.shape[0] // self.embedding_dim
@@ -467,7 +476,7 @@ class STPODAnalyzer(BaseAnalyzer):
         is_2d = (Nspace == Nx * Ny) and (Nx > 1 and Ny > 1)
 
         if not is_2d:
-            print("plot_modes currently supports 2-D fields only.")
+            logger.warning("plot_modes currently supports 2-D fields only.")
             return
 
         x_coords = self.data.get("x", np.arange(Nx))
@@ -548,7 +557,7 @@ class STPODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_modes_delay{delay_idx}.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_modes_3d_slices(self, plot_n_modes: int = 4, delay_idx: int = 0) -> None:
         """Plot orthogonal 3D slices for ST-POD modes at one delay index."""
@@ -560,12 +569,12 @@ class STPODAnalyzer(BaseAnalyzer):
 
     def _plot_modes_3d(self, kind: str, plot_n_modes: int = 4, delay_idx: int = 0) -> None:
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_stpod() first.")
+            logger.warning("No modes to plot. Run perform_stpod() first.")
             return
         nspace = self.modes.shape[0] // self.embedding_dim
         layout = resolve_volume_layout(self.data, nspace)
         if layout is None:
-            print(f"plot_modes_3d_{kind} requires volumetric data.")
+            logger.warning("plot_modes_3d_%s requires volumetric data.", kind)
             return
         if not 0 <= delay_idx < self.embedding_dim:
             raise ValueError(f"delay_idx={delay_idx} outside [0, {self.embedding_dim - 1}]")
@@ -609,7 +618,7 @@ class STPODAnalyzer(BaseAnalyzer):
             show_cylinder: If True, mask cylinder at origin.
         """
         if self.modes.size == 0:
-            print("No modes to plot. Run perform_stpod() first.")
+            logger.warning("No modes to plot. Run perform_stpod() first.")
             return
 
         if n_delays_show is None:
@@ -621,7 +630,7 @@ class STPODAnalyzer(BaseAnalyzer):
         is_2d = (Nspace == Nx * Ny) and (Nx > 1 and Ny > 1)
 
         if not is_2d:
-            print("plot_spacetime_mode currently supports 2-D fields only.")
+            logger.warning("plot_spacetime_mode currently supports 2-D fields only.")
             return
 
         x_coords = self.data.get("x", np.arange(Nx))
@@ -699,7 +708,7 @@ class STPODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_spacetime_mode{mode_idx + 1}.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_time_coefficients(
         self,
@@ -717,7 +726,7 @@ class STPODAnalyzer(BaseAnalyzer):
             U: Characteristic velocity for Strouhal number.
         """
         if self.time_coefficients.size == 0:
-            print("No time coefficients to plot. Run perform_stpod() first.")
+            logger.warning("No time coefficients to plot. Run perform_stpod() first.")
             return
 
         n_coeffs = min(n_coeffs, self.time_coefficients.shape[1])
@@ -776,12 +785,12 @@ class STPODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_time_coeffs.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def plot_cumulative_energy(self) -> None:
         """Plot cumulative energy captured by ST-POD modes."""
         if self.eigenvalues.size == 0:
-            print("No eigenvalues to plot. Run perform_stpod() first.")
+            logger.warning("No eigenvalues to plot. Run perform_stpod() first.")
             return
 
         denom, label_suffix = self._energy_denominator()
@@ -806,7 +815,7 @@ class STPODAnalyzer(BaseAnalyzer):
         plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_stpod_cumulative_energy.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        print(f"Saving figure {plot_filename}")
+        logger.info("Saving figure %s", plot_filename)
 
     def check_mode_orthogonality(self, tolerance: float = 1e-9) -> bool:
         """Check orthonormality of modes with respect to extended weights.
@@ -821,10 +830,10 @@ class STPODAnalyzer(BaseAnalyzer):
             True if modes are orthonormal within tolerance.
         """
         if self.modes.size == 0 or self.W.size == 0:
-            print("Modes or weights not available.")
+            logger.warning("Modes or weights not available.")
             return False
 
-        print("\nChecking ST-POD mode orthonormality...")
+        logger.info("Checking ST-POD mode orthonormality...")
         Nspace = self.modes.shape[0] // self.embedding_dim
         n_modes = self.modes.shape[1]
 
@@ -840,9 +849,9 @@ class STPODAnalyzer(BaseAnalyzer):
 
         is_orthonormal = (diag_dev < tolerance) and (off_diag_max < tolerance)
 
-        print(f"  Max diagonal deviation from 1: {diag_dev:.2e}")
-        print(f"  Max off-diagonal value: {off_diag_max:.2e}")
-        print(f"  Orthonormal: {'Yes' if is_orthonormal else 'No'}")
+        logger.info("Max diagonal deviation from 1: %.2e", diag_dev)
+        logger.info("Max off-diagonal value: %.2e", off_diag_max)
+        logger.info("Orthonormal: %s", "Yes" if is_orthonormal else "No")
 
         return is_orthonormal
 
@@ -859,7 +868,7 @@ class STPODAnalyzer(BaseAnalyzer):
             plot_n_coeffs: Number of time coefficients to plot.
             check_orthogonality: Whether to verify mode orthonormality.
         """
-        print(f"Starting ST-POD analysis for {os.path.basename(self.file_path)}")
+        logger.info("Starting ST-POD analysis for %s", os.path.basename(self.file_path))
         start_time = time.time()
 
         # Load data
@@ -888,5 +897,5 @@ class STPODAnalyzer(BaseAnalyzer):
             self.check_mode_orthogonality()
 
         end_time = time.time()
-        print(f"\nST-POD analysis completed in {end_time - start_time:.2f} seconds.")
+        logger.info("ST-POD analysis completed in %.2f seconds.", end_time - start_time)
         print_summary("ST-POD", self.results_dir, self.figures_dir)
