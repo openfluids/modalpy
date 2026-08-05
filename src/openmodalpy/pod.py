@@ -427,7 +427,7 @@ class PODAnalyzer(BaseAnalyzer):
             ax.set_title("POD Eigenvalue Spectrum")
             ax.grid(True, which="both", ls="--")
 
-            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_eigenvalues.png")
+            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_eigenvalues.png")
             plt.savefig(plot_filename, dpi=FIG_DPI, bbox_inches="tight")
             logger.info("Saving figure %s", plot_filename)
 
@@ -546,7 +546,7 @@ class PODAnalyzer(BaseAnalyzer):
 
             fig.tight_layout()
             # Save figure as PNG with dpi=FIG_DPI
-            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{start + 1}_to_{end}.png")
+            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_mode_{start + 1}_to_{end}.png")
             plt.savefig(plot_filename, dpi=FIG_DPI)
             plt.close(fig)
             logger.info("Saving figure %s", plot_filename)
@@ -645,7 +645,7 @@ class PODAnalyzer(BaseAnalyzer):
                     fontsize=8,
                     pad=20,
                 )
-            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{start + 1}_to_{end}.png")
+            plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_mode_{start + 1}_to_{end}.png")
             plt.savefig(plot_filename, dpi=FIG_DPI)
             plt.close(fig)
             logger.info("Saving figure %s", plot_filename)
@@ -686,7 +686,7 @@ class PODAnalyzer(BaseAnalyzer):
                 title = f"POD Mode {mode_idx + 1} | E={energy_pct:.2f}%"
             else:
                 title = f"POD Mode {mode_idx + 1}"
-            output_path = os.path.join(self.figures_dir, f"{self.data_root}_pod_mode_{mode_idx + 1}_{kind}.png")
+            output_path = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_mode_{mode_idx + 1}_{kind}.png")
             items.append({"mode_3d": mode_3d, "output_path": output_path, "title_prefix": title})
         plot_modes_3d(kind, items, x_coords, y_coords, z_coords, data=self.data)
 
@@ -815,7 +815,7 @@ class PODAnalyzer(BaseAnalyzer):
 
         plot_filename = os.path.join(
             self.figures_dir,
-            f"{self.data_root}_pod_modes_grid_{energy_threshold:.1f}perc.png",
+            f"{self.data_root}_{self.analysis_type}_modes_grid_{energy_threshold:.1f}perc.png",
         )
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
@@ -901,7 +901,7 @@ class PODAnalyzer(BaseAnalyzer):
             plt.grid(True, linestyle=":")
 
         plt.tight_layout()
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_time_coeffs.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_time_coeffs.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -985,7 +985,7 @@ class PODAnalyzer(BaseAnalyzer):
             plt.ylabel(f"Coefficient {j}")
             plt.title(f"POD Phase Portrait Modes {i} & {j}")
             plt.grid(True)
-            fname = os.path.join(self.figures_dir, f"{self.data_root}_pod_phase_pair_{i}_{j}.png")
+            fname = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_phase_pair_{i}_{j}.png")
             plt.savefig(fname, dpi=FIG_DPI)
             plt.close()
             logger.info("Saving figure %s", fname)
@@ -1013,7 +1013,7 @@ class PODAnalyzer(BaseAnalyzer):
         plt.title("Cumulative Energy of POD Modes")
         plt.grid(True, which="both", ls="--")
         plt.ylim(0, 105)  # Show up to 100% or slightly more
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_cumulative_energy.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_cumulative_energy.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -1056,7 +1056,7 @@ class PODAnalyzer(BaseAnalyzer):
         plt.title("Data Reconstruction Error vs. Number of POD Modes")
         plt.grid(True, which="both", ls="--")
         plt.yscale("log")  # Error often drops off exponentially
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_reconstruction_error.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_reconstruction_error.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -1174,7 +1174,7 @@ class PODAnalyzer(BaseAnalyzer):
                     ax_recon.set_title(f"Recon. k={n_modes_recon}")
 
         plt.tight_layout()
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_reconstruction_comparison.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_reconstruction_comparison.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -1244,7 +1244,7 @@ class PODAnalyzer(BaseAnalyzer):
         plt.title("Spatial Mode Orthogonality Check (Modes.T @ W @ Modes)")
         plt.xlabel("Mode Index")
         plt.ylabel("Mode Index")
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_spatial_ortho_check.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_spatial_ortho_check.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -1332,7 +1332,7 @@ class PODAnalyzer(BaseAnalyzer):
         axes[1].set_ylabel("Mode Index")
 
         plt.tight_layout()
-        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_pod_temporal_ortho_check.png")
+        plot_filename = os.path.join(self.figures_dir, f"{self.data_root}_{self.analysis_type}_temporal_ortho_check.png")
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close()
         logger.info("Saving figure %s", plot_filename)
@@ -1355,7 +1355,7 @@ class PODAnalyzer(BaseAnalyzer):
             check_orthogonality (bool, optional): If True, perform and print orthogonality checks.
                                                 Defaults to True.
         """
-        logger.info("Starting POD analysis for %s", os.path.basename(self.file_path))
+        logger.info("Starting %s analysis for %s", self.analysis_type.upper(), os.path.basename(self.file_path))
         start_total_time = time.time()
 
         # Load data and calculate weights via BaseAnalyzer's run method.
@@ -1374,8 +1374,8 @@ class PODAnalyzer(BaseAnalyzer):
         self.plot_eigenvalues()
         if int(self.data.get("Nz", 1)) > 1:
             for stale_name in (
-                f"{self.data_root}_pod_modes_grid_99.5perc.png",
-                f"{self.data_root}_pod_reconstruction_comparison.png",
+                f"{self.data_root}_{self.analysis_type}_modes_grid_99.5perc.png",
+                f"{self.data_root}_{self.analysis_type}_reconstruction_comparison.png",
             ):
                 stale_path = os.path.join(self.figures_dir, stale_name)
                 if os.path.exists(stale_path):

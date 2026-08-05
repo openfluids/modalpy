@@ -580,3 +580,70 @@ def test_mpod_rejects_a_zero_measure_weight():
     analyzer.W = np.zeros((6, 1))
     with pytest.raises(ValueError, match="zero total measure"):
         analyzer.perform_mpod()
+
+
+def test_mpod_figures_are_named_mpod(tmp_path):
+    """mPOD eigenvalue figures use _mpod_ and leave no _pod_ figure behind."""
+    q = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ],
+        dtype=float,
+    )
+    data = _make_uniform_data(q, dt=0.1)
+    analyzer = MPODAnalyzer(
+        file_path="case_mpod",
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+        band_edges=[0.0, 5.0],
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_mpod()
+    analyzer.plot_eigenvalues()
+
+    expected = tmp_path / f"{analyzer.data_root}_mpod_eigenvalues.png"
+    assert expected.is_file(), f"missing {expected.name}; dir={list(tmp_path.iterdir())}"
+    leftovers = sorted(tmp_path.glob(f"{analyzer.data_root}_pod_*.png"))
+    assert leftovers == [], f"mPOD run left POD-named figures: {[p.name for p in leftovers]}"
+
+
+def test_pod_figure_names_are_unchanged(tmp_path):
+    """POD still writes <case>_pod_*.png — regression guard for the label substitution."""
+    q = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ],
+        dtype=float,
+    )
+    data = _make_uniform_data(q, dt=0.1)
+    analyzer = PODAnalyzer(
+        file_path="case_pod",
+        results_dir=tmp_path,
+        figures_dir=tmp_path,
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=2,
+        use_parallel=False,
+    )
+    analyzer.load_and_preprocess()
+    analyzer.perform_pod()
+    analyzer.plot_eigenvalues()
+
+    expected = tmp_path / f"{analyzer.data_root}_pod_eigenvalues.png"
+    assert expected.is_file(), f"missing {expected.name}; dir={list(tmp_path.iterdir())}"
+    mpod_named = sorted(tmp_path.glob(f"{analyzer.data_root}_mpod_*.png"))
+    assert mpod_named == [], f"POD run wrote mPOD-named figures: {[p.name for p in mpod_named]}"

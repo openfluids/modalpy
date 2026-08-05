@@ -12,7 +12,7 @@ import re
 import numpy as np
 import pytest
 
-from openmodalpy import BSMDAnalyzer, DMDAnalyzer, PODAnalyzer, SPODAnalyzer, STPODAnalyzer
+from openmodalpy import BSMDAnalyzer, DMDAnalyzer, MPODAnalyzer, PODAnalyzer, SPODAnalyzer, STPODAnalyzer
 from openmodalpy.core.base import BaseAnalyzer, print_summary
 from openmodalpy.core.io import MATDataLoader
 
@@ -343,3 +343,38 @@ def test_dmd_run_still_says_something(tmp_path, caplog):
     # Pin the results path (a real reported quantity). Deleting that log line turns this red.
     pattern = re.compile(r"DMD results saved to .+/.*_dmd\.hdf5")
     assert any(pattern.search(r.getMessage()) for r in info), [r.getMessage() for r in info]
+
+
+def _make_mpod(tmp_path, data: dict) -> MPODAnalyzer:
+    """MPODAnalyzer on synthetic data — same shape as the POD helper."""
+    return MPODAnalyzer(
+        file_path="dummy.h5",
+        results_dir=str(tmp_path),
+        figures_dir=str(tmp_path),
+        data_loader=lambda _: data,
+        spatial_weight_type="uniform",
+        n_modes_save=4,
+        band_edges=[0.0, 0.5],
+        use_parallel=False,
+    )
+
+
+def test_mpod_banner_does_not_say_pod(tmp_path, caplog):
+    """mPOD run_analysis banner uses analysis_type.upper() → MPOD, not POD."""
+    analyzer = _make_mpod(tmp_path, _synthetic_data())
+    with caplog.at_level(logging.INFO, logger="openmodalpy.pod"):
+        analyzer.run_analysis(plot_n_modes_spatial=1, plot_n_coeffs_time=1)
+
+    info_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("Starting MPOD analysis" in m for m in info_msgs), info_msgs
+    assert not any("Starting POD analysis" in m for m in info_msgs), info_msgs
+
+
+def test_pod_banner_still_says_pod(tmp_path, caplog):
+    """POD run_analysis banner remains Starting POD analysis."""
+    analyzer = _make_pod(tmp_path, _synthetic_data())
+    with caplog.at_level(logging.INFO, logger="openmodalpy.pod"):
+        analyzer.run_analysis(plot_n_modes_spatial=1, plot_n_coeffs_time=1)
+
+    info_msgs = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert any("Starting POD analysis" in m for m in info_msgs), info_msgs
