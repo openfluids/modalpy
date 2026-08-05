@@ -19,6 +19,7 @@ from openmodalpy.commands import (
     inspect_results,
     list_methods,
     load_example_payload,
+    normalize_method_name,
     print_results_summary,
     run_from_config,
 )
@@ -43,6 +44,20 @@ def _configure_cli_logging() -> None:
     pkg_logger.setLevel(logging.INFO)
 
 
+def _analysis_method(value: str) -> str:
+    """Normalize a method name, keeping the registry's own error text.
+
+    argparse throws away the message of a ValueError raised by a ``type``
+    callable and prints ``invalid <callable name> value`` instead, which would
+    show the user an internal function name rather than the list of methods.
+    ArgumentTypeError is printed verbatim, so re-raise as that.
+    """
+    try:
+        return normalize_method_name(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argparse tree."""
     parser = argparse.ArgumentParser(
@@ -57,7 +72,12 @@ def build_parser() -> argparse.ArgumentParser:
         "analyze",
         help=f"Run one analysis family from a case config ({method_names}).",
     )
-    analyze.add_argument("analysis_method", help=f"Method to run ({method_names}).")
+    analyze.add_argument(
+        "analysis_method",
+        type=_analysis_method,
+        choices=sorted(METHOD_REGISTRY),
+        help=f"Method to run ({method_names}).",
+    )
     analyze.add_argument("--config", type=Path, required=True, help="Path to the case JSONC config file.")
     analyze.add_argument("--run-id", type=str, default=None, help="Custom run id for outputs.")
     analyze.add_argument("--dry-run", action="store_true", help="Print the resolved analysis without executing it.")
