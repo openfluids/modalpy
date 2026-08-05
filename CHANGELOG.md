@@ -104,6 +104,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DMD and SPOD agree on the shedding frequency without reference to the metadata.
 
 ### Changed
+- `openmodalpy analyze` rejects an unknown method when it parses the command
+  line, instead of accepting it and failing later. The accepted set is derived
+  from the method registry, so it cannot drift from the methods that exist, and
+  the error names them: `Unknown method 'psdpod'. Available: ['bsmd', 'dmd',
+  'hodmd', 'mpod', 'pod', 'psd_pod', 'spod', 'stpod', 'tls_hodmd']`. Every
+  spelling that worked before still works — `pod`, `POD`, `psd-pod`, `psd_pod`,
+  `tls-hodmd` — since the name is normalized before it is checked.
+- The packaged `cylinder_wake.jsonc` states `"seed": 42` explicitly. It always
+  used that seed, as the generator default, but the value was implicit in the
+  shipped config while the repository copy stated it. The reference fixture now
+  reads the seed from the config like it already read `Nx`, `Ny` and `Nt`,
+  rather than from a separate hardcoded literal, so the fixture's generation
+  contract is fully derived. No generated data changes.
 - PSD-POD reuses cached FFT blocks again instead of recomputing them on every
   run. The Welch-family analyzers (SPOD, BSMD, PSD-POD) now share one cache
   implementation, and any of them can adopt another's cached blocks when the
@@ -331,6 +344,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   frequency bins each turns the suite red.
 
 ### Fixed
+- `canonicalize_modes` accepts an integer-dtype `modes` array instead of failing
+  with numpy's `UFuncOutputCastingError`. The scale factor it applies is not an
+  integer, so integer input is now promoted to `float64` before scaling; `float`
+  and `complex` inputs keep their own dtype, and `float32` is not promoted. The
+  returned arrays were already copies, so a caller's array is untouched either
+  way. No solver route was affected — all of them pass float or complex — so
+  this only matters when calling the function directly.
 - SPOD no longer reports a roundoff-negative eigenvalue with its sign flipped.
   The cross-spectral matrix is positive semi-definite, so an eigenvalue that
   comes back slightly negative is roundoff; taking its absolute value presented
