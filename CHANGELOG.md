@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the unused `n_threads` parameter from `BaseAnalyzer`, `SPODAnalyzer`,
   and `blocksfft`. It never affected FFT or BLAS work; use the BLAS thread
   policy above for pool control.
+- Removed `get_optimization_info()` and `print_optimization_status()` from
+  `openmodalpy.core.parallel`. Both lost their callers when the per-module
+  command-line entry points were deleted, and the BLAS name they reported was
+  guessed by string-matching NumPy's own debug printout, so it went stale
+  whenever that printout changed. `get_threadpool_summary()` stays and is
+  unaffected — it asks `threadpoolctl` directly and returns the real thread
+  counts, and every analysis already logs it before computing FFT blocks.
 - DMD `rank` is required (no silent default to `n_modes_save`). See the
   Changed note below for migration (`rank=n_modes_save` is bit-identical
   to the previous default).

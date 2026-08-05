@@ -14,7 +14,6 @@ import pytest
 from openmodalpy import SPODAnalyzer
 from openmodalpy.core.base import BaseAnalyzer, print_summary
 from openmodalpy.core.io import MATDataLoader
-from openmodalpy.core.parallel import print_optimization_status
 
 
 def _synthetic_data(Ns: int = 32, Nspace: int = 4, dt: float = 1.0) -> dict:
@@ -80,10 +79,9 @@ def test_compute_fft_blocks_is_quiet_on_stdout(tmp_path, capsys):
     assert captured.out == ""
 
 
-def test_print_summary_and_optimization_status_are_quiet(capsys):
-    """core helpers that used to print now go through the module logger."""
+def test_print_summary_is_quiet(capsys):
+    """print_summary routes through the module logger; stdout stays empty."""
     print_summary("POD", "/tmp/results", "/tmp/figures")
-    print_optimization_status()
     captured = capsys.readouterr()
     assert captured.out == ""
 

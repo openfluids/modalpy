@@ -10,7 +10,6 @@ Author: Modal Decomposition Team
 """
 
 import logging
-import multiprocessing
 
 import numpy as np
 from threadpoolctl import threadpool_info
@@ -178,36 +177,6 @@ def spod_single_frequency_optimized(qhat, w, nblocks, dst, num_modes=None, retur
     )
 
 
-def get_optimization_info():
-    """Return information about available optimizations."""
-    info = {"parallel_available": PARALLEL_AVAILABLE, "cpu_count": multiprocessing.cpu_count(), "numpy_blas": "Unknown"}
-
-    # Try to detect BLAS implementation
-    try:
-        from contextlib import redirect_stdout
-        from io import StringIO
-
-        import numpy as np
-
-        # Capture config output instead of printing it
-        with redirect_stdout(StringIO()) as config_output:
-            np.__config__.show()
-        config_info = config_output.getvalue()
-
-        if "mkl" in str(config_info).lower():
-            info["numpy_blas"] = "Intel MKL"
-        elif "openblas" in str(config_info).lower():
-            info["numpy_blas"] = "OpenBLAS"
-        elif "atlas" in str(config_info).lower():
-            info["numpy_blas"] = "ATLAS"
-        else:
-            info["numpy_blas"] = "Standard"
-    except Exception:
-        info["numpy_blas"] = "Unknown"
-
-    return info
-
-
 def get_threadpool_summary():
     """Return a short description of active thread pools."""
     try:
@@ -217,19 +186,3 @@ def get_threadpool_summary():
         )
     except Exception:
         return "unavailable"
-
-
-def print_optimization_status():
-    """Log current optimization status."""
-    info = get_optimization_info()
-
-    logger.info("Optimization Status:")
-    logger.info("Parallel Available: %s", info["parallel_available"])
-    logger.info("CPU Cores: %s", info["cpu_count"])
-    logger.info("NumPy BLAS: %s", info["numpy_blas"])
-    logger.info("Thread pools: %s", get_threadpool_summary())
-
-    if info["parallel_available"]:
-        logger.info("High performance mode (vectorized)")
-    else:
-        logger.info("Standard performance mode")
