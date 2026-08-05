@@ -8,12 +8,14 @@ import h5py
 import pytest
 
 from openmodalpy import analyze_from_config
-from openmodalpy.cli import main
+from openmodalpy.cli import build_parser, main
 from openmodalpy.commands import (
+    METHOD_REGISTRY,
     _maybe_plot_volumetric_modes,
     discover_examples,
     get_method_spec,
     inspect_results,
+    normalize_method_name,
     run_from_config,
 )
 
@@ -550,6 +552,62 @@ def test_unhandled_command_tree_returns_2(monkeypatch, capsys) -> None:
     err = capsys.readouterr().err
     assert "Unhandled command tree" in err
     assert "not-a-real-command" in err
+
+
+def _analysis_method_action() -> argparse.Action:
+    parser = build_parser()
+    command_action = next(a for a in parser._actions if a.dest == "command")
+    analyze = command_action.choices["analyze"]
+    return next(a for a in analyze._actions if a.dest == "analysis_method")
+
+
+def test_analyze_method_choices_match_registry() -> None:
+    action = _analysis_method_action()
+    assert action.choices is not None
+    assert set(action.choices) == set(METHOD_REGISTRY)
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    [
+        "pod",
+        "POD",
+        "psd-pod",
+        "psd_pod",
+        "PSD-POD",
+        "tls-hodmd",
+        "tls_hodmd",
+        " pod ",
+    ],
+)
+def test_analyze_method_spellings_normalize_at_parse(spelling: str) -> None:
+    parser = build_parser()
+    args = parser.parse_args(["analyze", spelling, "--config", "/nonexistent.jsonc"])
+    assert args.analysis_method == normalize_method_name(spelling)
+    assert args.analysis_method in METHOD_REGISTRY
+
+
+def test_analyze_unknown_method_rejected_at_parse() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit) as excinfo:
+        parser.parse_args(["analyze", "not-a-method", "--config", "/nonexistent.jsonc"])
+    assert excinfo.value.code == 2
+
+
+def test_analyze_unknown_method_error_lists_the_methods(capsys) -> None:
+    """The rejection tells the user what to type, not an internal name.
+
+    argparse discards a ValueError's message and prints
+    'invalid <callable name> value'; only ArgumentTypeError survives verbatim.
+    """
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["analyze", "psdpod", "--config", "/nonexistent.jsonc"])
+    err = capsys.readouterr().err
+    assert "psdpod" in err
+    assert "normalize_method_name" not in err
+    for method in METHOD_REGISTRY:
+        assert method in err
 
 
 def test_cli_analyze_subcommand_routes_overrides(tmp_path: Path, monkeypatch, capsys) -> None:
