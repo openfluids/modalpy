@@ -112,10 +112,19 @@ def canonicalize_modes(modes, coeffs=None):
     does not remove the ambiguity. For an exactly antisymmetric mode, ``phi``
     and ``-phi`` are both valid, so any rule must break the tie by some
     comparison, and every comparison has a discontinuity somewhere.
+
+    Integer-dtype inputs are promoted to float64 before scaling, since the
+    scale factor is not an integer. Float and complex inputs keep their own
+    dtype. Either way the returned arrays are new copies, so the caller's
+    array is never touched.
     """
     modes = np.asarray(modes)
+    if not np.issubdtype(modes.dtype, np.inexact):
+        modes = modes.astype(np.float64)
     if coeffs is not None:
         coeffs = np.asarray(coeffs)
+        if not np.issubdtype(coeffs.dtype, np.inexact):
+            coeffs = coeffs.astype(np.float64)
         n_cols = modes.shape[1] if modes.ndim >= 2 else 0
         if coeffs.ndim < 2 or coeffs.shape[1] != n_cols:
             raise ValueError(

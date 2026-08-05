@@ -244,6 +244,22 @@ def test_canonicalize_modes_nan_and_coeffs_shape():
         canonicalize_modes(np.ones((4, 0)), np.ones((5, 2)))
 
 
+def test_canonicalize_modes_integer_promotes_float32_preserved():
+    """Integer modes promote to float64; float32 stays float32."""
+    modes_i = np.array([[1, -2], [-3, 4], [0, 1]], dtype=np.int64)
+    modes_f = modes_i.astype(np.float64)
+    out_i, _ = canonicalize_modes(modes_i)
+    out_f, _ = canonicalize_modes(modes_f)
+    assert out_i.dtype == np.float64
+    np.testing.assert_array_equal(out_i, out_f)
+    _assert_modes_canonical(out_i)
+
+    modes32 = np.array([[0.1, -0.9], [-2.0, 0.3], [0.5, -0.4]], dtype=np.float32)
+    out32, _ = canonicalize_modes(modes32)
+    assert out32.dtype == np.float32
+    _assert_modes_canonical(out32)
+
+
 def test_weighted_second_order_modes_are_canonical():
     """eigh (real + complex) and svd routes leave modes canonical."""
     rng = np.random.default_rng(11)
