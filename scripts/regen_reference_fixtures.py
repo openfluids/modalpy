@@ -28,14 +28,14 @@ from tests.reference_helpers import compute_reference_spectra  # noqa: E402
 OUT_DIR = ROOT / "tests" / "fixtures" / "reference"
 PACKAGED_EXAMPLES_DIR = ROOT / "src" / "openmodalpy" / "examples"
 
-# Names which generators have fixtures. Non-config extras (seed) live here;
-# grids (Nx/Ny/Nt) are read from the packaged example configs — single source.
-# The packaged cylinder_wake.jsonc has no explicit seed field; 42 is the
-# generator default, fixed so the fixture records the full generation contract.
+# Names which generators have fixtures. Non-config extras live here; grids
+# and seed (Nx/Ny/Nt/seed) are read from the packaged example configs — single
+# source. cylinder_wake states seed 42 in its packaged config so the fixture
+# records the full generation contract without a hard-coded merge.
 _GENERATOR_EXTRAS: dict[str, dict[str, Any]] = {
     "double_gyre": {},
     "taylor_green": {},
-    "cylinder_wake": {"seed": 42},
+    "cylinder_wake": {},
 }
 
 

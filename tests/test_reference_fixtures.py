@@ -26,10 +26,10 @@ FIX_DIR = Path(__file__).resolve().parent / "fixtures" / "reference"
 # Packaged configs ship in the wheel; they are the source of truth for grids.
 PACKAGED_EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "src" / "openmodalpy" / "examples"
 
-# Non-config extras that fixtures record. seed is the cylinder_wake generator
-# default; the packaged config has no seed field.
+# Non-config extras that fixtures record. Grids and seed come from the
+# packaged config (cylinder_wake states seed 42 there).
 _FIXTURE_EXTRAS: dict[str, dict] = {
-    "cylinder_wake": {"seed": 42},
+    "cylinder_wake": {},
 }
 
 
