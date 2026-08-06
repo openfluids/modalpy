@@ -4,7 +4,7 @@ import numpy as np
 from openmodalpy import SPODAnalyzer
 
 
-def test_plot_eigenvalues_v2(tmp_path):
+def test_plot_eigenvalues(tmp_path):
     rng = np.random.default_rng(0)
     data = {
         "q": rng.standard_normal((8, 4)),
@@ -27,8 +27,8 @@ def test_plot_eigenvalues_v2(tmp_path):
     analyzer.load_and_preprocess()
     analyzer.compute_fft_blocks()
     analyzer.perform_spod()
-    analyzer.plot_eigenvalues_v2()
-    expected = tmp_path / "dummy_SPOD_eigenvalues_v2_nfft4_noverlap0.0.png"
+    analyzer.plot_eigenvalues()
+    expected = tmp_path / "dummy_SPOD_eigenvalues_nfft4_noverlap0.0.png"
     assert expected.exists()
 
 
@@ -59,7 +59,7 @@ def test_plot_modes_and_timecoeffs(tmp_path):
     freq_idx = int(np.argmax(analyzer.eigenvalues[:, 0]))
     expected_modes = tmp_path / f"dummy_SPOD_mode1_freq{freq_idx}_q.png"
     assert expected_modes.exists()
-    analyzer.plot_time_coeffs()
+    analyzer.plot_time_coefficients()
     expected_time = tmp_path / (f"dummy_SPOD_timecoeffs_freq{freq_idx}_nfft4_noverlap0.0.png")
     assert expected_time.exists()
 

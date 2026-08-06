@@ -438,7 +438,7 @@ class SPODAnalyzer(BaseAnalyzer):
         Args:
             plot_modes_options (dict, optional): Options for `plot_modes`.
             plot_reconstruction_options (dict, optional): Options for `plot_reconstruction_error`.
-            plot_time_coeffs_options (dict, optional): Options for `plot_time_coeffs`.
+            plot_time_coeffs_options (dict, optional): Options for `plot_time_coefficients`.
             plot_complex_plane_options (dict, optional): Options for `plot_eig_complex_plane`.
             plot_options (dict, optional): Unified dict, e.g.
                 ``{"modes": {...}, "reconstruction": {...}, "time_coeffs": {...}, "complex_plane": {...}}``.
@@ -457,7 +457,7 @@ class SPODAnalyzer(BaseAnalyzer):
         self.save_results()
 
         # Generate plots
-        self.plot_eigenvalues_v2()
+        self.plot_eigenvalues()
         self.plot_cumulative_energy()
         if int(self.data.get("Nz", 1)) > 1:
             dominant_idx = int(np.argmax(self.eigenvalues[:, 0]))
@@ -465,17 +465,16 @@ class SPODAnalyzer(BaseAnalyzer):
             self.plot_modes_3d_isometric(freqs_to_plot=[dominant_idx], plot_n_modes=min(2, self.modes.shape[2]))
         else:
             self._run_plot(self.plot_modes, modes_opts)
-        self._run_plot(self.plot_time_coeffs, time_opts)
+        self._run_plot(self.plot_time_coefficients, time_opts)
         self._run_plot(self.plot_reconstruction_error, recon_opts)
         self._run_plot(self.plot_eig_complex_plane, cplex_opts)
 
         print_summary("SPOD", self.results_dir, self.figures_dir)
 
-    def plot_eigenvalues_v2(self, n_modes_line_plot=20, shading_cmap="inferno_r"):
-        """Plot the SPOD eigenvalue spectrum (energy vs. Strouhal number) - Version 2.
+    def plot_eigenvalues(self, n_modes_line_plot=20, shading_cmap="inferno_r"):
+        """Plot the SPOD eigenvalue spectrum (energy vs. Strouhal number).
 
-        This version aims for a style similar to a user-provided example,
-        featuring a shaded background for the eigenvalue bundle and grayscale lines for modes.
+        Shaded background for the eigenvalue bundle and grayscale lines for modes.
 
         Args:
             n_modes_line_plot (int, optional): Number of dominant mode eigenvalue lines to plot.
@@ -549,7 +548,7 @@ class SPODAnalyzer(BaseAnalyzer):
 
         ax.set_xlabel("Strouhal number")
         ax.set_ylabel(r"$\lambda$")  # Use raw string for LaTeX
-        ax.set_title("SPOD Eigenvalue Spectrum (v2)")
+        ax.set_title("SPOD Eigenvalue Spectrum")
 
         # Set plot limits - adjust as necessary
         if np.any(St_plot > 0):
@@ -569,13 +568,13 @@ class SPODAnalyzer(BaseAnalyzer):
         # Use settings from configs.py for saving
         plot_filename = os.path.join(
             self.figures_dir,
-            f"{self.data_root}_SPOD_eigenvalues_v2_nfft{self.nfft}_noverlap{self.overlap}.{FIG_FORMAT}",
+            f"{self.data_root}_SPOD_eigenvalues_nfft{self.nfft}_noverlap{self.overlap}.{FIG_FORMAT}",
         )  # Corrected self.novlap
 
         # Save the figure
         plt.savefig(plot_filename, dpi=FIG_DPI)
         plt.close(fig)
-        logger.info("SPOD eigenvalue plot (v2) saved to %s", plot_filename)
+        logger.info("SPOD eigenvalue plot saved to %s", plot_filename)
 
     def plot_modes(
         self, freqs_to_plot=None, plot_n_modes: Optional[int] = 10, modes_per_fig: int = 1, show_cylinder: bool = False
@@ -785,7 +784,7 @@ class SPODAnalyzer(BaseAnalyzer):
         plt.close(fig)
         logger.info("Cumulative energy plot saved to %s", plot_filename)
 
-    def plot_time_coeffs(self, modes_to_plot=None, freq=None, n_blocks=None):
+    def plot_time_coefficients(self, modes_to_plot=None, freq=None, n_blocks=None):
         """Plot temporal coefficients for selected modes."""
         if self.time_coefficients.size == 0:
             logger.warning("No time coefficients to plot. Run perform_spod() first.")

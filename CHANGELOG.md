@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- `SPODAnalyzer.plot_eigenvalues_v2` is renamed to `plot_eigenvalues`. The
+  `_v2` suffix is gone; SPOD never had another `plot_eigenvalues` to collide
+  with. Output figure basenames drop the `_v2` token as well.
+- `SPODAnalyzer.plot_time_coeffs` is renamed to `plot_time_coefficients`,
+  matching POD, DMD and ST-POD. The SPOD signature
+  (`modes_to_plot`, `freq`, `n_blocks`) is unchanged — only the method name.
+- `STPODAnalyzer.plot_time_coefficients` renames its `n_coeffs` parameter to
+  `n_coeffs_to_plot`, matching POD and DMD. Call sites that used the old
+  keyword must switch.
+- `blocksfft` no longer takes `use_parallel`. Both branches already called the
+  same shared `windowed_block_fft` path, so the flag selected nothing. Pass
+  the remaining keyword arguments only. Analyzer constructors still accept
+  `use_parallel` for polar weights and SPOD frequency work.
+- README documents `FFT_BACKEND` via `from openmodalpy.core import FFT_BACKEND`
+  (the public re-export), not `openmodalpy.core.config`.
+
+| Old | New |
+| --- | --- |
+| `SPODAnalyzer.plot_eigenvalues_v2(...)` | `SPODAnalyzer.plot_eigenvalues(...)` |
+| `SPODAnalyzer.plot_time_coeffs(...)` | `SPODAnalyzer.plot_time_coefficients(...)` |
+| `STPODAnalyzer.plot_time_coefficients(n_coeffs=...)` | `...plot_time_coefficients(n_coeffs_to_plot=...)` |
+| `blocksfft(..., use_parallel=...)` | `blocksfft(...)` (argument removed) |
+| `from openmodalpy.core.config import FFT_BACKEND` | `from openmodalpy.core import FFT_BACKEND` |
+
 - `weighted_second_order` no longer takes `drop_nonpositive`. Passing it now
   raises `TypeError`. The flag had stopped selecting anything — both routes
   always drop modes at or below their relative cutoff — so a caller passing

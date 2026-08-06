@@ -712,7 +712,7 @@ class STPODAnalyzer(BaseAnalyzer):
 
     def plot_time_coefficients(
         self,
-        n_coeffs: int = 2,
+        n_coeffs_to_plot: int = 2,
         n_snapshots_plot: Optional[int] = None,
         L: float = 1.0,
         U: float = 1.0,
@@ -720,7 +720,7 @@ class STPODAnalyzer(BaseAnalyzer):
         """Plot temporal coefficients and their spectra.
 
         Args:
-            n_coeffs: Number of coefficients to plot.
+            n_coeffs_to_plot: Number of coefficients to plot.
             n_snapshots_plot: Number of time points to show.
             L: Characteristic length for Strouhal number.
             U: Characteristic velocity for Strouhal number.
@@ -729,7 +729,7 @@ class STPODAnalyzer(BaseAnalyzer):
             logger.warning("No time coefficients to plot. Run perform_stpod() first.")
             return
 
-        n_coeffs = min(n_coeffs, self.time_coefficients.shape[1])
+        n_coeffs_to_plot = min(n_coeffs_to_plot, self.time_coefficients.shape[1])
         m = self.time_coefficients.shape[0]  # Number of Hankel columns
 
         if n_snapshots_plot is None or n_snapshots_plot > m:
@@ -738,11 +738,11 @@ class STPODAnalyzer(BaseAnalyzer):
         time_vector, xlabel = self._time_axis(n_snapshots_plot)
         fs = self._require_fs()
 
-        fig, axes = plt.subplots(n_coeffs, 2, figsize=(12, 3 * n_coeffs))
-        if n_coeffs == 1:
+        fig, axes = plt.subplots(n_coeffs_to_plot, 2, figsize=(12, 3 * n_coeffs_to_plot))
+        if n_coeffs_to_plot == 1:
             axes = axes.reshape(1, 2)
 
-        for i in range(n_coeffs):
+        for i in range(n_coeffs_to_plot):
             coeff = self.time_coefficients[:n_snapshots_plot, i]
 
             # Time series
@@ -890,7 +890,7 @@ class STPODAnalyzer(BaseAnalyzer):
             self.plot_spacetime_mode(mode_idx=0)
             if self.n_modes_save > 1:
                 self.plot_spacetime_mode(mode_idx=1)
-        self.plot_time_coefficients(n_coeffs=plot_n_coeffs)
+        self.plot_time_coefficients(n_coeffs_to_plot=plot_n_coeffs)
         self.plot_cumulative_energy()
 
         if check_orthogonality:

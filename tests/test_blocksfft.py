@@ -27,11 +27,11 @@ def test_blocksfft_constant_signal():
 
 @pytest.mark.parametrize("window_type", WINDOWS)
 def test_blocksfft_serial_parallel_window_identity(window_type):
-    """Serial and parallel paths must agree bit-for-bit for every window."""
+    """blocksfft and blocksfft_optimized must agree bit-for-bit for every window."""
     rng = np.random.default_rng(0)
     q = rng.standard_normal((64, 3))
-    ser = blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type=window_type, use_parallel=False)
-    par = blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type=window_type, use_parallel=True)
+    ser = blocksfft(q, nfft=16, nblocks=3, novlap=0, window_type=window_type)
+    par = blocksfft_optimized(q, nfft=16, nblocks=3, novlap=0, window_type=window_type)
     assert np.allclose(ser, par, rtol=0, atol=1e-12), (
         f"serial/parallel disagree for window_type={window_type!r}: max|diff|={np.max(np.abs(ser - par)):.3e}"
     )
@@ -85,7 +85,6 @@ def test_normvar_divides_by_variance_two_scales():
             nblocks=1,
             novlap=0,
             normvar=True,
-            use_parallel=False,
             window_type="boxcar",
         )
         out_base = blocksfft(
@@ -94,14 +93,13 @@ def test_normvar_divides_by_variance_two_scales():
             nblocks=1,
             novlap=0,
             normvar=True,
-            use_parallel=False,
             window_type="boxcar",
         )
         np.testing.assert_allclose(out, out_base / scale, rtol=0, atol=1e-12)
 
 
 def test_normvar_serial_parallel_agree():
-    """Serial and parallel blocksfft paths must agree with normvar=True.
+    """blocksfft and blocksfft_optimized must agree with normvar=True.
 
     Both paths implement the same divide-by-variance step; neither was
     exercised with the flag on before this bead (two-paths-one-maintained).
@@ -109,8 +107,8 @@ def test_normvar_serial_parallel_agree():
     rng = np.random.default_rng(42)
     q = rng.standard_normal((64, 4))
     kwargs = dict(nfft=16, nblocks=3, novlap=4, normvar=True, blockwise_mean=True)
-    ser = blocksfft(q, use_parallel=False, **kwargs)
-    par = blocksfft(q, use_parallel=True, **kwargs)
+    ser = blocksfft(q, **kwargs)
+    par = blocksfft_optimized(q, **kwargs)
     np.testing.assert_allclose(
         ser,
         par,
@@ -169,8 +167,8 @@ def test_blocksfft_serial_parallel_param_surface(
         blockwise_mean=blockwise_mean,
         normvar=normvar,
     )
-    ser = blocksfft(q, use_parallel=False, **kwargs)
-    par = blocksfft(q, use_parallel=True, **kwargs)
+    ser = blocksfft(q, **kwargs)
+    par = blocksfft_optimized(q, **kwargs)
     max_diff = float(np.max(np.abs(ser - par)))
     assert np.allclose(ser, par, rtol=0, atol=1e-12), (
         f"serial/parallel disagree: window={window_type!r} window_norm={window_norm!r} "
@@ -191,8 +189,8 @@ def test_normvar_zero_variance_channel_isfinite():
     constant = np.full(nfft, 3.0)
     q = np.column_stack([varying, constant])
 
-    with_nv = blocksfft(q, nfft=nfft, nblocks=1, novlap=0, normvar=True, use_parallel=False)
-    without = blocksfft(q, nfft=nfft, nblocks=1, novlap=0, normvar=False, use_parallel=False)
+    with_nv = blocksfft(q, nfft=nfft, nblocks=1, novlap=0, normvar=True)
+    without = blocksfft(q, nfft=nfft, nblocks=1, novlap=0, normvar=False)
 
     assert np.all(np.isfinite(with_nv)), "normvar produced non-finite values on a constant channel"
     # Constant channel: clamp divisor to 1 → identical to no-normvar path.
@@ -215,7 +213,7 @@ def test_normvar_zero_variance_channel_isfinite():
 )
 @pytest.mark.parametrize(
     "fn",
-    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    [blocksfft, blocksfft_optimized],
     ids=["serial", "parallel"],
 )
 def test_short_record_raises_naming_Ns_and_nfft(Ns, nfft, overlap, label, fn):
@@ -236,7 +234,7 @@ def test_short_record_raises_naming_Ns_and_nfft(Ns, nfft, overlap, label, fn):
 @pytest.mark.parametrize("Ns,nfft,overlap", [(500, 128, 0.5), (300, 128, 0.5)])
 @pytest.mark.parametrize(
     "fn",
-    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    [blocksfft, blocksfft_optimized],
     ids=["serial", "parallel"],
 )
 def test_oversize_nblocks_raises_not_clamp(Ns, nfft, overlap, fn):
@@ -284,7 +282,7 @@ def test_block_starts_strict_hop_and_fit(Ns, nfft, overlap):
         return starts
 
     for fn, name in (
-        (lambda *a, **k: blocksfft(*a, use_parallel=False, **k), "serial"),
+        (blocksfft, "serial"),
         (blocksfft_optimized, "parallel"),
     ):
         starts = recovered_starts(fn)
@@ -299,14 +297,14 @@ def test_serial_parallel_identical_placement_uneven_records():
         nb, novlap = _nblocks_floor(Ns, nfft, overlap)
         rng = np.random.default_rng(Ns)
         q = rng.standard_normal((Ns, 3))
-        ser = blocksfft(q, nfft, nb, novlap, use_parallel=False, window_type="boxcar")
+        ser = blocksfft(q, nfft, nb, novlap, window_type="boxcar")
         par = blocksfft_optimized(q, nfft, nb, novlap, window_type="boxcar")
         np.testing.assert_allclose(ser, par, rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize(
     "fn",
-    [lambda *a, **k: blocksfft(*a, use_parallel=False, **k), blocksfft_optimized],
+    [blocksfft, blocksfft_optimized],
     ids=["serial", "parallel"],
 )
 @pytest.mark.parametrize(
@@ -352,7 +350,7 @@ def test_apply_snapshot_limit_uses_floor_nblocks():
     assert an.nblocks == expect
 
     # Must actually be usable: the original break was a ValueError here.
-    out = blocksfft(an.data["q"], nfft, an.nblocks, novlap, use_parallel=False)
+    out = blocksfft(an.data["q"], nfft, an.nblocks, novlap)
     assert out.shape[2] == expect
 
 
@@ -448,7 +446,7 @@ def test_white_noise_spod_eigenvalue_matches_analytic():
     nb, novlap = _nblocks_floor(Ns, nfft, overlap)
     assert nb >= 16
     q = rng.standard_normal((Ns, 1))
-    qhat = blocksfft(q, nfft, nb, novlap, window_type="boxcar", use_parallel=False)
+    qhat = blocksfft(q, nfft, nb, novlap, window_type="boxcar")
     dst = 1.0 / nfft
     w = np.ones((1, 1))
     lams = []

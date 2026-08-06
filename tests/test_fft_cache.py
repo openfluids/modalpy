@@ -96,7 +96,6 @@ def test_different_q_arrays_do_not_share_cache(tmp_path):
         normvar=False,
         window_norm="power",
         window_type="hamming",
-        use_parallel=False,
     )
 
     np.testing.assert_allclose(analyzer2.qhat, reference)
@@ -145,7 +144,6 @@ def test_stamp_mismatch_recomputes_without_raising(tmp_path, caplog):
         normvar=False,
         window_norm="power",
         window_type="hamming",
-        use_parallel=False,
     )
     np.testing.assert_allclose(analyzer2.qhat, reference)
 

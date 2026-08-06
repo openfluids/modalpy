@@ -1050,13 +1050,9 @@ def blocksfft(
     normvar=False,
     window_norm="power",
     window_type="hamming",
-    use_parallel=True,
 ):
     """
     Compute blocked FFT using Welch's method for CSD estimation.
-
-    If ``use_parallel`` is True and optimized routines are available,
-    ``blocksfft_optimized`` from :mod:`parallel_utils` is used.
 
     Parameters:
     q (np.ndarray): Input data [time, space]
@@ -1093,18 +1089,6 @@ def blocksfft(
       ``ValueError`` rather than re-using trailing samples.
     ---
     """
-    if use_parallel and PARALLEL_AVAILABLE:
-        return blocksfft_optimized(
-            q,
-            nfft,
-            nblocks,
-            novlap,
-            blockwise_mean=blockwise_mean,
-            normvar=normvar,
-            window_norm=window_norm,
-            window_type=window_type,
-        )
-
     return windowed_block_fft(
         q,
         nfft,
@@ -1589,7 +1573,6 @@ class BaseAnalyzer:
             normvar=getattr(self, "normvar", False),
             window_norm=getattr(self, "window_norm", "power"),
             window_type=getattr(self, "window_type", "hamming"),
-            use_parallel=self.use_parallel,
         )
         logger.info("FFT computation complete.")
 

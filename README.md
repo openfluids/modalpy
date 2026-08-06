@@ -159,7 +159,7 @@ export FFTKIT_BACKEND=mkl      # or scipy, numpy, cupy, accelerate
 ```
 
 ```python
-from openmodalpy.core.config import FFT_BACKEND
+from openmodalpy.core import FFT_BACKEND
 print(FFT_BACKEND)   # the backend actually in use
 ```
 

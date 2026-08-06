@@ -42,7 +42,6 @@ def test_parseval_bin_centred_tone_power_norm():
         novlap=0,
         window_type="hann",
         window_norm="power",
-        use_parallel=False,
         blockwise_mean=False,
     )
 
@@ -74,7 +73,6 @@ def test_amplitude_norm_recovers_half_tone_amplitude():
         novlap=0,
         window_type="hann",
         window_norm="amplitude",
-        use_parallel=False,
         blockwise_mean=False,
     )
 
@@ -115,7 +113,6 @@ def test_scipy_welch_broadband_mean_square_matches_psd_times_df():
         novlap=novlap,
         window_type="hann",
         window_norm="power",
-        use_parallel=False,
         blockwise_mean=False,
     )
     ms = _onesided_mean_square(q_hat)[:, 0]
@@ -156,7 +153,6 @@ def test_power_norm_matches_manual_formula_on_boxcar():
         novlap=0,
         window_type="boxcar",
         window_norm="power",
-        use_parallel=False,
         blockwise_mean=False,
     )
     # boxcar periodic window is all ones; power scale is 1.

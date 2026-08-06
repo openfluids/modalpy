@@ -755,10 +755,7 @@ def _run_pod_like(
             else:
                 analyzer.plot_modes(plot_n_modes=min(2, spec.case.n_modes_save), modes_per_fig=2)
         if hasattr(analyzer, "plot_time_coefficients"):
-            if isinstance(analyzer, STPODAnalyzer):
-                analyzer.plot_time_coefficients(n_coeffs=min(2, spec.case.n_modes_save))
-            else:
-                analyzer.plot_time_coefficients(n_coeffs_to_plot=min(2, spec.case.n_modes_save))
+            analyzer.plot_time_coefficients(n_coeffs_to_plot=min(2, spec.case.n_modes_save))
         if hasattr(analyzer, "plot_cumulative_energy"):
             analyzer.plot_cumulative_energy()
 
@@ -855,7 +852,7 @@ def _run_spod(spec: AnalyzeSpec, *, dry_run: bool) -> RunOutcome:
     analyzer.save_results()
 
     if spec.case.generate_plots:
-        analyzer.plot_eigenvalues_v2()
+        analyzer.plot_eigenvalues()
         dominant_idx = int(np.argmax(analyzer.eigenvalues[:, 0]))
         if not _maybe_plot_volumetric_modes(
             analyzer,
